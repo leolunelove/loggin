@@ -104,3 +104,6 @@ Original code: MIT. Character and clips: CC0; see `LICENCE-NOTES.md`, `OIL-PAINT
 
 ### Day and night
 A full day takes 18 active minutes. The clock pauses in menus and hidden tabs and is saved locally, without offline catch-up. Camp lanterns turn on gradually at dusk. Walk into the shack, press E, then choose **Sleep until morning** after 18:00 (or before 06:30) to wake at 06:30. Sleeping keeps your bag, supplies and upgrades. The starter shack includes a bedroll; the extension adds a bedroom.
+
+### A campfire to build
+The stone hearth outside the shack takes **12 ordinary logs from stored camp supplies**, contributed up to four at a time. Press E or left-click at the hearth, or use Campfire in the Upgrades menu near camp. No woodshed prerequisite. Part-built logs and the lit fire persist in saves; completed fires burn without upkeep. Animated flames, rising embers, drifting smoke and warm flickering light run locally. The stereo crackle is generated once per audio context from a long noise bed and irregular wood-fracture transients, fades with distance, muffles indoors and obeys the Sound toggle.

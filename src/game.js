@@ -1,5 +1,5 @@
 import {advanceClock,canSleep,sleepUntilMorning,daylightAt,clockLabel,sleepFade} from './daylight.js';
-import {contributeMill,beginMilling,advanceMilling,contributePlanks,PROJECTS} from './camp.js';
+import {contributeFire,contributeMill,beginMilling,advanceMilling,contributePlanks,PROJECTS} from './camp.js';
 import {freshState} from './economy.js';
 import {WORLD,randomSeed} from './world/seed.js';
 import {newCamp,SAVE_KEY} from './save.js';
@@ -84,7 +84,7 @@ export class Lumberjack {
    const button=e.target.closest('[data-camp]');if(!button)return;
    if(homeDistance(this.home,this.player.feet)>14){this.toast('Return to camp to build and use the sawmill.');return;}
    const kind=button.dataset.camp;
-   const success=kind==='sawmill'?contributeMill(this.state):kind==='mill'?beginMilling(this.state):contributePlanks(this.state,kind);
+   const success=kind==='fire'?contributeFire(this.state):kind==='sawmill'?contributeMill(this.state):kind==='mill'?beginMilling(this.state):contributePlanks(this.state,kind);
    if(success){this.renderHud();this.renderUpgrades();this.save();this.shade.refresh();this.audio.unload(this.home.dropoff);}
   };
   $('resume-mouse').onclick=()=>this.input.capture();
@@ -153,14 +153,15 @@ export class Lumberjack {
   $('sleep').disabled=!this.insideShack||!canSleep(s);$('sleep-note').textContent=canSleep(s)?'Rest until 06:30. Your bag and supplies stay safe.':'Come back after 18:00 to turn in for the night.';
   $('ledger-supplies').innerHTML=[['Ordinary logs',Math.max(0,s.wood-s.hardwood)],['Hardwood',s.hardwood||0],['Planks',s.planks||0],['In your bag',`${s.carried} / ${bagCapacity(s)}`]].map(([label,value])=>`<div><span>${label}</span><strong>${typeof value==='number'?nice(value):value}</strong></div>`).join('');
   $('ledger-history').textContent=`${nice(s.felled)} ${s.felled===1?'tree':'trees'} felled · ${nice(s.total)} timber gathered · ${AXES[s.axe].name} equipped`;
-  const projects=[['Woodshed','shed',40,'A bigger bag and hardwood access'],['Sawmill','sawmill',40,'Cut logs into planks'],['Camp porch','porch',12,'Faster milling'],['Cabin extension','lodge',24,'A furnished rear room and more bag space']];
-  $('ledger-projects').innerHTML=projects.map(([name,key,max,benefit])=>`<div class="ledger-project"><div><h3>${name}</h3><span>${s[key]>=max?'Built':`${s[key]||0} / ${max} ${key==='shed'?'timber':key==='sawmill'?'hardwood':'planks'}`}</span></div><progress max="${max}" value="${s[key]||0}"></progress><p>${benefit}</p></div>`).join('');
+  const projects=[['Campfire','fire',12,'A warm hearth, crackling logs and a welcoming glow'],['Woodshed','shed',40,'A bigger bag and hardwood access'],['Sawmill','sawmill',40,'Cut logs into planks'],['Camp porch','porch',12,'Faster milling'],['Cabin extension','lodge',24,'A furnished rear room and more bag space']];
+  $('ledger-projects').innerHTML=projects.map(([name,key,max,benefit])=>`<div class="ledger-project"><div><h3>${name}</h3><span>${s[key]>=max?'Built':`${s[key]||0} / ${max} ${key==='shed'||key==='fire'?'timber':key==='sawmill'?'hardwood':'planks'}`}</span></div><progress max="${max}" value="${s[key]||0}"></progress><p>${benefit}</p></div>`).join('');
  }
  renderCamp(){
   const s=this.state,near=homeDistance(this.home,this.player.feet)<=14,working=!!s.millJob;
-  const key=[s.shed,s.sawmill,s.planks,s.porch,s.lodge,s.wood,s.hardwood,near,working,Math.ceil(s.millJob?.remaining||0)].join(':');if(key===this.campUiKey)return;this.campUiKey=key;
+  const key=[s.fire,s.shed,s.sawmill,s.planks,s.porch,s.lodge,s.wood,s.hardwood,near,working,Math.ceil(s.millJob?.remaining||0)].join(':');if(key===this.campUiKey)return;this.campUiKey=key;
   const button=(kind,text,enabled)=>`<button class="buy" data-camp="${kind}" ${enabled&&near?'':'disabled'}>${text}</button>`;
   $('camp-projects').innerHTML=`<h3>Grow your camp</h3><p>${near?'Build with supplies stored at camp.':'Return to camp to build and cut planks.'}</p>`+
+   `<div class="project-row"><h3>Campfire</h3><progress max="12" value="${s.fire||0}"></progress><p>${s.fire||0} / 12 ordinary logs · A stone hearth, stacked logs, then a roaring fire.</p>${s.fire>=12?'<p>Lit · A warm welcome, day and night.</p>':button('fire','Add up to 4 logs',s.wood-s.hardwood>0)}</div>`+
    (s.shed<40?'<p>First, deliver 40 timber to finish your woodshed.</p>':`<div class="project-row"><h3>Sawmill</h3><progress max="40" value="${s.sawmill}"></progress><p>${s.sawmill} / 40 hardwood · Foundations → frame → cutting bed → roof.</p>${s.sawmill<40?button('sawmill','Build · up to 8 hardwood',s.hardwood>0):`<p>${s.planks} planks stacked · ${Math.max(0,s.wood-s.hardwood)} ordinary logs available.</p>`+button('mill',working?`Sawing… ${Math.ceil(s.millJob.remaining)}s`:'Saw 8 logs → 2 planks',!working&&s.wood-s.hardwood>=8)}</div>`+
    (s.sawmill<40?'':Object.entries(PROJECTS).map(([kind,p])=>`<div class="project-row"><h3>${p.name}</h3><progress max="${p.cost}" value="${s[kind]}"></progress><p>${s[kind]} / ${p.cost} planks · ${kind==='porch'?'A sheltered place to work. Milling speeds up to 2 seconds.':'A larger home and 32 more bag capacity.'}</p>${s[kind]>=p.cost?'<p>Complete</p>':kind==='lodge'&&s.porch<12?'<p>Finish the porch first.</p>':button(kind,'Build · up to 4 planks',s.planks>0)}</div>`).join('')));
  }
@@ -201,6 +202,12 @@ export class Lumberjack {
    this.indoorActionHeld=this.held;return;
   }
   this.indoorActionHeld=false;
+  if(this.home?.nearFire?.(this.player.feet)&&this.state.fire<12){
+   this.swing=null;this.lockedTree=null;this.follow.look(inp.look,dt);inp.look={x:0,y:0};
+   const pressed=inp.interactPressed||(this.held&&!this.fireActionHeld);this.fireActionHeld=this.held;
+   if(!inactive&&pressed){if(contributeFire(this.state)){this.renderHud();this.save();this.audio.unload(this.home.fire.position);this.toast(this.state.fire>=12?'Campfire lit · Make yourself at home.':`Campfire · ${this.state.fire} / 12 logs`);}else this.toast('Bring ordinary logs home and empty your bag at the wood rack first.');}return;
+  }
+  this.fireActionHeld=false;
   if(!inactive&&inp.aimPressed){
    if(this.lockedTree)this.lockedTree=null;
    else{const t=pickAimTree(this.forest.trees,this.player.feet,this.follow.yaw,this.camera.position);this.lockedTree=t&&this.treeVisible(t)?t:null;}
@@ -326,6 +333,8 @@ export class Lumberjack {
   if(this.started&&advanceMilling(this.state,dt)){this.renderHud();this.save();this.toast('Two planks cut and stacked at the sawmill.');this.audio.unload(this.home.dropoff);}
   if($('upgrades').open)this.renderCamp();
   this.audio.listener={x:this.player.feet.x,z:this.player.feet.z,yaw:this.follow.yaw};
+  this.home.fire?.update(this.time,this.camera,1-this.shared.uDaylight.value);
+  if(this.started&&this.home.fire)this.audio.updateFire(this.home.fire.position,this.state.fire>=12&&!document.hidden,this.insideShack);
   for(let i=this.chips.length-1;i>=0;i--){const c=this.chips[i];c.life-=dt;c.v.y-=9*dt;c.mesh.position.addScaledVector(c.v,dt);c.mesh.rotation.x+=dt*6;if(c.life<.2)c.mesh.scale.multiplyScalar(Math.max(0,1-dt*8));if(c.life<=0){this.scene.remove(c.mesh);this.chips.splice(i,1);}}
   for(let i=this.falling.length-1;i>=0;i--){
     const f=this.falling[i];f.age+=dt;const pose=treeFallPose(f.plan,f.age);
@@ -359,6 +368,7 @@ export class Lumberjack {
     $('context').textContent=this.delivery?'Move to cancel':`${nice(this.state.wood)} wood stored at the shack`;return;
    }
   }
+  if(this.home?.nearFire?.(this.player.feet)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=this.state.fire>=12;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.state.fire>=12?'Campfire burning':'Build campfire';$('context').textContent=this.state.fire>=12?'A warm place to linger':`${this.state.fire||0} / 12 ordinary logs · Uses wood stored at camp`;return;}
   if(this.home?.nearDoor?.(this.player.feet)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=true;$('chop-key').textContent='WASD';$('action-text').textContent='Walk inside';$('context').textContent='The door opens as you approach';return;}
   $('chop').disabled=false;$('chop-key').textContent=this.touch?'E':this.input.active?'LMB':'E';
   const t=this.target,visible=this.started&&!this.paused&&t&&!t.down;$('target').hidden=!visible;

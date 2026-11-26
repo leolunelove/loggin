@@ -1,3 +1,4 @@
+import {fireSamples,fireMix} from './fire-audio.js';
 // Local, preloaded field recordings. No runtime service, requests or generated impact tones.
 const FILES=['axe-1','axe-2','axe-3','axe-4','trunk-crack','fall-rush','tree-land'];
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -31,6 +32,12 @@ export class ForestAudio {
     const gain=c.createGain();gain.gain.value=.035;source.connect(filter).connect(gain).connect(this.master);source.start();
     this.birds=setInterval(()=>{if(!document.hidden&&this.on&&(this.daylight??1)>.25&&this.random()<.6)this.bird();},4200);
     this.birds.unref?.();
+  }
+  updateFire(position,burning,inside=false){
+    const c=this.context;if(!c)return;
+    if(burning&&!this.fire){const channels=fireSamples(c.sampleRate),buffer=c.createBuffer(2,channels[0].length,c.sampleRate);channels.forEach((data,i)=>buffer.getChannelData(i).set(data));const source=c.createBufferSource(),level=c.createGain(),pan=c.createStereoPanner(),filter=c.createBiquadFilter();source.buffer=buffer;source.loop=true;level.gain.value=0;filter.type='lowpass';source.connect(filter).connect(level).connect(pan).connect(this.master);source.start();this.fire={source,level,pan,filter};}
+    if(!this.fire)return;
+    const mix=fireMix(this.listener,position,inside);this.fire.level.gain.setTargetAtTime(burning&&this.on?mix.gain:0,c.currentTime,.2);this.fire.pan.pan.setTargetAtTime(mix.pan,c.currentTime,.1);this.fire.filter.frequency.setTargetAtTime(mix.cutoff,c.currentTime,.2);
   }
   bird(){
     const c=this.context;if(!c||!this.on)return;

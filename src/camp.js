@@ -21,3 +21,5 @@ export function contributePlanks(s,kind){
  const amount=Math.min(4,p.cost-s[kind],s.planks);if(amount<=0)return 0;
  s.planks-=amount;s[kind]+=amount;return amount;
 }
+
+export function contributeFire(s){const amount=Math.min(4,12-(s.fire||0),Math.max(0,s.wood-s.hardwood));if(amount<=0)return 0;s.wood-=amount;s.fire=(s.fire||0)+amount;return amount;}

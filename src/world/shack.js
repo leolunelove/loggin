@@ -1,3 +1,4 @@
+import {createCampfire} from './campfire.js';
 import {insideShack,atShackDoor,cabinColliders,DOOR} from './shack-layout.js';
 import {buildShackRoom} from './shack-room.js';
 import * as THREE from 'three';
@@ -150,6 +151,9 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
   parts.forEach(({mesh},i)=>{shadow.children[i].visible=mesh.visible;shadow.children[i].matrix.copy(mesh.matrixWorld);});painted.update();
  }
 
+ const firePosition=new THREE.Vector3(site.x-3, heightAt(site.x-3,site.z+4.5)+.04,site.z+4.5);
+ const fire=createCampfire(shared,firePosition,{makePaint});fire.group.position.sub(group.position);group.add(fire.group);
+ campColliders.push({key:'fire',stage:1,x:firePosition.x,y:firePosition.y+.22,z:firePosition.z,hx:.69,hy:.22,hz:.69});
  const lamps=[];
  const lampPositions=[[1.28,1.83,-.6],[-1.35,1.85,1.7],[3.4,1.5,2.1],[mx,2,mz]];
  let haloTexture;
@@ -160,7 +164,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
   const frame=new THREE.Mesh(new THREE.BoxGeometry(.23,.035,.23),materials[6]);frame.position.set(p[0],p[1]+.12,p[2]);group.add(frame);
   let halo;if(haloTexture){halo=new THREE.Sprite(new THREE.SpriteMaterial({map:haloTexture,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:0}));halo.position.copy(core.position);halo.scale.set(1.3,1.3,1);group.add(halo);}lamps.push({core,frame,halo,i});
  }
- return {group,paint:painted,shadow,dropoff,colliders,campColliders,door:doorHinge,
+ return {fire,nearFire(feet){return Math.hypot(feet.x-firePosition.x,feet.z-firePosition.z)<2.35&&Math.abs(feet.y-firePosition.y)<1.3;},group,paint:painted,shadow,dropoff,colliders,campColliders,door:doorHinge,
   updateLighting(night,time,state){
    const strength=night*(.97+.03*Math.sin(time*3.1));
    lampPositions.forEach((p,i)=>{const on=i!==3||state.sawmill>=40;shared.uCampLights.value[i].set(site.x+p[0],y+p[1],site.z+p[2],on?strength*(i===0?2.1:1.7):0);lamps[i].core.visible=on&&night>.05;lamps[i].frame.visible=on;if(lamps[i].halo)lamps[i].halo.material.opacity=on?night:0;});
@@ -180,7 +184,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
    return {inside,reveal,changed:changed||(Math.abs(old-wanted)>.01&&Math.abs(doorAngle-wanted)<=.01),camera:reveal?{center:{x:site.x,y:y+.8,z:site.z-(state.lodge>=24?1.1:0)},distance:state.lodge>=24?7.5:6}:null};
   },
   setProject(amount){let changed=false;for(const mesh of projectParts){const visible=amount>=mesh.userData.projectStage;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}if(changed)syncVisuals();},
-  setCamp(state){let changed=room.setState(state);for(const mesh of rearDoorParts){const visible=state.lodge<24;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}for(const {mesh,key,stage} of campParts){const unlocked=key==='sawmill'?state.shed>=40:key==='lodge'?state.porch>=12:state.sawmill>=40;const value=key==='planks'?Math.min(12,state.planks):state[key];const visible=unlocked&&value>=stage;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}if(changed)syncVisuals();},
+  setCamp(state){fire.setState(state.fire||0);let changed=room.setState(state);for(const mesh of rearDoorParts){const visible=state.lodge<24;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}for(const {mesh,key,stage} of campParts){const unlocked=key==='sawmill'?state.shed>=40:key==='lodge'?state.porch>=12:state.sawmill>=40;const value=key==='planks'?Math.min(12,state.planks):state[key];const visible=unlocked&&value>=stage;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}if(changed)syncVisuals();},
   updateMill(dt,active){if(active){blade.rotation.y+=dt*9;group.updateMatrixWorld(true);painted.update();}},
   logTarget(wood){const index=Math.min(logs.length-1,Math.max(0,Math.ceil(wood/6)));return logs[index].getWorldPosition(new THREE.Vector3());},
   setWood(wood){

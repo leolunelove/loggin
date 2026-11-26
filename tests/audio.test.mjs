@@ -54,3 +54,5 @@ test('shipped contact clips have immediate attacks, no clipping, and bounded siz
  }
  assert.ok(bytes<200000);
 });
+
+test('campfire has one persistent stereo loop, spatial gain, indoor filtering and sound toggle silence',async()=>{const {a,c}=await engine();const p={x:0,z:0};a.listener={x:1,z:0,yaw:0};a.updateFire(p,true);const source=a.fire.source,count=c.sources.length;assert.equal(source.loop,true);const near=a.fire.level.gain.value;a.updateFire(p,true,true);assert.ok(a.fire.level.gain.value<near);assert.equal(a.fire.filter.frequency.value,850);a.listener.x=30;a.updateFire(p,true);assert.equal(a.fire.level.gain.value,0);a.listener.x=1;a.updateFire(p,true);assert.equal(c.sources.length,count);await a.start(false);a.updateFire(p,true);assert.equal(a.fire.level.gain.value,0);await a.start(true);a.updateFire(p,true);assert.ok(a.fire.level.gain.value>0);assert.equal(a.fire.source,source);a.updateFire(p,false);assert.equal(a.fire.level.gain.value,0);clearInterval(a.birds);});

@@ -12,7 +12,7 @@ export const TREES = [
   { name: 'Old oak', health: 16, wood: 45 },
   { name: 'Maple', health: 9, wood: 22 },
 ];
-export const freshState = () => ({ version: 1, day:1, hour:9, wood: 0, carried: 0, seed:0, appearance:defaultAppearance(), sawmill:0, planks:0, porch:0, lodge:0, millJob:null, shed: 0, hardwood: 0, carriedHardwood: 0, total: 0, felled: 0, axe: 0, speed: 0, yield: 0, sound: true, low: false, sensitivity: 1, down: {} });
+export const freshState = () => ({ version: 1, day:1, hour:9, fire:0, wood: 0, carried: 0, seed:0, appearance:defaultAppearance(), sawmill:0, planks:0, porch:0, lodge:0, millJob:null, shed: 0, hardwood: 0, carriedHardwood: 0, total: 0, felled: 0, axe: 0, speed: 0, yield: 0, sound: true, low: false, sensitivity: 1, down: {} });
 export function sanitize(data) {
   const s = freshState();
   // Existing balances remain stored at the shack. New harvests travel in the bag.
@@ -27,6 +27,7 @@ export function sanitize(data) {
   s.appearance=sanitizeAppearance(data?.appearance);
   for(const [key,max] of [['sawmill',40],['porch',12],['lodge',24]])s[key]=Math.max(0,Math.min(max,Math.floor(Number(data?.[key])||0)));
   if(data?.millJob&&s.sawmill===40){const remaining=Number(data.millJob.remaining);if(Number.isFinite(remaining)&&remaining>0)s.millJob={remaining:Math.min(3,remaining)};}
+  s.fire=Math.max(0,Math.min(12,Math.floor(Number(data?.fire)||0)));
   s.day=Math.max(1,Math.min(1000000,Math.floor(Number(data?.day)||1)));
   const hour=Number(data?.hour);s.hour=data?.hour!=null&&Number.isFinite(hour)?Math.max(0,Math.min(23.999999,hour)):9;
   return s;
