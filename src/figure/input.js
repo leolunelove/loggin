@@ -35,7 +35,7 @@ export class Input {
       if (!this.lockable) return;
       // The click that recaptures the mouse only resumes the game. Subsequent clicks swing the axe.
       if (!this.active) { if (e.button === 0) this.capture(); return; }
-      if (e.button === 0) this.mouse.left = true;
+      if (e.button === 0) {if(!this.mouse.left)this.pressed.add('Interact');this.mouse.left = true;}
       if (e.button === 2) { if(!this.mouse.right)this.pressed.add('Aim');this.mouse.right = true; }
     });
     addEventListener('mouseup', (e) => {
@@ -96,6 +96,7 @@ export class Input {
       sprint: k.has('ShiftLeft') || k.has('ShiftRight'),
       strafe: this.active || k.has('KeyF'),
       jump: this.pressed.has('Space'),
+      interactPressed:this.pressed.has('KeyE')||this.pressed.has('Interact'),
       aimPressed: this.pressed.has('Aim') || this.pressed.has('KeyQ'),
       look: { x: this.mouse.x * this.sensitivity + this.touchLook.x, y: this.mouse.y * this.sensitivity + this.touchLook.y },
       zoom: this.mouse.wheel,

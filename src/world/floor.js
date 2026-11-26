@@ -79,7 +79,7 @@ void makeDab(inout Dab d) {
   vec4 q = hash4(cell + 17.3, 51.0);
   vec4 f = hash4(cell + sub * 7.7 + 3.1, sub * 13.0 + 3.0);
   vec2 foot = (cell + r.xy) * uCell0;
-  if (abs(foot.x-uHome.x)<5.0 && abs(foot.y-uHome.y)<3.6) { d.alive=0.0; return; }
+  if (abs(foot.x-uHome.x)<5.0 && abs(foot.y-uHome.y)<4.5) { d.alive=0.0; return; }
   float lod;
   d.alive = ringGrow(distance(foot, cameraPosition.xz), lod);
   if (d.alive <= 0.0) return;

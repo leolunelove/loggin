@@ -38,6 +38,12 @@ export class Follow {
     if (!this.lookPrepared) this.look(look, dt);
     this.lookPrepared = false;
     this.want = THREE.MathUtils.clamp(this.want + zoom * 0.5, 2.8, 13);
+    if(this.interior){
+      const c=this.interior.center,pitch=THREE.MathUtils.clamp(this.pitch+.65,.68,1.02),distance=this.interior.distance;
+      const centre=new THREE.Vector3(c.x,c.y,c.z),eye=centre.clone().add(new THREE.Vector3(-Math.sin(this.yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(this.yaw)*Math.cos(pitch)).multiplyScalar(distance));
+      cam.position.lerp(eye,1-Math.exp(-8*dt));cam.lookAt(centre);this.exitBlend=1;return;
+    }
+    const oldPosition=this.exitBlend>0?cam.position.clone():null;
     const goal = new THREE.Vector3(target.x, target.y + 1.35, target.z);
     if (this.pivot.lengthSq() === 0) this.pivot.copy(goal);
     this.pivot.x = damp(this.pivot.x, goal.x, 10, dt);
@@ -63,6 +69,7 @@ export class Follow {
     const floor = groundAt(cam.position.x, cam.position.z) + 0.45;
     let raised = 0;
     if (cam.position.y < floor) { raised = floor - cam.position.y; cam.position.y = floor; }
+    if(oldPosition){this.exitBlend=Math.max(0,this.exitBlend-dt*3);cam.position.lerp(oldPosition,this.exitBlend);}
     cam.lookAt(from.x - back.x * 6, from.y - back.y * 6 + this.lift * k - raised * this.sink, from.z - back.z * 6);
   }
 }

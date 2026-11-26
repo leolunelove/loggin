@@ -22,6 +22,14 @@ Swings follow through while you move. A stroke only damages its tree when still 
 
 **Settings → What’s new · Changelog** contains illustrated field notes with screenshots of the game.
 
+## Walk into your shack
+
+Approach the front doorway and the door swings open. Walk through with WASD; the camera rises and the roof and near walls cut away to reveal the room. Mouse look still controls the view and movement heading. The doorway and walls have real collision; there is no scene teleport.
+
+Supply shelves reflect stored logs, hardwood and planks. Purchased axes stay on the wall, building mementos mark completed projects, and a camp board displays your totals. Press E or left-click inside to open the camp ledger, then Open workbench for upgrades and building work. Logs are still unloaded at the outdoor rack.
+
+The finished porch adds a rug. Completing the cabin extension removes the rear partition and opens a furnished room with a bed and reading shelf. Walk back through the front door to return to the forest.
+
 ## Build a bigger camp
 
 After the woodshed, use **U → Grow your camp** while near the shack:

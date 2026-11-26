@@ -1,3 +1,13 @@
+# A shack you can enter
+
+Replaced the solid building collider with a real doorway, walls, floor and furniture collision. The door opens automatically on approach. Walking inside raises the camera and removes the roof and near walls from view; mouse look and walking remain available. Leaving restores the exterior and blends the camera back outdoors.
+
+The interior contains a workbench, stocked shelves, a purchased-axe display, building mementos and a live camp board. E or left-click inside opens a ledger of supplies, lifetime work and building progress, with a link to the workbench. The porch adds a rug; the completed cabin opens a furnished rear room. Existing saves and the outdoor unloading rack continue to work.
+
+Validation includes real Rapier capsule routes through the door, wall blocking, exit and rear-room access; cutaway and stock visibility; indoor camera blending; and interaction routing. Browser playtests covered both a controlled walkthrough and normal WASD entry with E opening the ledger, plus the workbench and furnished extension. The illustrated menu changelog includes a new interior screenshot.
+
+---
+
 # Tree locking, moving swings and illustrated field notes
 
 Right-click or Q toggles lock onto an aimed, visible nearby tree. Locked trees retain selection while strafing and the camera tracks them smoothly. The lock releases on felling, excess distance or menu/cursor release. Right-click presses are edge-triggered so holding the button never repeatedly toggles the lock.

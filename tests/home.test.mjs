@@ -44,6 +44,6 @@ test('shack fits between original trees, casts shadows and updates a painted sto
  home.setWood(0);const empty=[...home.paint.mesh.geometry.attributes.aVisible.array].filter(Boolean).length;
  home.setWood(22);const filled=[...home.paint.mesh.geometry.attributes.aVisible.array].filter(Boolean).length;assert.ok(filled>empty);
  home.setWood(0);assert.equal([...home.paint.mesh.geometry.attributes.aVisible.array].filter(Boolean).length,empty);
- assert.ok([...home.paint.mesh.geometry.attributes.aPos.array].every(Number.isFinite));assert.ok(home.shadow.children.length>100);assert.equal(home.colliders.length,2);
+ assert.ok([...home.paint.mesh.geometry.attributes.aPos.array].every(Number.isFinite));assert.ok(home.shadow.children.length>100);assert.ok(home.colliders.length>2,'walls and furniture replace the solid building collider');
  assert.deepEqual(forest.trees.map(t=>[t.x,t.z]),original);
 });

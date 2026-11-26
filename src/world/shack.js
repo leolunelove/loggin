@@ -1,3 +1,5 @@
+import {insideShack,atShackDoor,cabinColliders,DOOR} from './shack-layout.js';
+import {buildShackRoom} from './shack-room.js';
 import * as THREE from 'three';
 import { paint } from '../figure/figure.js';
 import { pinDabs } from '../oilpaint/pins.js';
@@ -14,10 +16,10 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  // A level foundation, planted into the same terrain as the player's feet.
  const y=Math.max(...[-1.8,1.8].flatMap(x=>[-1.5,1.5].map(z=>heightAt(site.x+x,site.z+z))));
  group.position.set(site.x,y,site.z);
- const palettes=[PLANK,TIMBER,ROOF,DARK,CUT,WINDOW,[[.85,.88,.80],[.45,.52,.48],[.17,.22,.22]]],materials=palettes.map(p=>makePaint(shared,p,{grain:4})),parts=[];
- const colliders=[];
+ const palettes=[PLANK,TIMBER,ROOF,DARK,CUT,WINDOW,[[.85,.88,.80],[.45,.52,.48],[.17,.22,.22]],[[.89,.86,.72],[.57,.59,.46],[.23,.28,.25]]],materials=palettes.map(p=>makePaint(shared,p,{grain:4})),parts=[];
+ const colliders=[];let shell=null;const rearDoorParts=[];
  function part(geometry,pal,position,count=35,size=[.1,.32],dir=UP){
-  const m=new THREE.Mesh(geometry,materials[pal]);m.position.set(...position);group.add(m);
+  const m=new THREE.Mesh(geometry,materials[pal]);m.position.set(...position);if(shell)m.userData.shell=shell;group.add(m);
   parts.push({mesh:m,count,style:()=>({pal,size,dir})});return m;
  }
  const box=(w,h,d,pal,p,count=35,size,dir)=>part(new THREE.BoxGeometry(w,h,d),pal,p,count,size,dir);
@@ -25,14 +27,16 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  box(3.65,.38,3.1,1,[0,-.08,0],90,[.15,.3]);
  for(let i=0;i<13;i++){
   const x=-1.66+i*.277;
-  box(.267,2.2,.13,0,[x,1.16,-1.45],24);
-  box(.267,2.2,.13,0,[x,1.16,1.45],24);
+  shell='back';const back=box(.267,2.2,.13,0,[x,1.16,-1.45],24);rearDoorParts.push(back);
+  shell='front';if(x+.134<=DOOR.left||x-.134>=DOOR.right)box(.267,2.2,.13,0,[x,1.16,1.45],24);
  }
  for(const sign of [-1,1]){
+  shell=sign<0?'left':'right';
   for(let i=0;i<11;i++)box(.13,2.2,.263,0,[sign*1.8,1.16,-1.32+i*.264],22);
   for(const z of [-1.49,1.49])box(.15,2.4,.15,1,[sign*1.8,1.2,z],28);
  }
  // Gables close the roof ends; a pair of wide overhanging shingled slopes.
+ shell='roof';
  const triangle=new THREE.Shape();triangle.moveTo(-1.8,0);triangle.lineTo(1.8,0);triangle.lineTo(0,1.08);triangle.closePath();
  for(const z of [-1.52,1.4])part(new THREE.ExtrudeGeometry(triangle,{depth:.12,bevelEnabled:false}),0,[0,2.26,z],95,[.12,.25]);
  const angle=Math.atan2(1.24,2.18),slope=Math.hypot(2.18,1.24);
@@ -48,17 +52,22 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
   const trim=box(slope+.08,.12,.12,1,[sign*1.09,2.88,1.94],32,[.08,.3],ACROSS);trim.rotation.z=-sign*angle;
  }
  box(.22,.16,3.98,1,[0,3.54,0],55,[.12,.25],new THREE.Vector3(0,0,1));
- // Dark blue-green door, small warm window, latch and porch step.
- box(.91,1.83,.09,3,[-.48,.98,1.54],95,[.08,.2]);
- for(const x of [-.99,.03])box(.1,1.96,.12,1,[x,1,1.59],25);
- box(1.12,.12,.12,1,[-.48,1.99,1.59],24,[.1,.25],ACROSS);
- box(.1,.035,.05,4,[-.18,1,1.61],5,[.03,.05]);
+ // A real opening, with a hinged door that swings outward as you approach.
+ shell='front';
+ box(1.4,.12,.13,0,[DOOR.x,2.32,1.45],30);
+ const door=box(1.22,2.15,.09,3,[DOOR.x,1.16,1.54],95,[.08,.2]);
+ const latch=box(.1,.035,.06,4,[.02,1,1.61],5,[.03,.05]);
+ for(const x of [DOOR.left-.06,DOOR.right+.06])box(.1,2.22,.12,1,[x,1.18,1.59],25);
+ box(1.47,.12,.12,1,[DOOR.x,2.3,1.59],24,[.1,.25],ACROSS);
+ const doorHinge=new THREE.Group();doorHinge.position.set(DOOR.left,0,1.54);group.add(doorHinge);group.updateMatrixWorld(true);doorHinge.attach(door);doorHinge.attach(latch);
  box(.85,.76,.08,3,[.97,1.48,1.55],12);
  box(.65,.56,.08,5,[.97,1.48,1.6],16,[.09,.14]);
  for(const x of [.57,.97,1.37])box(.065,.79,.1,1,[x,1.48,1.67],10,[.035,.15]);
  for(const h of [1.08,1.48,1.88])box(.86,.065,.1,1,[.97,h,1.67],10,[.035,.15],ACROSS);
  box(1.35,.18,.6,1,[-.48,.02,1.83],40,[.12,.25],ACROSS);
+ shell='roof';
  box(.36,.82,.4,1,[.82,3.28,-.58],35,[.08,.16]);box(.48,.1,.52,3,[.82,3.71,-.58],15);
+ shell=null;
  // Open outdoor rack at the right of the shack, with every cut end facing the clearing.
  const rack={x:2.86,z:1.05};
  for(const x of [rack.x-1.08,rack.x+1.08]){
@@ -112,29 +121,56 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  for(const x of [-1.8,1.8]){campBox('porch',12,.12,1,.12,1,[x,.6,2.95]);campBox('porch',12,.12,.12,1.35,1,[x,1.1,2.4]);}
  campBox('porch',12,1.3,.12,.4,1,[0,-.04,3.22]);
  for(let i=0;i<6;i++)campBox('lodge',(i+1)*4,.6,.25,2.6,1,[-1.5+i*.6,.06,-2.85]);
- for(let i=0;i<6;i++)campBox('lodge',(i+1)*4,.58,2, .14,0,[-1.5+i*.6,1.15,-4.1]);
- for(const x of [-1.8,1.8])for(let i=0;i<3;i++)campBox('lodge',(i+1)*8,.14,2,.84,0,[x,1.15,-1.95-i*.84]);
- const lodgeRoof=campBox('lodge',24,4.1,.16,3,2,[0,2.35,-2.9]);lodgeRoof.rotation.x=-.10;
+ for(let i=0;i<6;i++){const m=campBox('lodge',(i+1)*4,.58,2,.14,0,[-1.5+i*.6,1.15,-4.1]);m.userData.shell='back';}
+ for(const x of [-1.8,1.8])for(let i=0;i<3;i++){const m=campBox('lodge',(i+1)*8,.14,2,.84,0,[x,1.15,-1.95-i*.84]);m.userData.shell=x<0?'left':'right';}
+ const lodgeRoof=campBox('lodge',24,4.1,.16,3,2,[0,2.35,-2.9]);lodgeRoof.rotation.x=-.10;lodgeRoof.userData.shell='roof';
+ const room=buildShackRoom({box,part});
+ campColliders.push({key:'lodge',stage:24,until:true,x:site.x-1.45,y:y+1.16,z:site.z-1.45,hx:.35,hy:1.1,hz:.08},{key:'lodge',stage:24,until:true,x:site.x+.975,y:y+1.16,z:site.z-1.45,hx:.825,hy:1.1,hz:.08});
+ campColliders.push({key:'lodge',stage:24,until:true,x:site.x+DOOR.x,y:y+1.15,z:site.z-1.45,hx:.625,hy:1.1,hz:.08});
+ campColliders.push({key:'lodge',stage:24,x:site.x,y:y+.06,z:site.z-2.85,hx:1.8,hy:.125,hz:1.3});
+ campColliders.push({key:'lodge',stage:24,x:site.x,y:y+1.15,z:site.z-4.1,hx:1.8,hy:1,hz:.08});
+ for(const x of [-1.8,1.8])campColliders.push({key:'lodge',stage:24,x:site.x+x,y:y+1.15,z:site.z-2.85,hx:.08,hy:1,hz:1.3});
+ campColliders.push({key:'lodge',stage:24,x:site.x+.95,y:y+.32,z:site.z-2.88,hx:.5,hy:.25,hz:.9});
+ parts.forEach(({mesh})=>mesh.userData.shown=mesh.visible);
  group.updateMatrixWorld(true);
  const painted=pinDabs(shared,palettes,parts);painted.update();
  // Separate static shadow meshes share geometry, avoiding self-shadowing the paint dabs.
  const shadow=new THREE.Group(),black=new THREE.MeshBasicMaterial({side:THREE.DoubleSide});
  for(const {mesh} of parts){const m=new THREE.Mesh(mesh.geometry,black);m.matrixAutoUpdate=false;m.matrix.copy(mesh.matrixWorld);m.visible=mesh.visible;shadow.add(m);}
  const dropoff={x:site.x+rack.x,y:heightAt(site.x+rack.x,site.z+rack.z+1.05),z:site.z+rack.z+1.05};
- colliders.push({x:site.x,y:y+1.35,z:site.z,hx:1.85,hy:1.65,hz:1.56});
+ colliders.push(...cabinColliders(site,y));
+ colliders.push({x:site.x-1.3,y:y+.43,z:site.z-.25,hx:.36,hy:.43,hz:.59});
+ colliders.push({x:site.x+1.4,y:y+.95,z:site.z-.17,hx:.33,hy:.95,hz:.76});
  colliders.push({x:site.x+rack.x,y:y+.65,z:site.z+rack.z,hx:1.16,hy:.84,hz:.53});
- let previous=-1;
- return {group,paint:painted,shadow,dropoff,colliders,campColliders,
-  setProject(amount){let changed=false;for(const mesh of projectParts){const visible=amount>=mesh.userData.projectStage;if(mesh.visible!==visible){mesh.visible=visible;changed=true;}}if(changed){parts.forEach(({mesh},i)=>shadow.children[i].visible=mesh.visible);painted.update();}},
-  setCamp(state){let changed=false;for(const {mesh,key,stage} of campParts){const unlocked=key==='sawmill'?state.shed>=40:key==='lodge'?state.porch>=12:state.sawmill>=40;const value=key==='planks'?Math.min(12,state.planks):state[key];const visible=unlocked&&value>=stage;if(mesh.visible!==visible){mesh.visible=visible;changed=true;}}if(changed){parts.forEach(({mesh},i)=>shadow.children[i].visible=mesh.visible);painted.update();}},
+ let previous=-1,cutaway=false,cutMask='',doorAngle=0;
+ function syncVisuals(){
+  for(const {mesh}of parts){mesh.visible=(mesh.userData.shown??true)&&!(cutaway&&cutMask.includes(mesh.userData.shell||'!'));}
+  group.updateMatrixWorld(true);
+  parts.forEach(({mesh},i)=>{shadow.children[i].visible=mesh.visible;shadow.children[i].matrix.copy(mesh.matrixWorld);});painted.update();
+ }
+
+ return {group,paint:painted,shadow,dropoff,colliders,campColliders,door:doorHinge,
+  nearDoor(feet){return atShackDoor(group.position,feet);},
+  contains(feet,state){return insideShack(group.position,feet,state);},
+  updateInterior(dt,feet,camera,state){
+   const inside=insideShack(group.position,feet,state),nearDoor=atShackDoor(group.position,feet);
+   const reveal=inside||(nearDoor&&feet.z<site.z+2.25);
+   const dx=camera.position.x-site.x,dz=camera.position.z-site.z;
+   const mask='roof,'+(inside?((dz>=0?'front,':'back,')+(dx>=0?'right':'left')):'');
+   const changed=reveal!==cutaway||(reveal&&mask!==cutMask);cutaway=reveal;cutMask=mask;
+   const wanted=inside||nearDoor?-Math.PI*.49:0,old=doorAngle;doorAngle=wanted+(doorAngle-wanted)*Math.exp(-9*dt);doorHinge.rotation.y=doorAngle;
+   if(changed||Math.abs(old-doorAngle)>.0001)syncVisuals();
+   if(shared.uLamp){shared.uLamp.value.set(site.x+1.28,y+1.83,site.z-.6,(inside?.65:0)+(shared.uLamp.value.w-(inside?.65:0))*Math.exp(-6*dt));}
+   return {inside,reveal,changed:changed||(Math.abs(old-wanted)>.01&&Math.abs(doorAngle-wanted)<=.01),camera:reveal?{center:{x:site.x,y:y+.8,z:site.z-(state.lodge>=24?1.1:0)},distance:state.lodge>=24?7.5:6}:null};
+  },
+  setProject(amount){let changed=false;for(const mesh of projectParts){const visible=amount>=mesh.userData.projectStage;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}if(changed)syncVisuals();},
+  setCamp(state){let changed=room.setState(state);for(const mesh of rearDoorParts){const visible=state.lodge<24;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}for(const {mesh,key,stage} of campParts){const unlocked=key==='sawmill'?state.shed>=40:key==='lodge'?state.porch>=12:state.sawmill>=40;const value=key==='planks'?Math.min(12,state.planks):state[key];const visible=unlocked&&value>=stage;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}if(changed)syncVisuals();},
   updateMill(dt,active){if(active){blade.rotation.y+=dt*9;group.updateMatrixWorld(true);painted.update();}},
   logTarget(wood){const index=Math.min(logs.length-1,Math.max(0,Math.ceil(wood/6)));return logs[index].getWorldPosition(new THREE.Vector3());},
   setWood(wood){
    const count=wood>0?Math.min(logs.length,Math.ceil(wood/6)):0;
    if(count===previous)return;previous=count;
-   logs.forEach((log,i)=>log.visible=i<count);
-   parts.forEach(({mesh},i)=>shadow.children[i].visible=mesh.visible);
-   painted.update();
+   logs.forEach((log,i)=>log.userData.shown=i<count);syncVisuals();
   },
  };
 }
