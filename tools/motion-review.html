@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>Woodsmoke motion review</title>
+<style>body{margin:0;background:#20271f;color:#f7eedb;font:14px Arial}header{padding:10px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}button{font:inherit;background:#ecdfbc;border:0;border-radius:3px;padding:9px;cursor:pointer}output{padding:0 10px 10px;display:block;font-size:12px}iframe{display:block;width:100vw;height:calc(100vh - 124px);border:0}</style>
+<header><button data-p="0">Carry</button><button data-p="0.16">Raise</button><button data-p="0.34">Windup</button><button data-p="0.5">Contact</button><button data-p="0.73">Pull out</button><button id="variant">Overhead</button><button id="finish">Normal hit</button><button id="play">Play slowly</button><button id="view">Side / rear</button></header><output id="status">Loading the game…</output><iframe id="game" src="/?capture&nopad"></iframe>
+<script type="module">
+import {chopContact,SWING_VARIANTS} from '/src/mechanics.js';
+import {startingTree} from '/src/world/home-site.js';
+let lab,tree,progress=0,side=true,playing=false,last=0,variant=0,finishing=false;
+const iframe=document.querySelector('iframe'),status=document.querySelector('output');
+const setup=setInterval(()=>{
+ lab=iframe.contentWindow.lab;if(!lab?.ready)return;clearInterval(setup);
+ tree=startingTree(lab.forest.trees);if(tree.down){tree.down=false;lab.forest.poseTree(tree,0,0,1);lab.game.clearRemains(tree);}
+ const x=tree.x,z=tree.z+tree.r+1.25;lab.teleport(x,z,tree.x,tree.z);
+ for(const id of ['intro','hud','controls','action','mouse-capture','target','home-marker'])iframe.contentDocument.getElementById(id).hidden=true;
+ lab.game.before=()=>{lab.game.swing={t:tree,variant,finishing,age:progress,duration:1,poseProgress:progress,contact:chopContact(tree,lab.player.feet,lab.player.visualY)};};
+ lab.game.update=()=>{};lab.game.hit=()=>{};lab.game.save=()=>{};
+ view();render();
+},100);
+function view(){if(!lab)return;const p=lab.player.feet;if(side)lab.view([p.x+3.5,p.y+1.9,p.z+.15],[p.x,p.y+1.28,p.z-.55]);else lab.view([p.x+1.7,p.y+2.1,p.z+3.8],[p.x,p.y+1.2,p.z-.5]);}
+function render(){if(!lab?.ready)return;lab.step(1/60);const m=lab.game.chopAnimation?.metrics,b=m?.blade,c=chopContact(tree,lab.player.feet,lab.player.visualY);status.textContent=`${SWING_VARIANTS[variant].name} ${progress.toFixed(2)} · Right grip ${((m?.r||0)*100).toFixed(1)} cm · Left grip ${((m?.l||0)*100).toFixed(1)} cm · Blade to cut ${b?(Math.hypot(b.x-c.x,b.y-c.y,b.z-c.z)*100).toFixed(1):'—'} cm`;}
+for(const button of document.querySelectorAll('[data-p]'))button.onclick=()=>{playing=false;progress=+button.dataset.p;for(let i=0;i<12;i++)render();};
+document.querySelector('#view').onclick=()=>{side=!side;view();render();};
+document.querySelector('#variant').onclick=e=>{variant=(variant+1)%3;e.target.textContent=SWING_VARIANTS[variant].name;for(let i=0;i<12;i++)render();};
+document.querySelector('#finish').onclick=e=>{finishing=!finishing;e.target.textContent=finishing?'Finishing hit':'Normal hit';for(let i=0;i<12;i++)render();};
+document.querySelector('#play').onclick=()=>{playing=!playing;last=performance.now();requestAnimationFrame(tick);};
+function tick(now){if(!playing)return;progress=(progress+Math.min(.05,(now-last)/1000)*.28)%1;last=now;render();requestAnimationFrame(tick);}
+</script>

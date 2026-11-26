@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {Input} from '../src/figure/input.js';
+const world=new EventTarget(),doc=new EventTarget(),el=new EventTarget();
+globalThis.document=doc;globalThis.addEventListener=world.addEventListener.bind(world);doc.activeElement=null;doc.pointerLockElement=null;
+const event=(type,props={})=>Object.assign(new Event(type),props);
+let requests=0;
+el.requestPointerLock=()=>{requests++;doc.pointerLockElement=el;doc.dispatchEvent(event('pointerlockchange'));};
+doc.exitPointerLock=()=>{doc.pointerLockElement=null;doc.dispatchEvent(event('pointerlockchange'));};
+const input=new Input(el,{pads:false});input.lockable=true;
+el.dispatchEvent(event('mousedown',{button:0}));assert.equal(requests,1);assert.ok(input.locked);assert.equal(input.mouse.left,false,'recapture must not swing');
+world.dispatchEvent(event('mousemove',{movementX:150,movementY:-50}));
+let s=input.read(1/60);assert.ok(Math.abs(s.look.x-.33)<1e-9,'free mouse motion without a held button');assert.ok(s.look.y<0);assert.ok(s.strafe);assert.equal(input.read(1/60).look.x,0,'mouse deltas are consumed once');
+el.dispatchEvent(event('mousedown',{button:0}));assert.ok(input.mouse.left);world.dispatchEvent(event('mouseup',{button:0}));assert.equal(input.mouse.left,false);
+world.dispatchEvent(event('keydown',{code:'KeyW'}));world.dispatchEvent(event('keydown',{code:'KeyD'}));s=input.read(1/60);assert.ok(Math.abs(Math.hypot(s.move.x,s.move.y)-1)<1e-9,'normalized diagonal input');
+input.release();assert.equal(input.keys.size,0);assert.equal(input.mouse.left,false);assert.equal(input.active,false);
+world.dispatchEvent(event('mousemove',{movementX:300,movementY:300}));assert.equal(input.read(1/60).look.x,0,'released cursor must not move the camera');
+el.requestPointerLock=()=>{doc.dispatchEvent(event('pointerlockerror'));};input.capture();assert.ok(input.freeLook);world.dispatchEvent(event('mousemove',{movementX:50,movementY:0}));assert.ok(input.read(1/60).look.x>0,'embedded fallback looks without dragging');world.dispatchEvent(event('keydown',{code:'Escape'}));assert.equal(input.active,false,'Escape exits embedded fallback');
+input.capture();input.lockable=false;input.release();el.dispatchEvent(event('mousedown',{button:0}));assert.equal(input.active,false,'menu clicks never capture or chop');
+console.log('Mouse controls passed: capture, button-free look, left-click hold/release, normalized WASD, cursor release, menu isolation, embedded fallback, Escape.');
+
+let prevented=false;world.dispatchEvent(Object.assign(new Event('keydown'),{code:'Tab',preventDefault(){prevented=true;}}));assert.equal(prevented,false,'menu Tab navigation stays available');
+input.lockable=true;input.capture();world.dispatchEvent(event('keydown',{code:'KeyW'}));world.dispatchEvent(event('blur'));assert.equal(input.active,false);assert.equal(input.keys.size,0,'blur releases movement and mouse look');
