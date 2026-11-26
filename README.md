@@ -107,3 +107,6 @@ A full day takes 18 active minutes. The clock pauses in menus and hidden tabs an
 
 ### A campfire to build
 The stone hearth outside the shack takes **12 ordinary logs from stored camp supplies**, contributed up to four at a time. Press E or left-click at the hearth, or use Campfire in the Upgrades menu near camp. No woodshed prerequisite. Part-built logs and the lit fire persist in saves; completed fires burn without upkeep. Animated flames, rising embers, drifting smoke and warm flickering light run locally. The stereo crackle is generated once per audio context from a long noise bed and irregular wood-fracture transients, fades with distance, muffles indoors and obeys the Sound toggle.
+
+### Sit by the fire
+Finishing the campfire also gives you a timber bench. Existing completed fires gain it automatically. Approach the bench and press **E / left-click** to sit. The character settles onto the seat, rests their hands, and stows the axe and bag while the camera eases into a fireside view. Mouse look adjusts that view gently. Press **E**, click **Stand up**, or use **WASD** to stand, then resume walking. Escape releases the cursor so you can leave the view running; day/night, smoke and crackling continue.

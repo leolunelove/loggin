@@ -1,3 +1,4 @@
+import {seatedPose} from './figure/sit.js';
 import {advanceClock,canSleep,sleepUntilMorning,daylightAt,clockLabel,sleepFade} from './daylight.js';
 import {contributeFire,contributeMill,beginMilling,advanceMilling,contributePlanks,PROJECTS} from './camp.js';
 import {freshState} from './economy.js';
@@ -58,7 +59,7 @@ export class Lumberjack {
   const syncCapture = () => {
     const captured=this.input.active;
     document.body.classList.toggle('mouse-captured',captured);
-    $('mouse-capture').hidden=!this.started||this.touch||this.paused||captured;
+    $('mouse-capture').hidden=!this.started||this.touch||this.paused||captured||!!this.seat;
     $('chop-key').textContent=this.touch?'E':captured?'LMB':'E';
     this.held=false;if(!captured){this.swing=null;this.lockedTree=null;}
   };
@@ -191,6 +192,13 @@ export class Lumberjack {
  }
  before(dt,inp){
   this.time+=dt;
+  if(this.seat){
+   if(this.seated&&!this.paused&&(inp.interactPressed||(this.held&&!this.seatActionHeld)||Math.hypot(inp.move.x,inp.move.y)>.15))this.standFromBench();
+   this.seatActionHeld=this.held;
+   if(this.seated&&!this.paused){this.seat.orbit=THREE.MathUtils.clamp((this.seat.orbit||0)-inp.look.x,-.55,.55);this.seat.tilt=THREE.MathUtils.clamp((this.seat.tilt||0)+inp.look.y,-.5,.65);}
+   this.follow.rest=this.seated?{...this.seat.camera,orbit:this.seat.orbit,tilt:this.seat.tilt}:null;
+   inp.move={x:0,y:0};inp.look={x:0,y:0};inp.zoom=0;inp.sprint=false;inp.jump=false;this.held=false;this.swing=null;this.lockedTree=null;return;
+  }
   const inactive=!this.started||this.paused||this.sleeping||(!this.touch&&!this.input.active&&inp.device!=='pad');
   if(inactive){inp.move={x:0,y:0};inp.look={x:0,y:0};inp.zoom=0;inp.sprint=false;inp.strafe=false;inp.jump=false;this.held=false;this.swing=null;this.lockedTree=null;}
   inp.jump=false;
@@ -202,6 +210,8 @@ export class Lumberjack {
    this.indoorActionHeld=this.held;return;
   }
   this.indoorActionHeld=false;
+  if(this.home?.nearBench?.(this.player.feet,this.state)&&!inactive&&(inp.interactPressed||(this.held&&!this.benchActionHeld))){this.sitOnBench();inp.move={x:0,y:0};inp.jump=false;return;}
+  this.benchActionHeld=this.held;
   if(this.home?.nearFire?.(this.player.feet)&&this.state.fire<12){
    this.swing=null;this.lockedTree=null;this.follow.look(inp.look,dt);inp.look={x:0,y:0};
    const pressed=inp.interactPressed||(this.held&&!this.fireActionHeld);this.fireActionHeld=this.held;
@@ -253,9 +263,18 @@ export class Lumberjack {
     if(s.age>=s.duration)this.swing=null;
   }
  }
+ sitOnBench(){
+  if(this.seat||this.state.fire<12||!this.home.nearBench(this.player.feet,this.state))return;
+  this.seat=this.home.bench;this.seat.orbit=0;this.seat.tilt=0;this.seated=true;this.seatWeight=0;this.seatActionHeld=this.held;this.swing=null;this.lockedTree=null;this.cancelDelivery();this.follow.rest={...this.seat.camera};this.syncCapture();
+ }
+ standFromBench(){this.seated=false;this.follow.rest=null;this.input.clear();this.held=false;}
  pose(dt=1/60){
   if(this.swing)this.swing.contact=movingChopContact(this.swing.t,this.player.feet,this.player.visualY??this.player.feet.y);
-  this.chopAnimation.update(dt,this.swing,this.state.axe);this.axePaint.update();this.unloadAnimation.update(dt,this.delivery,this.state);this.axe.visible=!this.insideShack;this.axePaint.mesh.visible=!this.insideShack;
+  this.chopAnimation.update(dt,this.swing,this.state.axe);this.axePaint.update();this.unloadAnimation.update(dt,this.delivery,this.state);this.seatWeight=THREE.MathUtils.clamp((this.seatWeight||0)+(this.seated?dt/.65:-dt/.5),0,1);
+  if(this.seat)seatedPose(this.figure.man,this.animator,this.unloadAnimation,this.seat,this.seatWeight*this.seatWeight*(3-2*this.seatWeight));
+  this.axe.visible=!this.insideShack&&!this.seat;this.axePaint.mesh.visible=this.axe.visible;
+  this.figure.pack.group.visible=!this.seat;this.figure.pack.paint.mesh.visible=!this.seat;
+  if(this.seat&&!this.seated&&this.seatWeight===0){this.seat=null;this.syncCapture();}
  }
  makeStump(t){
   if(t.stump)return;const g=new THREE.CylinderGeometry(t.r*.92,t.r*1.25,.44,10);const m=new THREE.Mesh(g,[this.woodPaint,this.cutPaint,this.woodPaint]);m.position.set(t.x,t.y+.18,t.z);this.scene.add(m);t.stump=m;
@@ -351,8 +370,10 @@ export class Lumberjack {
   if(this.time>(this.nextRegrow||0)){this.nextRegrow=this.time+2;let changed=false;for(const t of this.forest.trees)if(t.down&&Date.now()>=t.regrow){t.down=false;t.hp=TREES[t.type].health;t.shake=0;delete this.state.down[t.id];this.forest.poseTree(t,0,0,1);this.clearRemains(t);t.collider=this.physics.createCollider(this.RAPIER.ColliderDesc.cylinder(5,t.r*1.15).setTranslation(t.x,t.y+4.5,t.z));changed=true;}if(changed){this.shade.refresh();this.save();}}
  }
  updatePrompt(){
-  $('aim-crosshair').hidden=!this.started||this.paused||!!this.lockedTree||this.insideShack;
-  $('aim-status').hidden=!this.started||this.paused||this.insideShack;$('aim-status').textContent=this.lockedTree?'Tree locked · RMB / Q to release':'RMB / Q · Lock a tree';
+  $('aim-crosshair').hidden=!this.started||this.paused||!!this.lockedTree||this.insideShack||!!this.seat;
+  $('aim-status').hidden=!this.started||this.paused||this.insideShack||!!this.seat;$('aim-status').textContent=this.lockedTree?'Tree locked · RMB / Q to release':'RMB / Q · Lock a tree';
+  if(this.seat&&this.started&&!this.paused){$('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=!this.seated;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.seated?'Stand up':'Standing up…';$('context').textContent='Take your time · Mouse to look · WASD to stand';return;}
+  if(this.home?.nearBench?.(this.player.feet,this.state)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Sit by the fire';$('context').textContent='A quiet moment at camp';return;}
   if(this.insideShack&&this.started&&!this.paused){
    $('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Camp ledger & rest';$('context').textContent='Your supplies, tools and building progress';return;
   }
