@@ -76,7 +76,7 @@ export function createFrame(renderer, shared, { samples = 4 } = {}) {
           // lit air glows toward the sun; shaded air is a touch darker and cooler than the plain mist
           float streak = 0.75 + 0.5 * texture(tNoise, vec2(dot(world.xz, vec2(uSunDir.z, -uSunDir.x)) * 0.11, world.y * 0.02)).g;
           vec3 glow = vec3(1.0, 0.86, 0.56) * (0.16 + 0.95 * pow(sunward, 2.5));
-          col += glow * (lit - 0.34) * thick * streak * uShafts * 0.8;
+          col += glow * (lit - 0.34) * thick * streak * uShafts * uDaylight * 0.8;
         }
 
         if (uCanvas > 0.0) {

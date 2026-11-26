@@ -29,7 +29,7 @@ export class ForestAudio {
     const source=c.createBufferSource();source.buffer=b;source.loop=true;
     const filter=c.createBiquadFilter();filter.type='lowpass';filter.frequency.value=650;
     const gain=c.createGain();gain.gain.value=.035;source.connect(filter).connect(gain).connect(this.master);source.start();
-    this.birds=setInterval(()=>{if(!document.hidden&&this.on&&this.random()<.6)this.bird();},4200);
+    this.birds=setInterval(()=>{if(!document.hidden&&this.on&&(this.daylight??1)>.25&&this.random()<.6)this.bird();},4200);
     this.birds.unref?.();
   }
   bird(){

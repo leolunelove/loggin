@@ -31,6 +31,7 @@ export function buildShackRoom({box,part}){
  }
  const rug=box(1.25,.012,1.4,7,[-.22,.125,.16],45);rug.visible=false;
  // The completed rear room can be walked into and gains a bed and a reading shelf.
+ const cot=[box(1.45,.16,.64,1,[.05,.2,-.94],25),box(1.4,.12,.6,7,[.05,.34,-.94],30),box(.95,.045,.59,3,[.25,.42,-.94],25),box(.28,.13,.47,7,[-.48,.43,-.94],15)];
  const room=[];
  for(const m of [box(.98,.24,1.78,1,[.95,.22,-2.88],35),box(.92,.15,1.7,7,[.95,.4,-2.88],40),box(.91,.05,1.1,3,[.95,.5,-2.58],30),box(.72,.12,.35,7,[.95,.55,-3.48],20),box(.6,.65,.45,0,[-1.25,.33,-3.3],25)]){room.push(m);m.visible=false;}
  // A small lantern gives the room its own warm colour.
@@ -43,7 +44,7 @@ export function buildShackRoom({box,part}){
   for(const {mesh,key,index}of goods)changed=show(mesh,index<Math.ceil(quantities[key]/(key==='planks'?2:8)))||changed;
   for(const {mesh,tier}of tools)changed=show(mesh,tier<=s.axe)||changed;
   for(const {mesh,key}of rewards)changed=show(mesh,s[key]>=(key==='porch'?12:key==='lodge'?24:40))||changed;
-  changed=show(rug,s.porch>=12)||changed;for(const mesh of room)changed=show(mesh,s.lodge>=24)||changed;
+  for(const mesh of cot)changed=show(mesh,!complete)||changed;changed=show(rug,s.porch>=12)||changed;for(const mesh of room)changed=show(mesh,s.lodge>=24)||changed;
   const key=[s.wood,s.hardwood,s.planks,s.felled,s.shed,s.sawmill,s.porch,s.lodge].join(':');
   if(ctx&&key!==previous){previous=key;ctx.fillStyle='#253025';ctx.fillRect(0,0,640,320);ctx.fillStyle='#f1dfb8';ctx.textAlign='center';ctx.font='bold 36px Georgia';ctx.fillText('THE AUTUMN CAMP',320,62);ctx.font='26px Georgia';ctx.fillText(`${s.wood} wood · ${s.hardwood||0} hardwood`,320,122);ctx.fillText(`${s.planks||0} planks · ${s.felled} ${s.felled===1?'tree':'trees'} felled`,320,174);ctx.fillStyle='#cfb578';ctx.font='24px Georgia';const built=Number(s.shed>=40)+Number(s.sawmill>=40)+Number(s.porch>=12)+Number(s.lodge>=24);ctx.fillText(`${built} / 4 camp projects complete`,320,245);texture.needsUpdate=true;}
   return changed;

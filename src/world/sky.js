@@ -12,7 +12,10 @@ vec3 skyColour(vec3 v) {
   vec3 high = mix(vec3(0.56, 0.68, 0.84), vec3(0.8, 0.84, 0.82), sunward * sunward);
   vec3 c = mix(low, high, smoothstep(0.0, 0.75, v.y));
   c = mix(c, vec3(1.0, 0.95, 0.78), pow(sunward, 24.0) * 0.9);
-  return c;
+  c=mix(c,c*vec3(1.14,.68,.43),uDusk*.65);
+  vec3 night=mix(vec3(.014,.022,.055),vec3(.055,.075,.13),1.-max(v.y,0.));
+  night+=vec3(.06,.07,.075)*pow(max(dot(v,uMoonDir),0.),70.);
+  return mix(night,c,uDaylight);
 }
 `;
 
@@ -33,7 +36,14 @@ export function createSky(shared) {
       ${SKY}
       in vec3 vDir;
       layout(location = 0) out vec4 outC;
-      void main() { outC = vec4(skyColour(normalize(vDir)) * 0.97, 1.0); }`,
+      void main() {
+        vec3 v=normalize(vDir),c=skyColour(v)*.97;
+        vec3 cell=floor(v*640.);float star=step(.9983,hash4(dot(cell,vec3(1.,113.,971.))).x);
+        c+=vec3(.5,.53,.46)*star*smoothstep(.1,.35,v.y)*uNight;
+        float moon=smoothstep(.99925,.9995,dot(v,uMoonDir));
+        c+=vec3(.65,.7,.58)*moon*uNight;
+        outC=vec4(c,1.);
+      }`,
   }));
   dome.frustumCulled = false;
   dome.renderOrder = -10;

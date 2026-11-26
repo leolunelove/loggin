@@ -124,6 +124,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  for(let i=0;i<6;i++){const m=campBox('lodge',(i+1)*4,.58,2,.14,0,[-1.5+i*.6,1.15,-4.1]);m.userData.shell='back';}
  for(const x of [-1.8,1.8])for(let i=0;i<3;i++){const m=campBox('lodge',(i+1)*8,.14,2,.84,0,[x,1.15,-1.95-i*.84]);m.userData.shell=x<0?'left':'right';}
  const lodgeRoof=campBox('lodge',24,4.1,.16,3,2,[0,2.35,-2.9]);lodgeRoof.rotation.x=-.10;lodgeRoof.userData.shell='roof';
+ campColliders.push({key:'lodge',stage:24,until:true,x:site.x+.05,y:y+.3,z:site.z-.94,hx:.73,hy:.22,hz:.32});
  const room=buildShackRoom({box,part});
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x-1.45,y:y+1.16,z:site.z-1.45,hx:.35,hy:1.1,hz:.08},{key:'lodge',stage:24,until:true,x:site.x+.975,y:y+1.16,z:site.z-1.45,hx:.825,hy:1.1,hz:.08});
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x+DOOR.x,y:y+1.15,z:site.z-1.45,hx:.625,hy:1.1,hz:.08});
@@ -149,7 +150,22 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
   parts.forEach(({mesh},i)=>{shadow.children[i].visible=mesh.visible;shadow.children[i].matrix.copy(mesh.matrixWorld);});painted.update();
  }
 
+ const lamps=[];
+ const lampPositions=[[1.28,1.83,-.6],[-1.35,1.85,1.7],[3.4,1.5,2.1],[mx,2,mz]];
+ let haloTexture;
+ if(typeof document!=='undefined'){const c=document.createElement('canvas');c.width=c.height=64;const ctx=c.getContext('2d');if(ctx){const gradient=ctx.createRadialGradient(32,32,0,32,32,32);gradient.addColorStop(0,'rgba(255,193,92,.65)');gradient.addColorStop(.2,'rgba(255,156,48,.22)');gradient.addColorStop(1,'rgba(255,138,30,0)');ctx.fillStyle=gradient;ctx.fillRect(0,0,64,64);haloTexture=new THREE.CanvasTexture(c);}}
+ const glowMaterial=new THREE.MeshBasicMaterial({color:0xffb95d});
+ for(const [i,p]of lampPositions.entries()){
+  const core=new THREE.Mesh(new THREE.BoxGeometry(.12,.19,.12),glowMaterial);core.position.set(...p);group.add(core);
+  const frame=new THREE.Mesh(new THREE.BoxGeometry(.23,.035,.23),materials[6]);frame.position.set(p[0],p[1]+.12,p[2]);group.add(frame);
+  let halo;if(haloTexture){halo=new THREE.Sprite(new THREE.SpriteMaterial({map:haloTexture,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:0}));halo.position.copy(core.position);halo.scale.set(1.3,1.3,1);group.add(halo);}lamps.push({core,frame,halo,i});
+ }
  return {group,paint:painted,shadow,dropoff,colliders,campColliders,door:doorHinge,
+  updateLighting(night,time,state){
+   const strength=night*(.97+.03*Math.sin(time*3.1));
+   lampPositions.forEach((p,i)=>{const on=i!==3||state.sawmill>=40;shared.uCampLights.value[i].set(site.x+p[0],y+p[1],site.z+p[2],on?strength*(i===0?2.1:1.7):0);lamps[i].core.visible=on&&night>.05;lamps[i].frame.visible=on;if(lamps[i].halo)lamps[i].halo.material.opacity=on?night:0;});
+   shared.uLamp.value.set(site.x+1.28,y+1.83,site.z-.6,night*.6);
+  },
   nearDoor(feet){return atShackDoor(group.position,feet);},
   contains(feet,state){return insideShack(group.position,feet,state);},
   updateInterior(dt,feet,camera,state){
@@ -160,7 +176,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
    const changed=reveal!==cutaway||(reveal&&mask!==cutMask);cutaway=reveal;cutMask=mask;
    const wanted=inside||nearDoor?-Math.PI*.49:0,old=doorAngle;doorAngle=wanted+(doorAngle-wanted)*Math.exp(-9*dt);doorHinge.rotation.y=doorAngle;
    if(changed||Math.abs(old-doorAngle)>.0001)syncVisuals();
-   if(shared.uLamp){shared.uLamp.value.set(site.x+1.28,y+1.83,site.z-.6,(inside?.65:0)+(shared.uLamp.value.w-(inside?.65:0))*Math.exp(-6*dt));}
+
    return {inside,reveal,changed:changed||(Math.abs(old-wanted)>.01&&Math.abs(doorAngle-wanted)<=.01),camera:reveal?{center:{x:site.x,y:y+.8,z:site.z-(state.lodge>=24?1.1:0)},distance:state.lodge>=24?7.5:6}:null};
   },
   setProject(amount){let changed=false;for(const mesh of projectParts){const visible=amount>=mesh.userData.projectStage;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}if(changed)syncVisuals();},

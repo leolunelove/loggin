@@ -101,3 +101,6 @@ Automated coverage includes progression, storage, recovery, one hit per swing, i
 Built from Blendi / Patch’s [Oil Paint](https://patch.gg/blendi/oil-paint) renderer, forest and CC0 wanderer. Loggin’ adds the lumberjack loop, tools, coordinated procedural animations, carrying pack, shack, economy, UI, browser saves, sound and tree felling/regrowth.
 
 Original code: MIT. Character and clips: CC0; see `LICENCE-NOTES.md`, `OIL-PAINT-REFERENCE.md` and `public/LICENSES/`. Three.js: MIT. Rapier: Apache-2.0. Recorded sound licences are retained with `public/audio/`. Original notices remain in `LICENSE` and the production build. Do not remove these when publishing a fork.
+
+### Day and night
+A full day takes 18 active minutes. The clock pauses in menus and hidden tabs and is saved locally, without offline catch-up. Camp lanterns turn on gradually at dusk. Walk into the shack, press E, then choose **Sleep until morning** after 18:00 (or before 06:30) to wake at 06:30. Sleeping keeps your bag, supplies and upgrades. The starter shack includes a bedroll; the extension adds a bedroom.
