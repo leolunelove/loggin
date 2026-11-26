@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {Follow} from '../src/figure/camera.js';
 import {Lumberjack} from '../src/game.js';
-import {CHOP_REACH,IMPACT_AT,swingPose,pickTree,chopCount} from '../src/mechanics.js';
+import {CHOP_REACH,IMPACT_AT,swingPose,pickTree,chopCount,pickAimTree,movingChopContact} from '../src/mechanics.js';
 import {freshState,purchase,rewardFor,swingDuration,upgradeCost,sanitize} from '../src/economy.js';
 import {SAVE_KEY,readSave,writeSave} from '../src/save.js';
 const tree=(x,z,other={})=>({x,z,r:.2,tier:0,type:1,hp:3,...other});
@@ -31,15 +31,20 @@ test('one click commits one impact, never an extra held swing',()=>{
   for(let i=0;i<55;i++)g.before(.02,frame());
   assert.equal(g.hits.length,1);assert.equal(g.swing,null);
 });
-test('moving during windup cancels immediately without damaging a tree',()=>{
-  const g=rig();g.input.mouse.left=true;g.before(.15,frame());assert.ok(g.swing);
-  const next=frame(1);g.before(.02,next);assert.equal(g.swing,null);assert.equal(next.move.x,1);
-  assert.equal(g.hits.length,0);
+test('movement during windup keeps the stroke and movement input alive',()=>{
+ const g=rig();g.input.mouse.left=true;g.before(.15,frame());assert.ok(g.swing);g.input.mouse.left=false;
+ const next=frame(1);g.before(.02,next);assert.ok(g.swing);assert.equal(next.move.x,1);assert.equal(next.sprint,false);
+ for(let i=0;i<30;i++)g.before(.02,frame(1));assert.equal(g.hits.length,1);
 });
-test('looking away or opening a menu cancels an uncommitted swing',()=>{
-  for(const action of ['look','pause']){const g=rig();g.input.mouse.left=true;g.before(.2,frame());
-    if(action==='look')g.follow.yaw=0;else g.paused=true;
-    g.before(.3,frame());assert.equal(g.hits.length,0);assert.equal(g.swing,null);}
+test('moving out of reach produces one miss and completes recovery without hitting from afar',()=>{
+ const g=rig();g.input.mouse.left=true;g.before(.15,frame());g.input.mouse.left=false;g.player.feet.x=8;
+ g.before(.4,frame(1));assert.ok(g.swing);assert.equal(g.swing.missed,true);assert.equal(g.hits.length,0);
+ for(let i=0;i<30;i++)g.before(.02,frame(1));assert.equal(g.swing,null);assert.equal(g.hits.length,0);
+});
+test('looking away keeps a committed stroke but menus cancel it',()=>{
+ const g=rig();g.input.mouse.left=true;g.before(.2,frame());g.input.mouse.left=false;g.follow.yaw=0;
+ g.before(.3,frame());assert.equal(g.hits.length,1);
+ const paused=rig();paused.input.mouse.left=true;paused.before(.2,frame());paused.paused=true;paused.before(.3,frame());assert.equal(paused.hits.length,0);assert.equal(paused.swing,null);
 });
 test('keyboard chop remains held when one of two chop keys is released',()=>{
   const g=rig();g.input.keys.add('KeyE');g.input.keys.add('Space');g.input.keys.delete('KeyE');g.before(.02,frame());assert.ok(g.swing);
@@ -91,5 +96,21 @@ test('a failed backup write still saves new progress to the primary slot',()=>{
 test('a committed finishing stroke keeps its recovery when the tree leaves targeting',()=>{
  const g=rig();g.input.mouse.left=true;g.before(.02,frame());g.swing.hit=true;g.swing.age=g.swing.duration*.55;g.swing.t.down=true;g.input.mouse.left=false;
  g.before(.02,frame());assert.ok(g.swing,'falling must not cut off the follow-through');
- g.before(.02,frame(1));assert.equal(g.swing,null,'movement still interrupts recovery immediately');
+ g.before(.02,frame(1));assert.ok(g.swing,'movement preserves the finishing recovery');
 });
+
+test('right-click lock selects an aimed tree, persists through strafing, toggles off and releases on felling or range',()=>{
+ const g=rig(),t=g.forest.trees[0];const press={...frame(),aimPressed:true};g.before(.02,press);assert.equal(g.lockedTree,t);assert.equal(press.strafe,true);
+ g.follow.yaw=0;g.before(.02,frame(1));assert.equal(g.nearest().tree,t);g.before(.02,{...frame(),aimPressed:true});assert.equal(g.lockedTree,null);
+ g.follow.yaw=Math.PI;g.before(.02,{...frame(),aimPressed:true});t.down=true;g.before(.02,frame());assert.equal(g.lockedTree,null);
+ t.down=false;g.lockedTree=t;g.player.feet.x=25;g.before(.02,frame());assert.equal(g.lockedTree,null);
+});
+test('aim picks a central visible candidate and ignores down, behind and distant trunks',()=>{
+ const center=tree(0,-8),side=tree(3,-7);assert.equal(pickAimTree([side,center,tree(0,1),tree(0,-30)],{x:0,z:0},Math.PI),center);center.down=true;assert.equal(pickAimTree([center,tree(0,2)],{x:0,z:0},Math.PI),null);
+});
+test('moving swing contact tracks the near side of a tree but stays within arm reach after retreat',()=>{
+ const t=tree(0,-1.4,{y:0}),feet={x:0,y:0,z:0};const p=movingChopContact(t,feet);assert.ok(Math.abs(p.z+1.208)<.001);
+ feet.x=8;const miss=movingChopContact(t,feet);assert.ok(Math.hypot(miss.x-feet.x,miss.z-feet.z)<=CHOP_REACH+.00001);assert.equal(miss.y,1.23);
+});
+
+test('aim cannot lock through a solid obstruction',()=>{const g=rig();g.player.castRay=()=>.2;g.before(.02,{...frame(),aimPressed:true});assert.equal(g.lockedTree,null);g.player.castRay=()=>null;g.before(.02,{...frame(),aimPressed:true});assert.equal(g.lockedTree,g.forest.trees[0]);});

@@ -1,3 +1,15 @@
+# Tree locking, moving swings and illustrated field notes
+
+Right-click or Q toggles lock onto an aimed, visible nearby tree. Locked trees retain selection while strafing and the camera tracks them smoothly. The lock releases on felling, excess distance or menu/cursor release. Right-click presses are edge-triggered so holding the button never repeatedly toggles the lock.
+
+An axe stroke now follows through when movement starts, and its contact pose tracks the player without extending the arms toward a distant trunk. Damage is checked at the impact frame; stepping out of reach produces a miss. The walking gait stays active during the stroke.
+
+Settings now contains What’s new, an in-game changelog with three actual game screenshots. Images are bundled locally and loaded when the notes are opened.
+
+Browser verification covered right-click lock/release, strafing, a hit surviving movement during a stroke, and opening/closing the illustrated menu with all images loaded.
+
+---
+
 # Sawmill, planks and a fresh start
 
 The camp now grows from woodshed to hardwood sawmill, plank-funded porch and cabin extension. Sawmill construction consumes 40 hardwood in visible stages. Eight ordinary logs produce two planks; the porch shortens cutting time and the larger cabin increases carrying capacity.

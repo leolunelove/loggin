@@ -20,3 +20,5 @@ console.log('Mouse controls passed: capture, button-free look, left-click hold/r
 
 let prevented=false;world.dispatchEvent(Object.assign(new Event('keydown'),{code:'Tab',preventDefault(){prevented=true;}}));assert.equal(prevented,false,'menu Tab navigation stays available');
 input.lockable=true;input.capture();world.dispatchEvent(event('keydown',{code:'KeyW'}));world.dispatchEvent(event('blur'));assert.equal(input.active,false);assert.equal(input.keys.size,0,'blur releases movement and mouse look');
+
+input.lockable=true;input.capture();el.dispatchEvent(event('mousedown',{button:2}));assert.equal(input.read(1/60).aimPressed,true,'right click toggles a tree lock');assert.equal(input.read(1/60).aimPressed,false,'held RMB never toggles repeatedly');world.dispatchEvent(event('mouseup',{button:2}));el.dispatchEvent(event('mousedown',{button:2}));assert.equal(input.read(1/60).aimPressed,true);input.release();assert.equal(input.read(1/60).aimPressed,false,'release clears queued lock presses');

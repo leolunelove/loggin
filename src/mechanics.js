@@ -61,6 +61,23 @@ export function pickTree(trees, feet, yaw, eye=feet) {
   }
   return {tree,distance};
 }
+export const LOCK_REACH=18;
+export function pickAimTree(trees,feet,yaw,eye=feet){
+ const fx=Math.sin(yaw),fz=Math.cos(yaw);let tree=null,score=Infinity;
+ for(const t of trees){
+  if(t.down||t.tier!==0)continue;
+  const d=Math.max(0,Math.hypot(t.x-feet.x,t.z-feet.z)-t.r);if(d>LOCK_REACH)continue;
+  const dx=t.x-eye.x,dz=t.z-eye.z,n=Math.hypot(dx,dz)||1,facing=(dx*fx+dz*fz)/n;
+  if(facing<.94)continue;
+  const rank=(1-facing)*40+d*.025;if(rank<score){score=rank;tree=t;}
+ }
+ return tree;
+}
+export function movingChopContact(tree,feet,rootY=feet.y||0){
+ const p=chopContact(tree,feet,rootY),dx=p.x-feet.x,dz=p.z-feet.z,d=Math.hypot(dx,dz);
+ if(d>CHOP_REACH){p.x=feet.x+dx/d*CHOP_REACH;p.z=feet.z+dz/d*CHOP_REACH;}
+ return p;
+}
 export const chopCount = (health,power) => { const n=Math.ceil(health/power);return `${n} ${n===1?'chop':'chops'}`; };
 
 

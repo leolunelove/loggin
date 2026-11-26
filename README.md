@@ -18,6 +18,10 @@ Oak and maple are hardwood: build the woodshed and equip the felling axe to harv
 
 No hunger, stamina, accounts, server or external runtime services. Progress and preferences stay in this browser. Existing Woodsmoke saves migrate into an isolated camp save so older open builds cannot overwrite new progression; moving to another hostname starts a separate browser save.
 
+Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Lock onto an aimed tree with right-click or Q, then press again to release. Felling, range and menus also release the lock.
+
+**Settings → What’s new · Changelog** contains illustrated field notes with screenshots of the game.
+
 ## Build a bigger camp
 
 After the woodshed, use **U → Grow your camp** while near the shack:
@@ -44,6 +48,7 @@ New camps roll a random seed for terrain, tree layout and a winding, shallow riv
 | Shift + forward | Run |
 | Hold left mouse / E / Space | Chop nearby trees |
 | E / left mouse at rack | Start unloading |
+| Right-click / Q | Toggle tree lock; strafe while keeping the tree in view |
 | Mouse wheel | Zoom |
 | U | Upgrades |
 | Esc | Release cursor / close menu |
