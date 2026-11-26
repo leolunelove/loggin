@@ -1,3 +1,6 @@
+import {WORLD} from './world/seed.js';
+import {characterPalettes} from './appearance.js';
+import {createRiver,riverPhase} from './world/river.js';
 // A wanderer in an autumn wood, painted in oils. Third person; walk, run, jump; nothing to do yet but be there.
 // Shown with ?scene=autumn (src/scenes.js).
 //   ?capture       no clock: window.lab.step(dt, n) advances it (for stills and films)
@@ -52,6 +55,7 @@ renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 document.getElementById('view').appendChild(renderer.domElement);
 
 const shared = createShared();
+shared.uRiverPhase={value:riverPhase()};
 shared.tBrush.value = createBrushSheet();
 if (q.has('impasto')) shared.uImpasto.value = +q.get('impasto');
 const scene = new THREE.Scene();
@@ -70,7 +74,7 @@ lap('start');
 // the wanderer's files are the large ones: they start coming down now, while the wood is made
 let told = 0;
 const say = (value, label) => { told = Math.max(told, value); block.progress(told, label); };
-const figureComing = createFigure(shared, (done) => say(0.05 + 0.55 * done, 'Fetching the wanderer'));
+const figureComing = createFigure(shared, (done) => say(0.05 + 0.55 * done, 'Fetching the wanderer'),characterPalettes(WORLD.state?.appearance));
 
 const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
 await prepareLand((done) => { say(0.03 + 0.07 * done, 'Laying the ground'); return turn(); });
@@ -86,13 +90,14 @@ forest.shade.add(home.shadow);
 lap('forest');
 const floor = createFloor(shared);
 const sky = createSky(shared);
+const river=createRiver(shared,heightAt);
 const leaves = createLeaves(shared, 2400);
 const shade = createShade(renderer, shared, forest.shade);
 lap('shade');
 say(0.25, 'Fetching the wanderer');
 await turn();
 const kick = createKick(shared);
-scene.add(sky.group, land.mesh, forest.group, floor.group, leaves.mesh, kick.mesh);
+scene.add(river,sky.group, land.mesh, forest.group, floor.group, leaves.mesh, kick.mesh);
 
 // --- the ground and the trunks, for his feet ---
 await RAPIER.init();
@@ -257,6 +262,23 @@ for (let i = 0; i < (capture ? 1 : 5); i++) {
   await turn();
 }
 lap('first frame');
+// Let the player watch the same real meshes emerge: ground, water, individual tree batches, then camp.
+if(!capture){
+ const h=home.group.position;
+ follow.free={position:new THREE.Vector3(h.x+19,h.y+13,h.z+20),target:new THREE.Vector3(h.x+7,h.y+1,h.z-6)};
+ const meshes=forest.group.children.map(mesh=>({mesh,count:mesh.geometry.index?.count,instances:mesh.geometry.instanceCount}));
+ document.body.classList.add('generating');
+ for(let i=0;i<=30;i++){
+  const p=i/30,trees=THREE.MathUtils.clamp((p-.28)/.55,0,1);
+  land.mesh.visible=p>.08;floor.group.visible=p>.15;river.visible=p>.24;sky.group.visible=true;
+  home.group.visible=home.paint.mesh.visible=p>.82;man.object.visible=figure.dabs.visible=p>.93;leaves.mesh.visible=p>.9;kick.mesh.visible=p>.93;
+  for(const {mesh,count,instances} of meshes){if(count)mesh.geometry.setDrawRange(0,Math.floor(count*trees/3)*3);if(Number.isFinite(instances))mesh.geometry.instanceCount=Math.floor(instances*trees);}
+  block.progress(p,p<.1?'First light':p<.24?'Laying the land':p<.35?'Finding the river':p<.82?'Growing your forest':p<.94?'Making camp':'Your little life in the woods');
+  tick(1/30);await new Promise(resolve=>setTimeout(resolve,65));
+ }
+ for(const {mesh,count,instances} of meshes){if(count)mesh.geometry.setDrawRange(0,count);if(Number.isFinite(instances))mesh.geometry.instanceCount=instances;}
+ follow.free=null;follow.pivot.set(0,0,0);shade.refresh();document.body.classList.remove('generating');
+}
 
 // Draws while the page says the demo can be seen, and not at all while it can't.
 let running = false;

@@ -1,3 +1,5 @@
+import {WORLD} from './seed.js';
+import {riverDistance} from './river.js';
 // The wood: tall beeches with a scatter of birch, maple and old oak, thinned along the way and opened at the
 // clearing. Trunks and limbs are real shapes that carry the underpainting; bark, twigs and every leaf mass are
 // dabs. Trees close to the way are painted in full, those behind them with fewer, larger touches, and the furthest
@@ -70,6 +72,7 @@ function plant() {
   for (let gz = -40; gz <= 40; gz++) {
     for (let gx = -40; gx <= 40; gx++) {
       const x = (gx + 0.15 + rand() * 0.7) * G, z = (gz + 0.15 + rand() * 0.7) * G - 8;
+      if(WORLD.seed && (riverDistance(x,z)<5.8||(x>-8&&x<17&&z>65&&z<86)||[[-5,88],[-11,75],[-8,61],[-8,53],[14,45]].some(([a,b])=>Math.hypot(x-a,z-b)<4)))continue;
       const corridor = Math.hypot(Math.max(0, Math.abs(x) - 10), Math.max(0, Math.abs(z + 8) - 100));
       if (corridor > 185 || rand() > 0.84) continue;
       const wd = corridor < 60 ? wayDist(x, z) : 99;
@@ -80,10 +83,16 @@ function plant() {
       add(x, z, type, corridor < 40 ? 0 : corridor < 92 ? 1 : 2);
     }
   }
+  if(WORLD.seed){
+   add(0,78,BIRCH,0);trees[trees.length-1].tutorial=true;
+   for(const [x,z] of [[-5,88],[-11,75],[-8,61]])add(x,z,BIRCH,0);
+   add(-8,53,MAPLE,0);add(14,45,OAK,0);
+  }
   // the old oak that stands in the clearing, and two great beeches that make a gate where the way begins
   const hero = { x: CLEARING.x + 3, z: CLEARING.z - 2 };
   trees.push({ ...hero, y: heightAt(hero.x, hero.z), type: OAK, tier: 0, r: 1.25, h: 23, family: 0, seed: 77, lean: [0.03, -0.02], hero: true });
   for (const [x, z, s] of [[START.x - 5.5, START.z - 13, 1.9], [START.x + 6.2, START.z - 19, 1.6]]) add(x, z, BEECH, 0, s);
+  if(WORLD.seed)trees.sort((a,b)=>Math.hypot(a.x-START.x,a.z-START.z)-Math.hypot(b.x-START.x,b.z-START.z));
   return trees;
 }
 

@@ -1,3 +1,5 @@
+import {WORLD} from './seed.js';
+import {riverDepth} from './river.js';
 // The ground of the wood: gentle rises and hollows, a worn way winding north through the trees to a clearing
 // where the canopy opens. The same height is used by the picture (a map the shaders read), by the wanderer's feet
 // (a height field for the physics) and by everything that is planted on it.
@@ -43,12 +45,15 @@ export const clearingAt = (x, z) => {
 };
 
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-function rawHeight(x, z, wd) {
+function naturalHeight(x, z, wd) {
   let h = 2.8 * noise(x / 74 + 3.1, z / 74 - 1.7) + 1.2 * noise(x / 26, z / 26) + 0.3 * noise(x / 8.3, z / 8.3);
   h += 5.5 * sstep(70, -110, z); // the land climbs gently toward the clearing
   h -= 0.28 * Math.exp(-(wd * wd) / 3.2); // the way is worn a little into it
   return h;
 }
+
+const campHeight=naturalHeight(4,76,wayDist(4,76));
+function rawHeight(x,z,wd){let h=naturalHeight(x,z,wd);if(WORLD.seed){const d=Math.max(Math.abs(x-4)-11,Math.abs(z-76)-10,0);const w=1-sstep(0,6,d);h=h*(1-w)+campHeight*w;}return h-riverDepth(x,z);}
 
 // --- maps ------------------------------------------------------------------------------------------------------
 const N = LAND_RES;

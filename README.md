@@ -18,6 +18,23 @@ Oak and maple are hardwood: build the woodshed and equip the felling axe to harv
 
 No hunger, stamina, accounts, server or external runtime services. Progress and preferences stay in this browser. Existing Woodsmoke saves are retained using the same save key; moving to another hostname starts a separate browser save.
 
+## Build a bigger camp
+
+After the woodshed, use **U → Grow your camp** while near the shack:
+
+- Contribute up to 8 hardwood at a time to the sawmill. Its foundations, posts, beams, cutting bed and roof appear as the 40-hardwood project advances. Contributions consume stored hardwood and its corresponding logs.
+- At the completed sawmill, 8 ordinary stored logs become 2 planks in 3 seconds. Hardwood is reserved for construction and tools. An active cutting job survives a reload and completes only once.
+- Spend 12 planks on the visible camp porch to cut milling time to 2 seconds.
+- Then spend 24 planks on a cabin extension, adding a visible rear room and 32 carrying capacity.
+
+## Your lumberjack and world
+
+Choose shirt, hat, bag, skin tone and hair in the live 3D entry preview. Turn the character to inspect the outfit before entering. Choices are saved with the camp.
+
+New camps roll a random seed for terrain, tree layout and a winding, shallow river. A clear camp footprint and nearby starter trees keep the first deliveries approachable. The entry sequence reveals ground, water, tree batches and camp from an overview. Reloading a save rebuilds the same world; it does not reroll progress. Legacy seed-zero saves preserve their tree ordering.
+
+**Settings → Reset camp & grow a new world** opens an explicit reset confirmation. Reset clears progression and felled trees, rolls a new world and keeps your outfit. **Undo last camp reset** on the entry screen restores the previous camp. Browser storage must be available for reset and recovery.
+
 ## Controls
 
 | Input | Action |

@@ -87,6 +87,8 @@ precision highp float;
 precision highp sampler2DShadow;
 #define TAU 6.28318530718
 uniform float uTime;
+uniform float uRiverPhase;
+float riverGap(vec2 xz){return abs(xz.x-(24.0+sin(xz.y*.035+uRiverPhase)*5.0+sin(xz.y*.08+uRiverPhase)*1.5));}
 uniform float uPixel;
 uniform vec3 uSunDir;
 uniform vec3 uWind;

@@ -34,6 +34,7 @@ void makeDab(inout Dab d) {
   float lod;
   d.alive = ringGrow(distance(xz, cameraPosition.xz), lod);
   if (d.alive <= 0.0) return;
+  if(riverGap(xz)<4.6){d.alive=0.0;return;}
   vec3 P = vec3(xz.x, heightAt(xz), xz.y);
   vec3 Nn = normalAt(xz);
   vec4 m = texture(tLand, landUv(xz));
@@ -93,6 +94,7 @@ void makeDab(inout Dab d) {
   float a = (sub + f.x) / 6.0 * TAU + r.z * TAU;
   vec2 fan = vec2(cos(a), sin(a));
   vec2 xz = foot + fan * mix(0.1, 0.03, grass) * big;
+  if(riverGap(xz)<4.6){d.alive=0.0;return;}
   vec3 P = vec3(xz.x, heightAt(xz), xz.y);
   float gust = gustAt(xz);
   float lit = sunAt(P + vec3(0.0, 0.3, 0.0));

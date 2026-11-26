@@ -14,7 +14,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  // A level foundation, planted into the same terrain as the player's feet.
  const y=Math.max(...[-1.8,1.8].flatMap(x=>[-1.5,1.5].map(z=>heightAt(site.x+x,site.z+z))));
  group.position.set(site.x,y,site.z);
- const palettes=[PLANK,TIMBER,ROOF,DARK,CUT,WINDOW],materials=palettes.map(p=>makePaint(shared,p,{grain:4})),parts=[];
+ const palettes=[PLANK,TIMBER,ROOF,DARK,CUT,WINDOW,[[.85,.88,.80],[.45,.52,.48],[.17,.22,.22]]],materials=palettes.map(p=>makePaint(shared,p,{grain:4})),parts=[];
  const colliders=[];
  function part(geometry,pal,position,count=35,size=[.1,.32],dir=UP){
   const m=new THREE.Mesh(geometry,materials[pal]);m.position.set(...position);group.add(m);
@@ -87,6 +87,34 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  const shedRoof=projectBox(2.8,.16,2.95,2,[-3.7,2.5,0],40);shedRoof.rotation.x=.12;
  for(let i=0;i<9;i++){const log=part(new THREE.CylinderGeometry(.14,.16,1.7,8),1,[-4.35+(i%3)*.5,.45+Math.floor(i/3)*.3,0],25);log.rotation.x=Math.PI/2;log.userData.projectStage=40;projectParts.push(log);}
  projectParts.forEach(m=>m.visible=m.userData.projectStage===0);
+ const campParts=[],plankStack=[],campColliders=[];
+ const campBox=(key,stage,w,h,d,pal,position)=>{const mesh=box(w,h,d,pal,position,32);campParts.push({mesh,key,stage});mesh.visible=false;return mesh;};
+ // The hardwood sawmill grows from a staked plot to a timber frame, a work bed and a covered cutting station.
+ const mx=6.4,mz=-4.6;
+ for(const dx of [-1.6,1.6])for(const dz of [-1.2,1.2]){
+  campBox('sawmill',0,.14,.3,.14,1,[mx+dx,.1,mz+dz]);
+  campBox('sawmill',8,.22,.25,.3,1,[mx+dx,.1,mz+dz]);
+  campBox('sawmill',16,.16,2.3,.16,1,[mx+dx,1.15,mz+dz]);
+  campColliders.push({key:'sawmill',stage:16,x:site.x+mx+dx,y:y+1.15,z:site.z+mz+dz,hx:.12,hy:1.2,hz:.12});
+ }
+ for(const z of [mz-1.2,mz+1.2])campBox('sawmill',24,3.6,.18,.2,1,[mx,2.3,z]);
+ for(const x of [mx-1,mx+1])campBox('sawmill',24,.22,.9,.7,1,[x,.5,mz]);
+ campBox('sawmill',32,3.5,.2,1,0,[mx,1,mz]);
+ campColliders.push({key:'sawmill',stage:32,x:site.x+mx,y:y+.6,z:site.z+mz,hx:1.75,hy:.55,hz:.55});
+ for(let i=0;i<4;i++)campBox('sawmill',32,.15,.8,.1,0,[mx-1.5+i,1.5,mz-1.2]);
+ const millRoof=campBox('sawmill',40,3.9,.15,3.1,2,[mx,2.5,mz]);millRoof.rotation.x=.08;
+ const blade=part(new THREE.CylinderGeometry(.49,.49,.06,32),6,[mx,1.42,mz],65,[.05,.13]);blade.rotation.x=Math.PI/2;blade.visible=false;campParts.push({mesh:blade,key:'sawmill',stage:40});
+ for(let i=0;i<16;i++){const tooth=part(new THREE.BoxGeometry(.10,.12,.07),6,[mx+Math.sin(i*Math.PI/8)*.49,1.42+Math.cos(i*Math.PI/8)*.49,mz],4);tooth.rotation.z=-i*Math.PI/8;campParts.push({mesh:tooth,key:'sawmill',stage:40});tooth.visible=false;}
+ const feed=part(new THREE.CylinderGeometry(.17,.19,2.1,10),1,[mx+.8,1.22,mz],40);feed.rotation.z=Math.PI/2;feed.visible=false;campParts.push({mesh:feed,key:'sawmill',stage:40});
+ for(let i=0;i<12;i++){const mesh=campBox('planks',i+1,1.4,.08,.25,0,[mx-1+(i%3)*.32,.2+Math.floor(i/3)*.10,mz+1.8]);plankStack.push(mesh);}
+ // A broad porch and rear cabin room are paid for in planks, and appear piece by piece.
+ for(let i=0;i<3;i++)campBox('porch',(i+1)*4,1.22,.18,1.35,0,[-1.22+i*1.22,.09,2.4]);
+ for(const x of [-1.8,1.8]){campBox('porch',12,.12,1,.12,1,[x,.6,2.95]);campBox('porch',12,.12,.12,1.35,1,[x,1.1,2.4]);}
+ campBox('porch',12,1.3,.12,.4,1,[0,-.04,3.22]);
+ for(let i=0;i<6;i++)campBox('lodge',(i+1)*4,.6,.25,2.6,1,[-1.5+i*.6,.06,-2.85]);
+ for(let i=0;i<6;i++)campBox('lodge',(i+1)*4,.58,2, .14,0,[-1.5+i*.6,1.15,-4.1]);
+ for(const x of [-1.8,1.8])for(let i=0;i<3;i++)campBox('lodge',(i+1)*8,.14,2,.84,0,[x,1.15,-1.95-i*.84]);
+ const lodgeRoof=campBox('lodge',24,4.1,.16,3,2,[0,2.35,-2.9]);lodgeRoof.rotation.x=-.10;
  group.updateMatrixWorld(true);
  const painted=pinDabs(shared,palettes,parts);painted.update();
  // Separate static shadow meshes share geometry, avoiding self-shadowing the paint dabs.
@@ -96,8 +124,10 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  colliders.push({x:site.x,y:y+1.35,z:site.z,hx:1.85,hy:1.65,hz:1.56});
  colliders.push({x:site.x+rack.x,y:y+.65,z:site.z+rack.z,hx:1.16,hy:.84,hz:.53});
  let previous=-1;
- return {group,paint:painted,shadow,dropoff,colliders,
+ return {group,paint:painted,shadow,dropoff,colliders,campColliders,
   setProject(amount){let changed=false;for(const mesh of projectParts){const visible=amount>=mesh.userData.projectStage;if(mesh.visible!==visible){mesh.visible=visible;changed=true;}}if(changed){parts.forEach(({mesh},i)=>shadow.children[i].visible=mesh.visible);painted.update();}},
+  setCamp(state){let changed=false;for(const {mesh,key,stage} of campParts){const unlocked=key==='sawmill'?state.shed>=40:key==='lodge'?state.porch>=12:state.sawmill>=40;const value=key==='planks'?Math.min(12,state.planks):state[key];const visible=unlocked&&value>=stage;if(mesh.visible!==visible){mesh.visible=visible;changed=true;}}if(changed){parts.forEach(({mesh},i)=>shadow.children[i].visible=mesh.visible);painted.update();}},
+  updateMill(dt,active){if(active){blade.rotation.y+=dt*9;group.updateMatrixWorld(true);painted.update();}},
   logTarget(wood){const index=Math.min(logs.length-1,Math.max(0,Math.ceil(wood/6)));return logs[index].getWorldPosition(new THREE.Vector3());},
   setWood(wood){
    const count=wood>0?Math.min(logs.length,Math.ceil(wood/6)):0;

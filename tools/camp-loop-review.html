@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>Loggin’ sawmill loop review</title><style>body{margin:0;background:#282e23;color:#f5ebd1;font:14px Georgia}header{padding:12px;display:flex;gap:12px}button{padding:10px}iframe{border:0;width:100%;height:88vh}</style><header><button id="prepare">Prepare hardwood test camp</button><button id="advance">Run sawmill 4 seconds</button><button id="planks">Supply planks for building review</button><button id="view">View camp</button><button id="workbench">Open workbench</button><output>Loading…</output></header><iframe src="/?capture&nopad"></iframe><script type="module">
+import {freshState} from '/src/economy.js';
+let lab;const f=document.querySelector('iframe'),out=document.querySelector('output');const t=setInterval(()=>{lab=f.contentWindow.lab;if(!lab?.ready)return;clearInterval(t);out.textContent='Ready · isolated review, saving disabled';lab.game.save=()=>{};},100);
+function draw(){lab.game.renderHud();lab.game.shade.refresh();lab.step(1/60,2);out.textContent=`Sawmill ${lab.game.state.sawmill}/40 · ${lab.game.state.hardwood} hardwood · ${lab.game.state.wood} logs · ${lab.game.state.planks} planks`;}
+document.getElementById('prepare').onclick=()=>{lab.game.state={...freshState(),shed:40,axe:1,wood:120,hardwood:40};lab.game.started=true;for(const id of ['intro','mouse-capture'])f.contentDocument.getElementById(id).hidden=true;f.contentDocument.getElementById('hud').hidden=false;const h=lab.game.home.dropoff;lab.teleport(h.x,h.z+.2,h.x,h.z);lab.view([h.x+14,h.y+10,h.z+10],[h.x-1,h.y+1,h.z-5]);draw();lab.game.open('upgrades');};
+document.getElementById('advance').onclick=()=>{for(let i=0;i<80;i++)lab.game.update(.05);draw();lab.game.renderUpgrades();};
+document.getElementById('planks').onclick=()=>{lab.game.state.planks=40;draw();lab.game.renderUpgrades();};
+document.getElementById('view').onclick=()=>{f.contentDocument.querySelectorAll('dialog').forEach(d=>d.close());draw();};
+document.getElementById('workbench').onclick=()=>{lab.game.open('upgrades');draw();};
+</script>

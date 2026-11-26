@@ -1,7 +1,8 @@
+import {WORLD} from './seed.js';
 // Smooth noise and a seeded dice, shared by every scene's ground.
 const perm = new Uint8Array(512);
 {
-  let s = 20261110;
+  let s = (20261110 ^ WORLD.seed) >>> 0;
   const p = Array.from({ length: 256 }, (_, i) => i);
   for (let i = 255; i > 0; i--) {
     s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
@@ -22,6 +23,6 @@ export function noise(x, y) {
   return l(l(grad(perm[a], x, y), grad(perm[b], x - 1, y), u), l(grad(perm[a + 1], x, y - 1), grad(perm[b + 1], x - 1, y - 1), u), v) * 1.4;
 }
 export function rng(seed) {
-  let s = seed >>> 0;
+  let s = (seed ^ WORLD.seed) >>> 0;
   return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
 }
