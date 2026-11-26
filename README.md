@@ -16,7 +16,7 @@ The bag holds 24 timber until the woodshed is built. Delivering 40 ordinary timb
 
 Oak and maple are hardwood: build the woodshed and equip the felling axe to harvest them. Hardwood shares bag capacity and is tracked when unloaded; advanced axes require 8 hardwood alongside their timber price. Woodshed progress counts cumulative ordinary timber deliveries without consuming your spendable stockpile.
 
-No hunger, stamina, accounts, server or external runtime services. Progress and preferences stay in this browser. Existing Woodsmoke saves are retained using the same save key; moving to another hostname starts a separate browser save.
+No hunger, stamina, accounts, server or external runtime services. Progress and preferences stay in this browser. Existing Woodsmoke saves migrate into an isolated camp save so older open builds cannot overwrite new progression; moving to another hostname starts a separate browser save.
 
 ## Build a bigger camp
 

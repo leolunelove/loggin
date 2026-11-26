@@ -1,7 +1,7 @@
 import {contributeMill,beginMilling,advanceMilling,contributePlanks,PROJECTS} from './camp.js';
 import {freshState} from './economy.js';
 import {WORLD,randomSeed} from './world/seed.js';
-import {newCamp} from './save.js';
+import {newCamp,SAVE_KEY} from './save.js';
 import * as THREE from 'three';
 import { paint } from './figure/figure.js';
 import { pinDabs } from './oilpaint/pins.js';
@@ -37,7 +37,7 @@ export class Lumberjack {
   this.bind();this.renderHud();this.updateSaveNote();this.applyQuality();
  }
  save(){
-  if(this.resetting)return;
+  if(this.resetting||this.externalSaveChange)return;
   const ok=writeSave(this.storage,this.state);this.saveStatus=ok?'saved':'unavailable';
   this.updateSaveNote();
   if(!ok&&!this.saveWarned){this.toast('Progress cannot be saved in this browser.');this.saveWarned=true;}
@@ -72,6 +72,8 @@ export class Lumberjack {
     syncCapture();if(!this.touch)this.input.capture();
   };
   $('start').onclick=start;
+  $('reload-save').onclick=()=>location.reload();
+  addEventListener('storage',event=>{if(event.key!==SAVE_KEY||this.resetting||!event.newValue)return;this.externalSaveChange=true;this.paused=true;this.held=false;this.swing=null;this.input.lockable=false;this.input.release();$('save-conflict').hidden=false;});
   $('reset-open').onclick=()=>{$('settings').addEventListener('close',()=>this.open('reset-dialog'),{once:true});$('settings').close();};
   $('reset-confirm').onclick=()=>{this.save();const next=freshState();next.seed=randomSeed();next.appearance={...this.state.appearance};next.low=this.state.low;next.sound=this.state.sound;this.resetting=true;if(newCamp(this.storage,next))location.reload();else{this.resetting=false;this.toast('The camp could not reset. Browser storage is unavailable.');}};
   $('camp-projects').onclick=e=>{

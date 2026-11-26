@@ -2,9 +2,9 @@
 
 The camp now grows from woodshed to hardwood sawmill, plank-funded porch and cabin extension. Sawmill construction consumes 40 hardwood in visible stages. Eight ordinary logs produce two planks; the porch shortens cutting time and the larger cabin increases carrying capacity.
 
-Entry includes a live rotating character preview with five appearance choices. New camps have seeded terrain, tree placement and a winding river, revealed progressively before play. Reloads retain the world. Reset has a confirmation and an undo copy; returning pages cannot overwrite a newly reset save.
+Entry includes a live rotating character preview with five appearance choices. New camps have seeded terrain, tree placement and a winding river, revealed progressively before play. Reloads retain the world. Reset has a confirmation and an undo copy; returning pages cannot overwrite a newly reset save. Legacy saves migrate into an isolated camp slot; other active tabs pause with a reload prompt when that camp changes.
 
-Validation: 48 automated checks pass, including sawmill costs, interrupted milling, plank project ordering, save migration, reset/undo, appearance, real construction geometry, and reproducible seeded forests and terrain. Browser checks exercised character choices, world generation, river rendering, sawmill contributions and plank production, both larger buildings, reset to a different seed, and undo restoration. Physical phone/gamepad performance remains unverified.
+Validation: 49 automated checks pass, including sawmill costs, interrupted milling, plank project ordering, save migration, reset/undo, appearance, real construction geometry, and reproducible seeded forests and terrain. Browser checks exercised character choices, world generation, river rendering, sawmill contributions and plank production, both larger buildings, reset to a different seed, and undo restoration. Physical phone/gamepad performance remains unverified.
 
 ---
 

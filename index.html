@@ -9,6 +9,7 @@
 </head>
 <body>
 <section id="outfitter" hidden><div class="outfit-copy"><p class="eyebrow">A LITTLE LIFE IN THE WOODS</p><h1>Loggin’</h1><h2>Make yourself at home.</h2><p id="lobby-note"></p><div class="outfit-fields"><label>Shirt<select id="shirt-choice"></select></label><label>Hat<select id="hat-choice"></select></label><label>Bag<select id="pack-choice"></select></label><label>Skin tone<select id="skin-choice"></select></label><label>Hair<select id="hair-choice"></select></label></div><button id="grow-world" class="paper">Grow my forest</button><button id="undo-reset" class="glass" hidden>Undo last camp reset</button><p class="outfit-foot">A new camp gets a new forest. Your saved world stays yours.</p></div><div class="outfit-model"><div id="character-preview" aria-label="Live character preview"></div><p id="preview-note">Finding your lumberjack…</p><button id="turn-character" class="glass">Turn character ↻</button></div></section>
+<section id="save-conflict" role="alertdialog" aria-label="Camp updated in another tab" hidden><div><h2>Your camp moved on.</h2><p>Another tab updated this camp. Reload to continue with its latest progress.</p><button id="reload-save" class="paper">Reload my camp</button></div></section>
 <div id="view" role="application" aria-label="Loggin’ forest. Click to capture the mouse. WASD to move, mouse to look, hold left mouse button to chop, E at the shack to empty your bag, U for upgrades, Escape to release the cursor."></div>
 <div class="vignette"></div>
 <header id="hud" hidden>

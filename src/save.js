@@ -1,5 +1,6 @@
 import { freshState, sanitize } from './economy.js';
-export const SAVE_KEY='woodsmoke-save-v1';
+export const LEGACY_SAVE_KEY='woodsmoke-save-v1';
+export const SAVE_KEY='loggin-camp-v2';
 export const RESET_BACKUP_KEY=SAVE_KEY+'-before-reset';
 export function newCamp(storage,state){
  try{
@@ -23,6 +24,8 @@ export function readSave(storage){
     if(primary)return {state:primary,status:'saved'};
     const backup=parse(storage.getItem(SAVE_KEY+'-backup'));
     if(backup)return {state:backup,status:'recovered'};
+    // Migrate once into the isolated camp key; older open builds can only change the legacy slot.
+    if(!raw){const legacy=parse(storage.getItem(LEGACY_SAVE_KEY))||parse(storage.getItem(LEGACY_SAVE_KEY+'-backup'));if(legacy)return {state:legacy,status:'saved'};}
     return {state:freshState(),status:raw?'damaged':'new'};
   }catch{return {state:freshState(),status:'unavailable'};}
 }
