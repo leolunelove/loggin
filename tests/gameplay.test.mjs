@@ -53,7 +53,7 @@ test('axe pause is part of its cadence and returns continuously to rest',()=>{
 test('first two trees buy a useful axe without changing existing balances',()=>{
   const s=freshState();s.wood=rewardFor(s,1)+rewardFor(s,0);assert.equal(s.wood,22);
   assert.ok(purchase(s,'axe'));assert.equal(s.wood,10);assert.equal(s.axe,1);assert.equal(chopCount(3,2),'2 chops');
-  s.wood=1e6;for(const kind of ['axe','speed','yield']){while(purchase(s,kind)){}assert.equal(upgradeCost(s,kind),null);assert.equal(s[kind],4);}
+  s.wood=1e6;s.hardwood=100;for(const kind of ['axe','speed','yield']){while(purchase(s,kind)){}assert.equal(upgradeCost(s,kind),null);assert.equal(s[kind],4);}
   assert.ok(swingDuration(s)<swingDuration(freshState()));
 });
 test('a damaged primary save recovers the last valid backup',()=>{

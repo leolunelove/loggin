@@ -75,6 +75,18 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
   parts[parts.length-1].style=(p,n)=>({pal:Math.abs(n.y)>.7?4:1,size:Math.abs(n.y)>.7?[.07,.09]:[.07,.19],dir:UP});
   logs.push(log);log.visible=false;
  }
+ const projectParts=[];
+ function projectBox(w,h,d,pal,p,stage){const mesh=box(w,h,d,pal,p,35);mesh.userData.projectStage=stage;projectParts.push(mesh);return mesh;}
+ // Stakes and foundation first, then upright framing, plank walls and finally a roof.
+ for(const x of [-4.8,-2.6])for(const z of [-1.2,1.2])projectBox(.16,.35,.16,1,[x,.1,z],0);
+ for(const z of [-1.2,1.2])projectBox(2.5,.18,.18,1,[-3.7,.18,z],8);
+ for(const x of [-4.8,-2.6])for(const z of [-1.2,1.2])projectBox(.16,2.3,.16,1,[x,1.25,z],16);
+ for(const z of [-1.2,1.2])projectBox(2.5,.16,.16,1,[-3.7,2.35,z],24);
+ for(let i=0;i<10;i++)projectBox(.23,1.9,.12,0,[-4.78+i*.24,1.25,-1.2],32);
+ for(const x of [-4.85,-2.55])for(let i=0;i<7;i++)projectBox(.12,1.3,.25,0,[x,.95,-1.05+i*.32],32);
+ const shedRoof=projectBox(2.8,.16,2.95,2,[-3.7,2.5,0],40);shedRoof.rotation.x=.12;
+ for(let i=0;i<9;i++){const log=part(new THREE.CylinderGeometry(.14,.16,1.7,8),1,[-4.35+(i%3)*.5,.45+Math.floor(i/3)*.3,0],25);log.rotation.x=Math.PI/2;log.userData.projectStage=40;projectParts.push(log);}
+ projectParts.forEach(m=>m.visible=m.userData.projectStage===0);
  group.updateMatrixWorld(true);
  const painted=pinDabs(shared,palettes,parts);painted.update();
  // Separate static shadow meshes share geometry, avoiding self-shadowing the paint dabs.
@@ -85,6 +97,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  colliders.push({x:site.x+rack.x,y:y+.65,z:site.z+rack.z,hx:1.16,hy:.84,hz:.53});
  let previous=-1;
  return {group,paint:painted,shadow,dropoff,colliders,
+  setProject(amount){let changed=false;for(const mesh of projectParts){const visible=amount>=mesh.userData.projectStage;if(mesh.visible!==visible){mesh.visible=visible;changed=true;}}if(changed){parts.forEach(({mesh},i)=>shadow.children[i].visible=mesh.visible);painted.update();}},
   logTarget(wood){const index=Math.min(logs.length-1,Math.max(0,Math.ceil(wood/6)));return logs[index].getWorldPosition(new THREE.Vector3());},
   setWood(wood){
    const count=wood>0?Math.min(logs.length,Math.ceil(wood/6)):0;

@@ -12,7 +12,11 @@ A small third-person lumberjack game in an autumn forest painted in oils. Chop t
 4. Press U to spend stored wood on axes, swing speed or yield. New axes have distinct heads, handles and fittings.
 5. Return to the woods. Birch, beech, maple and oak offer different rewards; trees regrow after 90 seconds.
 
-No bag limit, hunger, stamina, accounts, server or external runtime services. Progress and preferences stay in this browser. Existing Woodsmoke saves are retained using the same save key; moving to another hostname starts a separate browser save.
+The bag holds 24 timber until the woodshed is built. Delivering 40 ordinary timber completes the woodshed in visible stages and expands capacity to 64. Yield upgrades then add 16 capacity each, so larger harvests still fit. A tree can only be chopped when its full yield fits; existing oversized saves retain all carried wood.
+
+Oak and maple are hardwood: build the woodshed and equip the felling axe to harvest them. Hardwood shares bag capacity and is tracked when unloaded; advanced axes require 8 hardwood alongside their timber price. Woodshed progress counts cumulative ordinary timber deliveries without consuming your spendable stockpile.
+
+No hunger, stamina, accounts, server or external runtime services. Progress and preferences stay in this browser. Existing Woodsmoke saves are retained using the same save key; moving to another hostname starts a separate browser save.
 
 ## Controls
 

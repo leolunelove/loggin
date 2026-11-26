@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { paint } from './figure/figure.js';
 import { pinDabs } from './oilpaint/pins.js';
-import { AXES, TREES, upgradeCost, purchase, swingDuration, rewardFor, depositWood } from './economy.js';
+import { AXES, TREES, upgradeCost, purchase, swingDuration, rewardFor, depositWood, bagCapacity, isHardwood, canHarvest, harvestFits } from './economy.js';
 import { atWoodRack,homeDistance } from './world/home-site.js';
 const $ = id => document.getElementById(id);
 const UP = new THREE.Vector3(0,1,0);
@@ -61,7 +61,7 @@ export class Lumberjack {
   document.addEventListener('woodsmoke:mousecapturechange',syncCapture);
   const start=()=>{
     if(this.started)return;
-    this.started=true;$('intro').hidden=true;$('hud').hidden=false;$('controls').hidden=false;$('action').hidden=false;$('touch-controls').hidden=!this.touch;
+    this.started=true;$('project-status').hidden=false;$('intro').hidden=true;$('hud').hidden=false;$('controls').hidden=false;$('action').hidden=false;$('touch-controls').hidden=!this.touch;
     this.input.lockable=!this.touch;this.input.clear();this.audio.start(this.state.sound)?.then(()=>{if(this.state.sound&&this.audio.loadError)this.toast('Sound could not load. Reload to retry.');});
     if(['recovered','damaged','unavailable'].includes(this.saveStatus))this.toast(document.querySelector('.panel-note').textContent);
     syncCapture();if(!this.touch)this.input.capture();
@@ -106,17 +106,17 @@ export class Lumberjack {
   if(this.leaves)this.leaves.mesh.geometry.instanceCount=low?900:2400;
  }
  renderSettings(){ $('sensitivity').value=this.state.sensitivity;$('sensitivity-value').textContent=this.state.sensitivity.toFixed(2)+'×';$('sound').textContent=this.state.sound?'On':'Off';$('sound').setAttribute('aria-pressed',String(this.state.sound));$('quality').textContent=this.state.low?'Low':'High';$('lifetime').textContent=`${nice(this.state.felled)} trees felled · ${nice(this.state.total)} wood gathered`; }
- renderHud(){ this.tools.equip(this.state.axe);this.figure.pack.setWood(this.state.carried);this.home.setWood(this.state.wood);$('wood').textContent=nice(this.state.carried);$('stored-wood').textContent=nice(this.state.wood);$('axe-name').textContent=AXES[this.state.axe].name; }
+ renderHud(){ this.tools.equip(this.state.axe);this.figure.pack.setWood(this.state.carried);this.home.setWood(this.state.wood);this.home.setProject(this.state.shed||0);$('wood').textContent=nice(this.state.carried)+' / '+bagCapacity(this.state);$('project-status').textContent=(this.state.shed||0)<40?`Woodshed · ${this.state.shed||0} / 40 timber delivered`:`Woodshed built · ${this.state.hardwood||0} hardwood stored`; $('stored-wood').textContent=nice(this.state.wood);$('axe-name').textContent=AXES[this.state.axe].name; }
  renderUpgrades(){
-  const s=this.state,next=AXES[s.axe+1];$('panel-wood').textContent=nice(s.wood)+' wood';$('carried-note').textContent=s.carried?`${nice(s.carried)} in your bag. Return to the shack to store it.`:'';
+  const s=this.state,next=AXES[s.axe+1];$('panel-wood').textContent=nice(s.wood)+' wood · '+nice(s.hardwood||0)+' hardwood';$('carried-note').textContent=s.carried?`${nice(s.carried)} in your bag. Return to the shack to store it.`:'';
   const rows=[
     ['axe',next?.name||AXES[s.axe].name,next?`${chopCount(TREES[0].health,AXES[s.axe].power)} → ${chopCount(TREES[0].health,next.power)} per beech`:'Maximum axe strength.',`AXE ${s.axe+1} / 5`],
     ['speed','Swing speed',s.speed<4?`${Math.round(60/swingDuration(s))} → ${Math.round(60/swingDuration({...s,speed:s.speed+1}))} swings a minute`:'Maximum swing speed.',`SPEED ${s.speed} / 4`],
     ['yield','Wood yield',s.yield<4?`+${Math.round(s.yield*30)}% → +${Math.round((s.yield+1)*30)}% wood per tree`:'Maximum wood yield.',`YIELD ${s.yield} / 4`]
   ];
   $('upgrade-list').innerHTML=rows.map(([kind,name,desc,level])=>{
-    const cost=upgradeCost(s,kind),short=cost===null?0:Math.max(0,cost-s.wood);
-    return `<div class="upgrade-row">${kind==='axe'?axeIcon(Math.min(4,s.axe+1)):''}<div class="upgrade-description"><h3>${name}</h3><p>${desc}</p><small>${level}</small></div><div class="buy-wrap"><button class="buy" data-buy="${kind}" ${cost===null||short?'disabled':''} aria-label="${cost===null?'Fully upgraded':`Buy ${name} for ${cost} wood`}">${cost===null?'Complete':nice(cost)+' wood'}</button>${short?`<span class="shortfall">${nice(short)} more needed</span>`:''}</div></div>`;
+    const hardLocked=kind==='axe'&&s.axe>=1&&(s.hardwood||0)<8;const cost=upgradeCost(s,kind),short=cost===null?0:Math.max(0,cost-s.wood);
+    return `<div class="upgrade-row">${kind==='axe'?axeIcon(Math.min(4,s.axe+1)):''}<div class="upgrade-description"><h3>${name}</h3><p>${desc}</p><small>${level}</small></div><div class="buy-wrap"><button class="buy" data-buy="${kind}" ${cost===null||short||hardLocked?'disabled':''} aria-label="${cost===null?'Fully upgraded':`Buy ${name} for ${cost} wood`}">${cost===null?'Complete':nice(cost)+' wood'+(kind==='axe'&&s.axe>=1?' + 8 hardwood':'')}</button>${hardLocked?'<span class="shortfall">8 hardwood required</span>':''}${short?`<span class="shortfall">${nice(short)} more needed</span>`:''}</div></div>`;
   }).join('');
   this.updateSaveNote();
  }
@@ -131,7 +131,7 @@ export class Lumberjack {
  cancelDelivery(){this.delivery=null;this.figure?.pack.setWood(this.state.carried);}
  updateDelivery(dt){
   const result=advanceDelivery(this.delivery,dt);
-  if(result.amount){depositWood(this.state,result.amount);this.renderHud();this.save();this.audio.unload(this.home.dropoff);this.shade.refresh();}
+  if(result.amount){const beforeShed=this.state.shed||0;depositWood(this.state,result.amount);this.renderHud();this.save();this.audio.unload(this.home.dropoff);this.shade.refresh();if(beforeShed<40&&this.state.shed>=40)this.toast('Woodshed built · Bag expanded to 64 · Hardwood unlocked with the felling axe');}
   if(result.done){this.delivery=null;this.toast(this.state.carried?'Wood stacked.':'Wood stacked · Bag empty');}
  }
  before(dt,inp){
@@ -158,7 +158,7 @@ export class Lumberjack {
   const held=this.held||padHeld||this.input.keys.has('KeyE')||this.input.keys.has('Space')||(this.input.active&&this.input.mouse.left);
   const unloading=this.home&&atWoodRack(this.home,this.player.feet);
   if(unloading){this.swing=null;if(!inactive&&held&&!moving&&this.player.grounded)this.unload();return;}
-  if(!inactive&&held&&!this.swing&&!moving&&this.target&&near.distance<=CHOP_REACH&&this.player.grounded&&this.player.speed<.4){
+  if(!inactive&&held&&!this.swing&&!moving&&this.target&&canHarvest(this.state,this.target.type)&&harvestFits(this.state,this.target.type)&&near.distance<=CHOP_REACH&&this.player.grounded&&this.player.speed<.4){
     const t=this.target,yaw=Math.atan2(t.x-this.player.feet.x,t.z-this.player.feet.z);
     inp.facingYaw=yaw;
     const off=Math.atan2(Math.sin(yaw-this.player.yaw),Math.cos(yaw-this.player.yaw));
@@ -205,7 +205,7 @@ export class Lumberjack {
   this.forest.carveTree(t,{x,y,z},-dx,-dz,damage);
  }
  hit(t){
-  if(t.down||Math.hypot(this.player.feet.x-t.x,this.player.feet.z-t.z)-t.r>CHOP_REACH+.12)return;
+  if(!canHarvest(this.state,t.type)||!harvestFits(this.state,t.type)||t.down||Math.hypot(this.player.feet.x-t.x,this.player.feet.z-t.z)-t.r>CHOP_REACH+.12)return;
   t.hp=Math.max(0,t.hp-AXES[this.state.axe].power);this.audio.hit(t.type,this.state.axe,t,t.hp<=0);t.shake=this.time;this.impactUntil=this.time+.14;
   const dx=t.x-this.player.feet.x,dz=t.z-this.player.feet.z,len=Math.hypot(dx,dz)||1;
   const {x,y,z}=this.swing?.contact??chopContact(t,this.player.feet,this.player.visualY??this.player.feet.y);
@@ -221,11 +221,11 @@ export class Lumberjack {
   }
   if(t.hp<=0){
     t.down=true;t.regrow=Date.now()+REGROW_MS;this.state.down[t.id]=t.regrow;this.state.felled++;
-    const reward=rewardFor(this.state,t.type);this.state.carried+=reward;this.state.total+=reward;
+    const reward=rewardFor(this.state,t.type);this.state.carried+=reward;if(isHardwood(t.type))this.state.carriedHardwood=(this.state.carriedHardwood||0)+reward;this.state.total+=reward;
     if(t.collider){this.physics.removeCollider(t.collider,true);t.collider=null;}
     if(t.notch){this.scene.remove(t.notch);t.notch.geometry.dispose();t.notch=null;}
     this.makeStump(t);this.falling.push({t,age:0,dx:dx/len,dz:dz/len,plan:createTreeFall(t,dx/len,dz/len,this.heightAt),sound:this.audio.beginFall(t)});
-    const p=new THREE.Vector3(t.x,t.y+2,t.z).project(this.camera),el=document.createElement('div');el.className='reward';el.textContent=`+${reward} wood`;el.style.left=(p.x*.5+.5)*innerWidth+'px';el.style.top=(-p.y*.5+.5)*innerHeight+'px';document.body.appendChild(el);setTimeout(()=>el.remove(),1600);
+    const p=new THREE.Vector3(t.x,t.y+2,t.z).project(this.camera),el=document.createElement('div');el.className='reward';el.textContent=`+${reward} ${isHardwood(t.type)?'hardwood':'wood'}`;el.style.left=(p.x*.5+.5)*innerWidth+'px';el.style.top=(-p.y*.5+.5)*innerHeight+'px';document.body.appendChild(el);setTimeout(()=>el.remove(),1600);
     this.renderHud();this.save();if(!this.hinted){this.hinted=true;this.toast('Return to the shack to empty your bag.');}
   }
  }
@@ -270,6 +270,6 @@ export class Lumberjack {
   $('target').style.left=`${THREE.MathUtils.clamp((p.x*.5+.5)*innerWidth,70,innerWidth-70)}px`;$('target').style.top=`${THREE.MathUtils.clamp((-p.y*.5+.5)*innerHeight,130,innerHeight-120)}px`;
   $('tree-name').textContent=spec.name;$('tree-health').style.width=`${t.hp/spec.health*100}%`;
   $('tree-meta').textContent=near?`${chopCount(t.hp,AXES[this.state.axe].power)} · ${rewardFor(this.state,t.type)} wood`:`${Math.ceil(this.distance)} m away`;
-  $('action-text').textContent=this.touch?'Chop':near?'Hold to chop':'Walk closer';$('context').textContent='';
+  const locked=!canHarvest(this.state,t.type),full=!harvestFits(this.state,t.type);$('chop').disabled=locked||full;$('action-text').textContent=locked?'Hardwood locked':full?'Return to camp':this.touch?'Chop':near?'Hold to chop':'Walk closer';$('context').textContent=locked?'Build the woodshed and equip the felling axe':full?'This tree’s full yield will not fit. Empty your bag first.':isHardwood(t.type)?'Hardwood · Needed for advanced axes':'';
  }
 }
