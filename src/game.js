@@ -1,3 +1,5 @@
+import {createSettlements} from './world/settlements.js';
+import {PLACES,restored,contributePlace} from './exploration.js';
 import {weatherAt,shelterAt} from './weather.js';
 import {createWeather} from './world/weather.js';
 import {seatedPose} from './figure/sit.js';
@@ -39,6 +41,7 @@ export class Lumberjack {
   forest.trees.forEach((t,i)=>{t.id=i;t.hp=TREES[t.type].health;if(this.state.down[i]){t.down=true;t.regrow=this.state.down[i];forest.poseTree(t,0,0,1,true);if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}this.makeStump(t);this.makeLogs(t,Math.sin(t.seed),Math.cos(t.seed));}});
   if(Object.keys(this.state.down).length)shade.refresh();
   this.weatherFX=createWeather(shared,home,heightAt);scene.add(this.weatherFX.group);
+  this.exploration=createSettlements(this);this.exploration.sync(this.state);shade.refresh();
   this.bind();this.renderHud();this.updateSaveNote();this.applyQuality();
  }
  save(){
@@ -79,6 +82,7 @@ export class Lumberjack {
   $('start').onclick=start;
   $('ledger-workbench').onclick=()=>{$('ledger').addEventListener('close',()=>this.open('upgrades'),{once:true});$('ledger').close();};
   $('sleep').onclick=()=>{if(!this.insideShack||!canSleep(this.state))return;$('ledger').addEventListener('close',()=>this.beginSleep(),{once:true});$('ledger').close();};
+  $('outpost-project').onclick=e=>{const kind=e.target.closest('[data-outpost]')?.dataset.outpost;if(!kind)return;const p=this.state.places[this.placeIndex];if(kind==='unload'){depositWood(this.state,this.state.carried);}else if(kind==='sleep'&&restored(p)&&canSleep(this.state)){$('outpost').addEventListener('close',()=>{this.beginSleep(true);},{once:true});$('outpost').close();return;}else contributePlace(this.state,this.placeIndex,kind);this.exploration.sync(this.state);this.shade.refresh();this.renderHud();this.renderOutpost();this.save();};
   $('reload-save').onclick=()=>location.reload();
   addEventListener('storage',event=>{if(event.key!==SAVE_KEY||this.resetting||!event.newValue)return;this.externalSaveChange=true;this.paused=true;this.held=false;this.swing=null;this.input.lockable=false;this.input.release();$('save-conflict').hidden=false;});
   $('changelog-open').onclick=()=>{$('settings').addEventListener('close',()=>this.open('changelog'),{once:true});$('settings').close();};
@@ -122,13 +126,14 @@ export class Lumberjack {
   const stop=()=>{stickId=null;this.input.touchMove={x:0,y:0};knob.style.transform='';};stick.onpointerup=stop;stick.onpointercancel=stop;stick.onlostpointercapture=stop;
  }
  ready(){ $('intro').hidden=false; }
- open(id){if(this.paused||this.sleeping||!this.started)return;this.paused=true;this.held=false;this.input.lockable=false;this.input.release();this.syncCapture();if(id==='upgrades')this.renderUpgrades();else if(id==='ledger')this.renderLedger();else this.renderSettings();$(id).showModal();}
+ open(id){if(this.paused||this.sleeping||!this.started)return;this.paused=true;this.held=false;this.input.lockable=false;this.input.release();this.syncCapture();if(id==='outpost')this.renderOutpost();else if(id==='upgrades')this.renderUpgrades();else if(id==='ledger')this.renderLedger();else this.renderSettings();$(id).showModal();}
  applyQuality(){
   const low=this.state.low;
   this.renderer.setPixelRatio(Math.min(devicePixelRatio,low?1:1.5));this.renderer.setSize(innerWidth,innerHeight);
   if(this.frame){this.frame.uniforms.uShafts.value=low?0:1;this.frame.resize();}
   if(this.leaves)this.leaves.mesh.geometry.instanceCount=low?900:2400;
  }
+ renderOutpost(){const i=this.placeIndex,p=this.state.places[i],ready=restored(p);$('outpost-title').textContent=PLACES[i].name;$('outpost-story').textContent=PLACES[i].story;const button=(kind,text,enabled)=>`<button class="paper" data-outpost="${kind}" ${enabled?'':'disabled'}>${text}</button>`;$('outpost-project').innerHTML=`<p>${this.state.wood-this.state.hardwood} ordinary logs · ${this.state.planks} planks stored · ${this.state.carried} in your bag</p><h3>${ready?'Restored home':'Restore this shack'}</h3><p>Timber ${p.wood} / 24 · Planks ${p.planks} / 8</p>`+(ready?button('unload','Empty bag here',this.state.carried>0)+button('sleep','Sleep until morning',canSleep(this.state)):`${button('wood','Repair · up to 6 stored logs',p.wood<24&&this.state.wood>this.state.hardwood)} ${button('planks','Finish · up to 2 planks',p.wood>=24&&p.planks<8&&this.state.planks>0)}`)+`<h3>Connect to home camp</h3><p>${p.trail} / 40 logs · A trail clears and grows with each contribution. Finished paths give 25% faster travel.</p>`+button('trail',p.trail===40?'Connected':'Lay trail · up to 8 stored logs',ready&&p.trail<40&&this.state.wood>this.state.hardwood); }
  renderSettings(){ $('sensitivity').value=this.state.sensitivity;$('sensitivity-value').textContent=this.state.sensitivity.toFixed(2)+'×';$('sound').textContent=this.state.sound?'On':'Off';$('sound').setAttribute('aria-pressed',String(this.state.sound));$('quality').textContent=this.state.low?'Low':'High';$('lifetime').textContent=`${nice(this.state.felled)} trees felled · ${nice(this.state.total)} wood gathered`; }
  renderHud(){ this.tools.equip(this.state.axe);this.figure.pack.setWood(this.state.carried);this.home.setWood(this.state.wood);this.home.setProject(this.state.shed||0);this.home.setCamp?.(this.state);this.syncCampColliders();$('wood').textContent=nice(this.state.carried)+' / '+bagCapacity(this.state);$('project-status').textContent=(this.state.shed||0)<40?`Woodshed · ${this.state.shed||0} / 40 timber delivered`:this.state.sawmill<40?`Sawmill · ${this.state.sawmill||0} / 40 hardwood\n${this.state.hardwood||0} hardwood stored · U to build`:`Sawmill ready · ${this.state.planks||0} planks\n${this.state.hardwood||0} hardwood stored · U for camp`; $('stored-wood').textContent=nice(this.state.wood);$('axe-name').textContent=AXES[this.state.axe].name;if($('ledger').open)this.renderLedger(); }
  renderUpgrades(){
@@ -156,7 +161,7 @@ export class Lumberjack {
   const s=this.state;
   $('sleep').disabled=!this.insideShack||!canSleep(s);$('sleep-note').textContent=canSleep(s)?'Rest until 06:30. Your bag and supplies stay safe.':'Come back after 18:00 to turn in for the night.';
   $('ledger-supplies').innerHTML=[['Ordinary logs',Math.max(0,s.wood-s.hardwood)],['Hardwood',s.hardwood||0],['Planks',s.planks||0],['In your bag',`${s.carried} / ${bagCapacity(s)}`]].map(([label,value])=>`<div><span>${label}</span><strong>${typeof value==='number'?nice(value):value}</strong></div>`).join('');
-  $('ledger-history').textContent=`${nice(s.felled)} ${s.felled===1?'tree':'trees'} felled · ${nice(s.total)} timber gathered · ${AXES[s.axe].name} equipped`;
+  $('ledger-history').textContent=this.state.places.filter(p=>p.found).length+' / 3 woodland shacks discovered · '+`${nice(s.felled)} ${s.felled===1?'tree':'trees'} felled · ${nice(s.total)} timber gathered · ${AXES[s.axe].name} equipped`;
   const projects=[['Campfire','fire',12,'A warm hearth, crackling logs and a welcoming glow'],['Woodshed','shed',40,'A bigger bag and hardwood access'],['Sawmill','sawmill',40,'Cut logs into planks'],['Camp porch','porch',12,'Faster milling'],['Cabin extension','lodge',24,'A furnished rear room and more bag space']];
   $('ledger-projects').innerHTML=projects.map(([name,key,max,benefit])=>`<div class="ledger-project"><div><h3>${name}</h3><span>${s[key]>=max?'Built':`${s[key]||0} / ${max} ${key==='shed'||key==='fire'?'timber':key==='sawmill'?'hardwood':'planks'}`}</span></div><progress max="${max}" value="${s[key]||0}"></progress><p>${benefit}</p></div>`).join('');
  }
@@ -164,7 +169,7 @@ export class Lumberjack {
   const s=this.state,near=homeDistance(this.home,this.player.feet)<=14,working=!!s.millJob;
   const key=[s.fire,s.shed,s.sawmill,s.planks,s.porch,s.lodge,s.wood,s.hardwood,near,working,Math.ceil(s.millJob?.remaining||0)].join(':');if(key===this.campUiKey)return;this.campUiKey=key;
   const button=(kind,text,enabled)=>`<button class="buy" data-camp="${kind}" ${enabled&&near?'':'disabled'}>${text}</button>`;
-  $('camp-projects').innerHTML=`<h3>Grow your camp</h3><p>${near?'Build with supplies stored at camp.':'Return to camp to build and cut planks.'}</p>`+
+  $('camp-projects').innerHTML=`<section class="project-row"><h3>Explore the woodland</h3><p>Follow the signs beside camp. Look west for an orchard, north for the river stop and farther north-west for the old logging crew.</p>${PLACES.map((place,i)=>`<p>${this.state.places[i].found?place.name:'Undiscovered shack'} · ${this.state.places[i].trail===40?'Connected · +25% travel':restored(this.state.places[i])?'Restored':this.state.places[i].found?'Found · Needs repairs':'Explore to find it'}</p>`).join('')}</section><h3>Grow your camp</h3><p>${near?'Build with supplies stored at camp.':'Return to camp to build and cut planks.'}</p>`+
    `<div class="project-row"><h3>Campfire</h3><progress max="12" value="${s.fire||0}"></progress><p>${s.fire||0} / 12 ordinary logs · A stone hearth, stacked logs, then a roaring fire.</p>${s.fire>=12?'<p>Lit · A warm welcome, day and night.</p>':button('fire','Add up to 4 logs',s.wood-s.hardwood>0)}</div>`+
    (s.shed<40?'<p>First, deliver 40 timber to finish your woodshed.</p>':`<div class="project-row"><h3>Sawmill</h3><progress max="40" value="${s.sawmill}"></progress><p>${s.sawmill} / 40 hardwood · Foundations → frame → cutting bed → roof.</p>${s.sawmill<40?button('sawmill','Build · up to 8 hardwood',s.hardwood>0):`<p>${s.planks} planks stacked · ${Math.max(0,s.wood-s.hardwood)} ordinary logs available.</p>`+button('mill',working?`Sawing… ${Math.ceil(s.millJob.remaining)}s`:'Saw 8 logs → 2 planks',!working&&s.wood-s.hardwood>=8)}</div>`+
    (s.sawmill<40?'':Object.entries(PROJECTS).map(([kind,p])=>`<div class="project-row"><h3>${p.name}</h3><progress max="${p.cost}" value="${s[kind]}"></progress><p>${s[kind]} / ${p.cost} planks · ${kind==='porch'?'A sheltered place to work. Milling speeds up to 2 seconds.':'A larger home and 32 more bag capacity.'}</p>${s[kind]>=p.cost?'<p>Complete</p>':kind==='lodge'&&s.porch<12?'<p>Finish the porch first.</p>':button(kind,'Build · up to 4 planks',s.planks>0)}</div>`).join('')));
@@ -195,6 +200,8 @@ export class Lumberjack {
  }
  before(dt,inp){
   this.time+=dt;
+  if(this.exploration){inp.trailBoost=this.onTrail=this.exploration.onTrail(this.player.feet,this.state);const i=this.exploration.nearest(this.player.feet);if(i>=0&&!this.state.places[i].found){this.state.places[i].found=true;this.toast('Discovered '+PLACES[i].name);this.save();}if(i>=0&&!this.paused&&(inp.interactPressed||(this.held&&!this.outpostHeld))){this.placeIndex=i;this.open('outpost');}this.outpostHeld=this.held;}
+
   if(this.seat){
    if(this.seated&&!this.paused&&(inp.interactPressed||(this.held&&!this.seatActionHeld)||Math.hypot(inp.move.x,inp.move.y)>.15))this.standFromBench();
    this.seatActionHeld=this.held;
@@ -330,8 +337,8 @@ export class Lumberjack {
     this.renderHud();this.save();if(!this.hinted){this.hinted=true;this.toast('Return to the shack to empty your bag.');}
   }
  }
- beginSleep(){
-  if(!this.insideShack||!canSleep(this.state))return;
+ beginSleep(outpost=false){
+  if(!outpost&&!this.insideShack||!canSleep(this.state))return;
   this.sleeping=true;this.sleepAge=0;this.sleepApplied=false;this.paused=true;this.held=false;this.swing=null;this.input.lockable=false;this.input.release();this.input.clear();this.syncCapture();$('sleep-fade').hidden=false;
  }
  updateDaylight(dt){
@@ -350,20 +357,22 @@ export class Lumberjack {
  update(dt){
   this.updateDaylight(dt);
   const forecast=this.weatherOverride||weatherAt(this.state);this.weather=forecast;
+  const nearPlace=this.exploration.nearest(this.player.feet),weatherHome=nearPlace>=0?this.exploration.sites[nearPlace]:this.home,weatherState=nearPlace>=0?{lodge:0,porch:0,sawmill:0}:this.state;
   const u=this.shared;u.uRain.value=forecast.rain;u.uOvercast.value=forecast.overcast;
   u.uHazeDensity.value=.0105+forecast.rain*.009+forecast.mist*.038;
   u.uHaze.value.lerp(new THREE.Color(.48,.55,.58).multiplyScalar(.2+.8*u.uDaylight.value),forecast.mist*.55+forecast.rain*.25);
   u.uHazeSun.value.lerp(new THREE.Color(.55,.6,.64).multiplyScalar(.15+.85*u.uDaylight.value),forecast.overcast*.9);u.uHazeGlow.value.multiplyScalar(1-forecast.overcast*.9);
   this.audio.daylight=u.uDaylight.value*(1-forecast.rain);
-  this.weatherFX.update(document.hidden?0:dt,this.camera,this.state,forecast,this.state.low,this.insideShack);
-  $('camp-clock').textContent+=' · '+forecast.label;
+  this.weatherFX.update(document.hidden?0:dt,this.camera,this.state,forecast,this.state.low,weatherHome.contains(this.player.feet,weatherState),weatherHome);
+  $('camp-clock').textContent+=' · '+forecast.label+' · '+['S','SE','E','NE','N','NW','W','SW'][((Math.round(this.follow.yaw/(Math.PI/4))%8)+8)%8];
   const room=this.home.updateInterior?.(dt,this.player.feet,this.camera,this.state);
   if(room){this.insideShack=room.inside;this.follow.interior=room.camera;if(room.changed)this.shade.refresh();}
+  const away=this.exploration?.update(dt,this.player.feet,this.camera,this.state);if(away){this.follow.interior=away.camera;this.swing=null;if(away.changed)this.shade.refresh();}
   this.home.updateMill?.(dt,!!this.state.millJob&&this.started);
   if(this.started&&advanceMilling(this.state,dt)){this.renderHud();this.save();this.toast('Two planks cut and stacked at the sawmill.');this.audio.unload(this.home.dropoff);}
   if($('upgrades').open)this.renderCamp();
   this.audio.listener={x:this.player.feet.x,z:this.player.feet.z,yaw:this.follow.yaw};
-  if(this.started)this.audio.updateRain(forecast.rain,shelterAt(this.home.group.position,this.state,this.player.feet),!document.hidden);
+  if(this.started)this.audio.updateRain(forecast.rain,shelterAt(weatherHome.group.position,weatherState,this.player.feet),!document.hidden);
   this.home.fire?.update(this.time,this.camera,1-this.shared.uDaylight.value);
   if(this.started&&this.home.fire)this.audio.updateFire(this.home.fire.position,this.state.fire>=12&&!document.hidden,this.insideShack);
   for(let i=this.chips.length-1;i>=0;i--){const c=this.chips[i];c.life-=dt;c.v.y-=9*dt;c.mesh.position.addScaledVector(c.v,dt);c.mesh.rotation.x+=dt*6;if(c.life<.2)c.mesh.scale.multiplyScalar(Math.max(0,1-dt*8));if(c.life<=0){this.scene.remove(c.mesh);this.chips.splice(i,1);}}
@@ -379,12 +388,13 @@ export class Lumberjack {
   }
   this.uiClock+=dt;
   if(this.uiClock>.1){this.uiClock=0;this.updatePrompt();}
-  if(this.time>(this.nextRegrow||0)){this.nextRegrow=this.time+2;let changed=false;for(const t of this.forest.trees)if(t.down&&Date.now()>=t.regrow){t.down=false;t.hp=TREES[t.type].health;t.shake=0;delete this.state.down[t.id];this.forest.poseTree(t,0,0,1);this.clearRemains(t);t.collider=this.physics.createCollider(this.RAPIER.ColliderDesc.cylinder(5,t.r*1.15).setTranslation(t.x,t.y+4.5,t.z));changed=true;}if(changed){this.shade.refresh();this.save();}}
+  if(this.time>(this.nextRegrow||0)){this.nextRegrow=this.time+2;let changed=false;for(const t of this.forest.trees)if(t.down&&!t.routeCleared&&Date.now()>=t.regrow){t.down=false;t.hp=TREES[t.type].health;t.shake=0;delete this.state.down[t.id];this.forest.poseTree(t,0,0,1);this.clearRemains(t);t.collider=this.physics.createCollider(this.RAPIER.ColliderDesc.cylinder(5,t.r*1.15).setTranslation(t.x,t.y+4.5,t.z));changed=true;}if(changed){this.shade.refresh();this.save();}}
  }
  updatePrompt(){
   $('aim-crosshair').hidden=!this.started||this.paused||!!this.lockedTree||this.insideShack||!!this.seat;
   $('aim-status').hidden=!this.started||this.paused||this.insideShack||!!this.seat;$('aim-status').textContent=this.lockedTree?'Tree locked · RMB / Q to release':'RMB / Q · Lock a tree';
   if(this.seat&&this.started&&!this.paused){$('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=!this.seated;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.seated?'Stand up':'Standing up…';$('context').textContent='Take your time · Mouse to look · WASD to stand';return;}
+  const place=this.exploration?.nearest(this.player.feet)??-1;if(place>=0&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent=PLACES[place].name;$('context').textContent='Restore · Connect · Make a home';return;}
   if(this.home?.nearBench?.(this.player.feet,this.state)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Sit by the fire';$('context').textContent='A quiet moment at camp';return;}
   if(this.insideShack&&this.started&&!this.paused){
    $('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Camp ledger & rest';$('context').textContent='Your supplies, tools and building progress';return;
@@ -392,7 +402,7 @@ export class Lumberjack {
   if(this.home){
    const h=this.home.dropoff,dx=h.x-this.player.feet.x,dz=h.z-this.player.feet.z,d=homeDistance(this.home,this.player.feet);
    $('home-marker').hidden=!this.started||this.paused;
-   $('home-distance').textContent=`Shack · ${Math.ceil(d)} m`;
+   $('home-distance').textContent=`Shack · ${Math.ceil(d)} m${this.onTrail?' · Trail +25%':''}`;
    // A compass bearing, relative to the current mouse heading, keeps home easy to find.
    $('home-bearing').style.transform=`rotate(${this.follow.yaw-Math.atan2(dx,dz)}rad)`;
    if(this.started&&!this.paused&&atWoodRack(this.home,this.player.feet)){

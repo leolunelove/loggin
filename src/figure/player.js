@@ -85,7 +85,7 @@ export class Player {
     else if (input.device === 'pad' && mag < 0.6) speed = S.walk * (mag / 0.6);
     else if (input.sprint && (!input.strafe || m.y > 0.7)) speed = S.sprint;
     else speed = input.device === 'pad' ? THREE.MathUtils.lerp(S.walk, S.run, (mag - 0.6) / 0.4) : S.run;
-    return { dir, mag, speed, dirYaw: Math.atan2(dir.x, dir.z) };
+    return { dir, mag, speed:speed*(input.trailBoost?1.25:1), dirYaw: Math.atan2(dir.x, dir.z) };
   }
 
   // --- each frame ---------------------------------------------------------------------------

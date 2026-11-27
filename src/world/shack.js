@@ -170,7 +170,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  if(typeof document!=='undefined'){const c=document.createElement('canvas');c.width=c.height=64;const ctx=c.getContext('2d');if(ctx){const gradient=ctx.createRadialGradient(32,32,0,32,32,32);gradient.addColorStop(0,'rgba(255,193,92,.65)');gradient.addColorStop(.2,'rgba(255,156,48,.22)');gradient.addColorStop(1,'rgba(255,138,30,0)');ctx.fillStyle=gradient;ctx.fillRect(0,0,64,64);haloTexture=new THREE.CanvasTexture(c);}}
  const glowMaterial=new THREE.MeshBasicMaterial({color:0xffb95d});
  for(const [i,p]of lampPositions.entries()){
-  const core=new THREE.Mesh(new THREE.BoxGeometry(.12,.19,.12),glowMaterial);core.position.set(...p);group.add(core);
+  const core=new THREE.Mesh(new THREE.BoxGeometry(.12,.19,.12),glowMaterial);core.name='camp-lantern-core';core.position.set(...p);group.add(core);
   const frame=new THREE.Mesh(new THREE.BoxGeometry(.23,.035,.23),materials[6]);frame.position.set(p[0],p[1]+.12,p[2]);group.add(frame);
   let halo;if(haloTexture){halo=new THREE.Sprite(new THREE.SpriteMaterial({map:haloTexture,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:0}));halo.position.copy(core.position);halo.scale.set(1.3,1.3,1);group.add(halo);}lamps.push({core,frame,halo,i});
  }

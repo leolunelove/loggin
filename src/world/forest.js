@@ -217,6 +217,7 @@ export function createForest(shared) {
     t.ranges.lobes.push(lobes.length / 4);
   }
 
+  const brushStart={leaf:leafDabs.length/10,bark:barkDabs.length/13};
   // --- the understorey: saplings and bushes that hold their leaves at eye height ---
   for (let i = 0; i < 620; i++) {
     const x = (rand() - 0.5) * 150, z = -125 + rand() * 235;
@@ -447,5 +448,6 @@ export function createForest(shared) {
     woodGeometry.attributes.aCut.needsUpdate=true;barkMesh.geometry.attributes.aVisible.needsUpdate=true;
     t.uncut=null;t.cut=null;poseTree(t,0,1,0);
   }
-  return { group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
+  function clearBrush(x,z,radius){for(const [mesh,start]of [[leafMesh,brushStart.leaf],[barkMesh,brushStart.bark]]){const attr=mesh.geometry.attributes.aPos;let changed=false;for(let i=start;i<attr.count;i++)if(attr.getY(i)>-100&&Math.hypot(attr.getX(i)-x,attr.getZ(i)-z)<radius){attr.setY(i,-250);changed=true;}if(changed)attr.needsUpdate=true;}}
+  return { clearBrush,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
 }
