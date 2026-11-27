@@ -18,6 +18,20 @@ import {freshState,swingDuration} from '../src/economy.js';
 
 const angleError=(a,b)=>Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
 
+test('holding the shoulder view frames a reachable mark, yields to walls and restores the previous lens and zoom',()=>{
+ for(const fps of [30,60,120]){
+  const camera=new THREE.PerspectiveCamera(46,1.7,.2,200),rig=new Follow(camera),feet=new THREE.Vector3(4,1.7,-9),dt=1/fps;
+  const step=(seconds,block=null,wheel=0)=>{for(let i=0;i<seconds*fps;i++){rig.update(dt,feet,{x:0,y:0},i?0:wheel,(o,dir)=>dir.z<-.75?block:null,()=>0);camera.updateMatrixWorld(true);}};
+  rig.want=7.4;step(2);rig.shoulder=true;step(1);
+  assert.ok(Math.abs(rig.distance-1.65)<.02&&Math.abs(camera.fov-42)<.08);
+  const centre=new THREE.Vector3(feet.x,feet.y+1.5-.22-1.12*Math.sin(rig.pitch),feet.z+1.12*Math.cos(rig.pitch)).project(camera);
+  assert.ok(Math.hypot(centre.x,centre.y)<.008);
+  const head=feet.clone().add(new THREE.Vector3(0,1.58,0)).project(camera);
+  assert.ok(head.x<-.18);
+  step(.5,.6);assert.ok(rig.distance<.4);step(.7,null,-1);assert.equal(rig.want,7.4);
+  rig.shoulder=false;step(3);assert.ok(Math.abs(rig.distance-7.4)<.015&&Math.abs(camera.fov-46)<.02);
+ }
+});
 test('mouse look settles quickly without overshoot and gives the same turn at 30/60/120 fps',()=>{
  const results=[];
  for(const fps of [30,60,120]){

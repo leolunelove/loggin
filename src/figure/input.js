@@ -36,7 +36,7 @@ export class Input {
       // The click that recaptures the mouse only resumes the game. Subsequent clicks swing the axe.
       if (!this.active) { if (e.button === 0) this.capture(); return; }
       if (e.button === 0) {if(!this.mouse.left)this.pressed.add('Interact');this.mouse.left = true;}
-      if (e.button === 2) { if(!this.mouse.right)this.pressed.add('Aim');this.mouse.right = true; }
+      if (e.button === 2) this.mouse.right = true;
     });
     addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mouse.left = false;
@@ -100,7 +100,8 @@ export class Input {
       chopPressed:this.pressed.has('KeyE')||this.pressed.has('Interact'),
       swingPressed:this.pressed.has('Interact'),
       fieldPressed:this.pressed.has('KeyR'),
-      aimPressed: this.pressed.has('Aim') || this.pressed.has('KeyQ'),
+      aimHeld: this.active && this.mouse.right,
+      aimPressed: this.pressed.has('KeyQ'),
       look: { x: this.mouse.x * this.sensitivity + this.touchLook.x, y: this.mouse.y * this.sensitivity + this.touchLook.y },
       zoom: this.mouse.wheel,
       device: 'keyboard',
@@ -127,13 +128,15 @@ export class Input {
       if (this.pad.sprint || btn(5)) s.sprint = true;
       if (btn(0) && !this.pad.a) s.jump = true;
       const aim=(pad.buttons[6]?.value??0)>.4;
-      if(aim){s.strafe=true;if(!this.pad.aim)s.aimPressed=true;}this.pad.aim=aim;
+      if(aim){s.strafe=true;s.aimHeld=true;}
+      if(btn(11)&&!this.pad.lock)s.aimPressed=true;
+      this.pad.lock=btn(11);
       if (btn(12)) s.zoom -= 4 * dt;
       if (btn(13)) s.zoom += 4 * dt;
       this.pad.a = btn(0); this.pad.l3 = btn(10);
       if (btn(2) && !this.pad.swing) s.swingPressed = true;
       this.pad.swing = btn(2);
-      if (rx || ry || pl > 0.01 || btn(0) || btn(2) || btn(7)) s.device = 'pad';
+      if (rx || ry || pl > 0.01 || aim || btn(11) || btn(0) || btn(2) || btn(7)) s.device = 'pad';
     }
     return s;
   }

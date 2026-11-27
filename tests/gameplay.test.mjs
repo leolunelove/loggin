@@ -171,7 +171,41 @@ test('a committed finishing stroke keeps its recovery when the tree leaves targe
  g.before(.02,frame(1));assert.ok(g.swing,'movement preserves the finishing recovery');
 });
 
-test('right-click lock selects an aimed tree, persists through strafing, toggles off and releases on felling or range',()=>{
+function sightRig(height,form=0,fps=60){
+ const g=attachedRig(form,fps),tree=g.forest.trees[0];
+ tree.z=-1.20;tree.collider.setTranslation({x:0,y:1.45,z:tree.z});tree.collider.standingTree=tree;g.physics.step();
+ g.camera=new THREE.PerspectiveCamera(42,1.7,.15,100);g.camera.position.set(.98,1.56,1.65);
+ g.camera.lookAt(.015,height,-1.0);g.camera.updateMatrixWorld(true);
+ return g;
+}
+test('shoulder aim works two distinct patches of bark with real axe contact for each swing form',()=>{
+ const bad=[];
+ for(const fps of [30,60,120])for(const h of [.94,1.36])for(let form=0;form<5;form++){
+  const g=sightRig(h,form,fps),tree=g.forest.trees[0],aim={...frame(),aimHeld:true};
+  g.step(.12,aim);const mark=g.sight.point.clone();
+  assert.equal(g.sight.tree,tree);assert.ok(g.sight.reachable);assert.ok(!g.lockedTree);
+  g.step(1/fps,{...aim,swingPressed:true,chopPressed:true});g.step(1.1,frame());
+  const s=g.observedSwing,point=s?.bite?.point,delta=point?point.distanceTo(mark):Infinity;
+  if(g.hits.length!==1||delta>.10)bad.push({fps,h,form,material:s?.material,distance:delta.toFixed(3),actual:point?.toArray(),travel:s?.travel});
+  g.physics.free();
+ }
+ assert.deepEqual(bad,[]);
+});
+test('the shoulder sight sees a thin rail first, even with a Q lock on the trunk behind it',()=>{
+ const g=sightRig(1.12),tree=g.forest.trees[0],aim={...frame(),aimHeld:true};
+ g.lockedTree=tree;const wall=g.physics.createCollider(R.ColliderDesc.cuboid(.95,.85,.009).setTranslation(0,1,-.76));
+ g.physics.step();g.audio.stack=()=>{};g.edgeChips=()=>{};g.step(.3,aim);
+ assert.equal(g.sight.collider.handle,wall.handle);assert.ok(g.sight.reachable);assert.ok(!g.sight.tree);assert.equal(g.lockedTree,tree);
+ g.step(1/60,{...aim,swingPressed:true,chopPressed:true});g.step(1.1,frame());
+ assert.equal(g.hits.length,0);assert.ok(g.observedSwing.bite);g.physics.free();
+});
+test('a click from the pack remembers its chosen patch when the player releases the shoulder button',()=>{
+ const g=sightRig(1.16),aim={...frame(),aimHeld:true};g.toggleAxe();g.step(.7,aim);
+ const mark=g.sight.point.clone();g.step(1/60,{...aim,swingPressed:true,chopPressed:true});
+ assert.ok(g.drawStroke.sight);g.camera.lookAt(2,2,0);g.camera.updateMatrixWorld(true);g.step(1.75,frame());
+ assert.equal(g.hits.length,1);assert.ok(g.observedSwing.bite.point.distanceTo(mark)<.10);g.physics.free();
+});
+test('Q lock selects an aimed tree, persists through strafing, toggles off and releases on felling or range',()=>{
  const g=rig(),t=g.forest.trees[0];const press={...frame(),aimPressed:true};g.before(.02,press);assert.equal(g.lockedTree,t);assert.equal(press.strafe,true);
  g.follow.yaw=0;g.before(.02,frame(1));assert.equal(g.nearest().tree,t);g.before(.02,{...frame(),aimPressed:true});assert.equal(g.lockedTree,null);
  g.follow.yaw=Math.PI;g.before(.02,{...frame(),aimPressed:true});t.down=true;g.before(.02,frame());assert.equal(g.lockedTree,null);

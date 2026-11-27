@@ -4,6 +4,7 @@
 <label>Axe <select id="tier"><option>Hand axe</option><option>Felling axe</option><option>Steel axe</option><option>Splitting axe</option><option>Forester’s axe</option></select></label>
 <label>Stroke <select id="form"><option>Natural</option><option>Overhead</option><option>Diagonal</option><option>Compact</option><option>Backhand</option><option>Low hew</option></select></label><label>Rate <select id="rate"><option>30</option><option selected>60</option><option>120</option></select></label>
 <button id="standing">Cut a standing tree</button><button id="wall">Cut beside the shack</button><button id="rail">Swing through a rail</button><button id="ground">Strike the ground</button><button id="carry">Turn into a post</button>
+<button id="shoulderHigh">Sight upper bark</button><button id="shoulderLow">Sight lower bark</button><button id="precise">Cut at the sight</button><button id="lookout">Release the shoulder view</button><button id="saveShoulder">Save shoulder frame</button>
 <button id="free">Swing in open space</button><button id="stow">Stow on the pack</button><button id="draw">Draw into a cut</button><button id="close">Frame the axe</button><button id="wide">Frame the woodcutter</button><button id="advance">Advance one frame</button>
 </header><output aria-live="polite">Loading the forest…</output><iframe title="Playable forest" src="/?capture&amp;nopad&amp;woodlandReview"></iframe>
 <script type="module">
@@ -122,6 +123,48 @@ $('draw').onclick=()=>{
   focus=g.chopAnimation.metrics.blade.clone();camera();show(' · '+(g.state.axeStowed?'stowed':'drawn'));
 };
 $('tier').onchange=()=>{g.state.axe=$('tier').selectedIndex;g.renderHud();lab.step(1/60,1,false);out.textContent='Equipped '+$('tier').selectedOptions[0].text;};
+let sightTree=null;
+function sightView(pitch){
+  clear();sightTree=tree();if(!sightTree)return;
+  const t=sightTree;g.state.axeStowed=false;g.stowWeight=0;
+  visit(t.x,t.z+t.r+.96,t.x,t.z,pitch);
+  lab.input.override=()=>({...neutral(),aimHeld:true});lab.step(1/60,95,false);g.updatePrompt();
+  sightRead();
+}
+function sightRead(extra=''){
+  const s=g.sight,p=s?.point;
+  out.textContent=(g.follow.shoulder?'Over the shoulder':'Walking view')+' · camera '+g.follow.distance.toFixed(2)+' m · FOV '+lab.camera.fov.toFixed(1)+'° · '+(p?(s.tree?'bark':'surface')+' '+(p.y-lab.player.feet.y).toFixed(2)+' m high · '+(s.reachable?'in reach':'out of reach'):'free look')+extra;
+}
+$('shoulderHigh').onclick=()=>sightView(-.10);
+$('shoulderLow').onclick=()=>sightView(.29);
+$('precise').onclick=()=>{
+  if(!g.sight)sightView(.03);
+  const before=g.sight?.point?.clone(),xp=g.state.woodcutting.xp;
+  lab.input.override=()=>({...neutral(),aimHeld:true,swingPressed:true,chopPressed:true});
+  lab.step(1/60,1,false);lab.input.override=()=>({...neutral(),aimHeld:true});
+  let s=g.swing;if(s&&$('form').selectedIndex)s.variant=$('form').selectedIndex-1;
+  for(let i=0;i<62;i++){lab.step(1/60,1,false);s=g.swing||s;if(s?.hit)break;}
+  const contact=g.chopAnimation.metrics.contact;
+  const face=contact?' · '+contact.part.name+' · '+(-contact.velocity.dot(contact.normal)).toFixed(2)+' m/s inward · flat '+Math.abs(v(0,0,1).applyQuaternion(contact.rotation).dot(contact.normal)).toFixed(2):'';
+  sightRead(' · form '+s?.variant+' · '+(s?.material||'air')+face+' · travel '+Math.round((s?.travel||0)*100)+' cm'+' · '+(g.state.woodcutting.xp-xp)+' XP'+(s?.bite&&before?' · actual / aim '+s.bite.point.y.toFixed(2)+' / '+before.y.toFixed(2)+' m · error '+Math.round(s.bite.point.distanceTo(before)*100)+' cm':''));
+};
+$('saveShoulder').onclick=async()=>{
+  if(!g.sight)sightView(.03);
+  lab.step(.0001,1);
+  const source=lab.renderer.domElement,canvas=document.createElement('canvas');
+  canvas.width=source.width;canvas.height=source.height;
+  const ctx=canvas.getContext('2d');ctx.drawImage(source,0,0);
+  const reticle=frame.contentDocument.getElementById('aim-crosshair'),svg=reticle.querySelector('svg').cloneNode(true);
+  svg.querySelector(g.sight?.reachable?'.distant-sight':'.working-sight').remove();
+  const icon=new Image();icon.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));await icon.decode();
+  const size=reticle.offsetWidth*canvas.width/source.clientWidth;
+  ctx.drawImage(icon,(canvas.width-size)/2,(canvas.height-size)/2,size,size);
+  canvas.toBlob(blob=>{
+    const link=document.createElement('a'),url=URL.createObjectURL(blob);
+    link.href=url;link.download='loggin-shoulder-aim.'+(blob.type==='image/webp'?'webp':'png');link.click();setTimeout(()=>URL.revokeObjectURL(url),3000);
+  },'image/webp',.92);
+};
+$('lookout').onclick=()=>{lab.input.override=neutral;lab.step(1/60,150,false);g.updatePrompt();sightRead();};
 $('advance').onclick=()=>{if(!metrics)return;lab.step(1/rate(),1,false);show(' · '+(g.swing?.poseProgress.toFixed(3)||'at rest'));};
 $('close').onclick=()=>metrics&&camera(true);$('wide').onclick=()=>metrics&&camera();
 </script></html>

@@ -26,7 +26,7 @@ async function grow(){
  WORLD.seed=state.seed;WORLD.state=state;
  if(!new URLSearchParams(location.search).has('capture'))writeSave(storage,state);
  closePreview();$('welcome').hidden=true;document.body.classList.remove('at-title');$('loading').hidden=false;
- try{await import('./main.js');}catch(error){console.error(error);$('loading-label').textContent='The forest could not load.';const retry=$('reload-forest');retry.hidden=false;retry.onclick=()=>location.reload();}
+ try{await import('./main.js');}catch(error){console.error(error);$('loading-label').textContent=/WebGL context/i.test(error.message)?'3D graphics are unavailable. Reopen the camp or reload to try again.':'The forest could not load.';const retry=$('reload-forest');retry.hidden=false;retry.onclick=()=>location.reload();}
 }
 if(new URLSearchParams(location.search).has('capture')){$('welcome').hidden=true;WORLD.seed=state.seed;WORLD.state=state;grow();}
 else{

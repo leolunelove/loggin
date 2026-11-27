@@ -117,6 +117,11 @@ body.rambling :is(#project-status,#controls){opacity:0}#controls,#project-status
 #tree-name{font:800 18px/1 var(--display);text-transform:uppercase}#tree-meta{font:10px var(--body)}#target .health{height:3px;margin:4px auto;background:#67816b}#target .health i{background:var(--honey)}
 #target.locked{border-color:var(--honey)}#target.locked #tree-name{color:var(--honey)}#aim-status:empty{display:none}#aim-status{color:var(--cream);font:12px var(--body)}
 #toast{background:var(--pine);border:1px dashed var(--seam);border-radius:9px;color:var(--cream);font:800 18px var(--display);letter-spacing:.02em}
+#aim-crosshair svg{display:none}
+#aim-crosshair.shoulder{width:25px;height:25px;border:0;border-radius:0;background:none;box-shadow:none}
+#aim-crosshair.shoulder svg{display:block;width:100%;height:100%}
+#aim-crosshair.shoulder.in-reach .distant-sight,#aim-crosshair.shoulder:not(.in-reach) .working-sight{display:none}
+.shoulder-view #target{left:50% !important;top:auto !important;bottom:70px;transform:translateX(-50%);pointer-events:none}
 body:has(#mouse-capture:not([hidden])) :is(#action,#target,#field-action,#aim-status,#aim-crosshair,#controls){visibility:hidden}
 dialog{width:min(525px,94vw);padding:clamp(20px,3vw,34px);background:var(--grain),var(--pine);color:var(--cream);border:2px solid #617d63;border-radius:15px;scrollbar-color:#849875 var(--deep);scrollbar-width:thin}
 dialog::backdrop{background:#10282080;backdrop-filter:blur(3px)}

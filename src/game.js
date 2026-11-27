@@ -1,6 +1,6 @@
 import {awardWork,logCut,skillProgress,ensureOrder} from './woodcutting.js';
 import {skillsPage} from './woodcutting-ui.js';
-import {facesWork,looseAim,openAim,waterContact,nudgeSection} from './world/axe-contact.js';
+import {facesWork,looseAim,openAim,waterContact,nudgeSection,shoulderSight} from './world/axe-contact.js';
 import {Endurance} from './effort.js';
 import {PATCH_FILES} from './exploration.js';
 import {plantTrunk,fallingTrunk,placeSection,sectionBody} from './world/woodland-physics.js';
@@ -415,7 +415,8 @@ export class Lumberjack {
   inp.playing=this.started&&!this.paused&&!this.sleeping&&!(typeof document!=='undefined'&&document.hidden)&&(!!this.seat||this.touch||this.input.active||inp.device==='pad');
   inp.resting=!!this.seated;inp.packLoad=this.state?Math.min(1,this.state.carried/bagCapacity(this.state)):0;
   inp.blockJump=!inp.playing||!!this.seat||!!this.cart?.towing||!!this.delivery||!!this.swing;
-  const toolOnly=inp.sprint&&(inp.swingPressed||this.held||this.input.mouse?.left);
+  this.follow.shoulder=false;this.sight=null;
+  const toolOnly=inp.aimHeld||inp.sprint&&(inp.swingPressed||this.held||this.input.mouse?.left);
   if(this.exploration){
     inp.trailBoost=this.onTrail=this.exploration.onTrail(this.player.feet,this.state)||this.field?.onSteps(this.player.feet);
     inp.provisioned=packedLunch(this.state);
@@ -461,12 +462,14 @@ export class Lumberjack {
    if(!inactive&&pressed){if(contributeFire(this.state)){this.renderHud();this.save();this.audio.unload(this.home.fire.position);this.toast(this.state.fire>=12?'Campfire lit · Make yourself at home.':`Campfire · ${this.state.fire} / 12 logs`);}else this.toast('Bring ordinary logs home and empty your bag at the wood rack first.');}return;
   }
   this.fireActionHeld=false;
+  this.follow.shoulder=!!(inp.aimHeld&&!inactive&&!this.delivery);
+  if(this.follow.shoulder){this.sight=shoulderSight(this);inp.strafe=true;}
   if(!inactive&&inp.aimPressed){
    if(this.lockedTree)this.lockedTree=null;
-   else{const t=pickAimTree(this.field?[...this.forest.trees,...this.field.windthrows()]:this.forest.trees,this.player.feet,this.follow.yaw,this.camera.position);this.lockedTree=t&&this.treeVisible(t)?t:null;}
+   else{const t=this.sight?this.sight.tree:pickAimTree(this.field?[...this.forest.trees,...this.field.windthrows()]:this.forest.trees,this.player.feet,this.follow.yaw,this.camera.position);this.lockedTree=t&&this.treeVisible(t)?t:null;}
   }
   if(this.lockedTree)this.nearest();
-  if(this.lockedTree){
+  if(this.lockedTree&&!this.follow.shoulder){
    const t=this.lockedTree,desired=Math.atan2(t.x-this.player.feet.x,t.z-this.player.feet.z),current=this.follow.aimYaw??this.follow.yaw;
    this.follow.aimYaw=current+Math.atan2(Math.sin(desired-current),Math.cos(desired-current));
    inp.look.x=0;inp.facingYaw=desired;inp.strafe=true;
@@ -474,7 +477,9 @@ export class Lumberjack {
   this.follow.look(inp.look,dt);inp.look={x:0,y:0};
   const pad=[...(navigator.getGamepads?.()||[])].find(p=>p?.connected);
   const padHeld=pad&&this.started&&!this.paused&&(pad.buttons[7]?.value>.3||pad.buttons[2]?.pressed);
-  const near=this.nearest();this.target=near.tree;this.distance=near.distance;
+  if(this.drawStroke&&(inactive||this.time>this.drawStroke.until))this.drawStroke=null;
+  const sight=this.drawStroke?.sight||this.queuedStroke?.sight||this.sight;
+  const near=sight?{tree:sight.tree,distance:sight.distance??Infinity}:this.nearest();this.target=near.tree;this.distance=near.distance;
   const moving=Math.hypot(inp.move.x,inp.move.y)>.1;
   if(this.delivery){
     if(inactive||moving||!atWoodRack(this.home,this.player.feet))this.cancelDelivery();
@@ -486,47 +491,49 @@ export class Lumberjack {
     }
   }
   // A committed stroke follows through while the feet remain free. Reach is checked at impact.
-  if(this.drawStroke&&(inactive||this.time>this.drawStroke.until))this.drawStroke=null;
   const held=this.held||padHeld||this.input.keys.has('KeyE')||(this.input.active&&this.input.mouse.left)||!!this.drawStroke;
   const freeSwing=!!(inp.swingPressed||this.held||padHeld||(this.input.active&&this.input.mouse.left)||this.drawStroke?.primary);
-  const loose=freeSwing&&!this.swing&&!this.lockedTree?looseAim(this.looseTimber||[],this.player.feet,this.follow.yaw,this.follow.pitch||0):null;
-  const aimed=this.target&&(this.lockedTree||facesWork(this.target,this.player.feet,this.follow.yaw,this.follow.pitch));
+  const loose=sight?sight.timber:freeSwing&&!this.swing&&!this.lockedTree?looseAim(this.looseTimber||[],this.player.feet,this.follow.yaw,this.follow.pitch||0):null;
+  const aimed=this.target&&(sight||this.lockedTree||facesWork(this.target,this.player.feet,this.follow.yaw,this.follow.pitch));
   const looseFirst=loose&&((this.follow.pitch||0)>.30||!aimed||Math.hypot(loose.x-this.player.feet.x,loose.z-this.player.feet.z)<near.distance);
-  const inReach=this.target&&near.distance<=(this.target.windthrow?.94:CHOP_REACH);
+  const inReach=this.target&&(sight?sight.reachable:near.distance<=(this.target.windthrow?.94:CHOP_REACH));
   const primary=freeSwing||this.queuedStroke?.primary;
   const aimAtTree=inReach&&(!primary||aimed);
   const unloading=this.home&&atWoodRack(this.home,this.player.feet);
   if(unloading&&!toolOnly&&(!freeSwing||this.state.carried)){this.swing=null;if(!inactive&&(inp.interactPressed||held)&&!moving&&this.player.grounded)this.unload();return;}
   if(!inactive&&!this.swing&&(held||inp.chopPressed)&&(this.state.axeStowed||this.stowWeight>.035)){
     if(this.state.axeStowed){this.state.axeStowed=false;this.save();}
-    this.drawStroke={primary:freeSwing,until:this.time+.55};return;
+    this.drawStroke={primary:freeSwing,sight,until:this.time+.55};return;
   }
-  if((inp.chopPressed||this.drawStroke)&&!inactive&&!this.swing&&aimAtTree&&!looseFirst)this.queuedStroke={tree:this.target,primary:freeSwing,until:this.time+.45};
+  if((inp.chopPressed||this.drawStroke)&&!inactive&&!this.swing&&aimAtTree&&!looseFirst)this.queuedStroke={tree:this.target,primary:freeSwing,sight,until:this.time+.45};
   if(this.queuedStroke&&(inactive||this.time>this.queuedStroke.until||this.target!==this.queuedStroke.tree))this.queuedStroke=null;
   if(!inactive&&!looseFirst&&!inp.jump&&(held||this.queuedStroke)&&!this.swing&&aimAtTree&&(primary||(this.workAllowed(this.target)&&this.workFits(this.target)))&&this.player.grounded){
-    const t=this.target,yaw=Math.atan2(t.x-this.player.feet.x,t.z-this.player.feet.z);
+    const t=this.target,aim=sight?.point||t,yaw=Math.atan2(aim.x-this.player.feet.x,aim.z-this.player.feet.z);
     inp.facingYaw=yaw;
     const off=Math.atan2(Math.sin(yaw-this.player.yaw),Math.cos(yaw-this.player.yaw));
     // Turn toward the trunk before lifting the tool, rather than snapping the whole body.
     if(Math.abs(off)<.44){
      const heavy=!!inp.sprint,variant=chooseSwing(this.lastSwingVariant,t);this.lastSwingVariant=variant;
      this.queuedStroke=null;
-     this.swing={t,variant,heavy,finishing:t.hp<=strokePower(this.state,t,AXES[this.state.axe].power,heavy),age:0,duration:swingDuration(this.state)*(heavy?1.28:1),hit:false,contact:this.workContact(t,false)};
+     this.swing={t,variant,heavy,finishing:t.hp<=strokePower(this.state,t,AXES[this.state.axe].power,heavy),age:0,duration:swingDuration(this.state)*(heavy?1.28:1),hit:false,contact:sight?.point.clone()||this.workContact(t,false),sight};
     }
   }
   if(freeSwing&&!inactive&&!inp.jump&&!this.swing){
-    const feet=this.player.feet,yaw=this.follow.yaw,pitch=this.follow.pitch||0;
+    const feet=this.player.feet,pitch=this.follow.pitch||0;
+    const mark=sight&&(sight.reachable?sight.point:sight.freePoint);
+    const yaw=mark?Math.atan2(mark.x-feet.x,mark.z-feet.z):this.follow.yaw;
     const t=loose||openAim(feet,yaw,pitch);
     const aligning=this.player.grounded&&!looseFirst&&aimAtTree;
     if(!aligning){
       const variant=chooseSwing(this.lastSwingVariant,t);this.lastSwingVariant=variant;this.queuedStroke=null;
-      this.swing={t,free:true,yaw,pitch,heavy:!!inp.sprint,variant,age:0,duration:swingDuration(this.state)*(inp.sprint?1.15:.92),hit:false,contact:t.point.clone()};
+      this.swing={t,free:true,yaw,pitch,heavy:!!inp.sprint,variant,age:0,duration:swingDuration(this.state)*(inp.sprint?1.15:.92),hit:false,contact:(mark||t.point).clone(),sight};
     }
   }
   if(this.swing){
     this.drawStroke=null;
     const s=this.swing;inp.blockJump=true;inp.walk=true;inp.sprint=false;s.age+=dt;s.poseProgress=Math.min(1,s.age/s.duration);
-    inp.facingYaw=s.free?s.yaw:Math.atan2(s.t.x-this.player.feet.x,s.t.z-this.player.feet.z);
+    const work=s.sight?.point||s.t;
+    inp.facingYaw=s.free?s.yaw:Math.atan2(work.x-this.player.feet.x,work.z-this.player.feet.z);
     if(s.age>=s.duration*.33&&!s.swished){s.swished=true;this.audio?.brushSound?.('air',this.player.feet,s.heavy?.46:.32);}
     if(s.age>=s.duration)this.swing=null;
   }
@@ -542,6 +549,11 @@ export class Lumberjack {
  }
  swingPoint(s){
   const feet=this.player.feet;
+  if(s.sight){
+    const mark=s.sight;
+    if(mark.body?.isValid())return mark.local.clone().applyQuaternion(mark.body.rotation()).add(mark.body.translation());
+    return (mark.reachable?mark.point:mark.freePoint).clone();
+  }
   if(!s.free){
     const p=this.workContact(s.t,true);
     if(s.t.windthrow)return p;
@@ -657,7 +669,7 @@ export class Lumberjack {
   this.stowWeight=THREE.MathUtils.clamp(this.stowWeight+(packed?dt/.38:-dt/.29),0,1);
   const guards=()=>this.axeOwner.guards(this.figure.man,this.figure.pack,this.figure.hat);
   if(!visible)this.heldAxe.stow();
-  this.chopAnimation.update(dt,s,this.state.axe,visible?this.heldAxe:null,guards,{weight:this.stowWeight,loop:this.figure.pack.axeLoop});
+  this.chopAnimation.update(dt,s,this.state.axe,visible?this.heldAxe:null,guards,{weight:this.stowWeight,loop:this.figure.pack.axeLoop},this.sight);
   const {contact,blade}=this.chopAnimation.metrics;
   const driving=s&&!s.hit&&s.poseProgress>=.34&&s.poseProgress<=.59;
   if(driving&&s.lastEdge){
@@ -879,29 +891,32 @@ export class Lumberjack {
   if(this.hudEffort!==effort){this.hudEffort=effort;$('stamina').value=effort;$('stamina').textContent=effort+'%';$('stamina-tag').dataset.low=String(effort<24);}
   if(this.home)this.updateBearing();
   const fieldLabel=this.fieldKeyLabel();$('field-action').hidden=!this.started||this.paused||!fieldLabel||this.insideShack||!!this.seat;$('field-label').textContent=fieldLabel||'';
-  $('aim-crosshair').hidden=!this.started||this.paused||!!this.lockedTree||this.insideShack||!!this.seat;
-  $('aim-status').hidden=!this.started||this.paused||this.insideShack||!!this.seat;$('aim-status').textContent=this.lockedTree?'Tree locked · RMB / Q to release':'';
+  const reticle=$('aim-crosshair');
+  reticle.hidden=!this.started||this.paused||(!this.sight&&!!this.lockedTree)||this.insideShack||this.indoorPlace>=0||!!this.seat;
+  reticle.classList.toggle('shoulder',!!this.sight);reticle.classList.toggle('in-reach',!!this.sight?.reachable);
+  document.body.classList.toggle('shoulder-view',!!this.sight);
+  $('aim-status').hidden=!this.started||this.paused||this.insideShack||!!this.seat;$('aim-status').textContent=this.lockedTree&&!this.sight?'Tree locked · Q to release':'';
   if(this.seat&&this.started&&!this.paused){$('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=!this.seated;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.seated?'Stand up':'Standing up…';$('context').textContent='Take your time · Mouse to look · WASD to stand';return;}
   const local=this.field?.fieldAction(this.player.feet,this.state);
-  if(local&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=local.type==='rack'&&!this.state.carried;$('chop-key').textContent='E';$('action-text').textContent=local.title;$('context').textContent=local.note;return;}
+  if(!this.sight&&local&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=local.type==='rack'&&!this.state.carried;$('chop-key').textContent='E';$('action-text').textContent=local.title;$('context').textContent=local.note;return;}
   if(this.cart?.towing&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=true;return;}
   const place=this.exploration?.nearest(this.player.feet)??-1;if(place>=0&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent=PLACES[place].name;$('context').textContent=restored(this.state.places[place])?'Open the home ledger':'Examine the abandoned home';return;}
-  if(this.home?.nearBench?.(this.player.feet,this.state)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Sit by the fire';$('context').textContent='A quiet moment at camp';return;}
+  if(!this.sight&&this.home?.nearBench?.(this.player.feet,this.state)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Sit by the fire';$('context').textContent='A quiet moment at camp';return;}
   if(this.insideShack&&this.started&&!this.paused){
    $('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Camp ledger & rest';$('context').textContent='Your supplies, tools and building progress';return;
   }
   if(this.home){
-   if(this.started&&!this.paused&&atWoodRack(this.home,this.player.feet)){
+   if(!this.sight&&this.started&&!this.paused&&atWoodRack(this.home,this.player.feet)){
     $('target').hidden=true;$('action').hidden=false;$('chop').disabled=!!this.delivery||!this.state.carried;
     $('chop-key').textContent=this.touch?'E':'E / LMB';$('action-text').textContent=this.delivery?'Stacking logs…':this.state.carried?'Empty bag':'Bag empty';
     $('context').textContent=this.delivery?'Move to cancel':`${nice(this.state.wood)} timber in shared stock`;return;
    }
   }
-  if(this.fireTakesFocus()&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=this.state.fire>=12;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.state.fire>=12?'Campfire burning':'Build campfire';$('context').textContent=this.state.fire>=12?'A warm place to linger':`${this.state.fire||0} / 12 ordinary logs · Uses wood stored at camp`;return;}
-  if(this.home?.nearDoor?.(this.player.feet)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=true;$('chop-key').textContent='WASD';$('action-text').textContent='Walk inside';$('context').textContent='The door opens as you approach';return;}
+  if(!this.sight&&this.fireTakesFocus()&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=this.state.fire>=12;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.state.fire>=12?'Campfire burning':'Build campfire';$('context').textContent=this.state.fire>=12?'A warm place to linger':`${this.state.fire||0} / 12 ordinary logs · Uses wood stored at camp`;return;}
+  if(!this.sight&&this.home?.nearDoor?.(this.player.feet)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=true;$('chop-key').textContent='WASD';$('action-text').textContent='Walk inside';$('context').textContent='The door opens as you approach';return;}
   $('chop').disabled=false;$('chop-key').textContent=this.touch?'Tap':'LMB';
-  const t=this.target,aimed=t&&(this.lockedTree||facesWork(t,this.player.feet,this.follow.yaw,this.follow.pitch));
-  const timber=!this.lockedTree&&this.started&&!this.paused?looseAim(this.looseTimber||[],this.player.feet,this.follow.yaw,this.follow.pitch):null;
+  const t=this.target,aimed=t&&(this.sight||this.lockedTree||facesWork(t,this.player.feet,this.follow.yaw,this.follow.pitch));
+  const timber=this.sight?this.sight.timber:!this.lockedTree&&this.started&&!this.paused?looseAim(this.looseTimber||[],this.player.feet,this.follow.yaw,this.follow.pitch):null;
   if(timber&&(!aimed||this.follow.pitch>.30||Math.hypot(timber.x-this.player.feet.x,timber.z-this.player.feet.z)<this.distance)){
     $('target').hidden=true;$('action').hidden=false;$('chop-key').textContent=this.touch?'Tap':'LMB';
     $('action-text').textContent=timber.kind==='stump'?'Strike stump':timber.part.length>1.1?'Hew fallen log':'Nudge log';
@@ -909,15 +924,15 @@ export class Lumberjack {
     return;
   }
   const visible=this.started&&!this.paused&&aimed&&!t.down;$('target').hidden=!visible;
-  $('target').classList.toggle('locked',!!this.lockedTree);
+  $('target').classList.toggle('locked',this.lockedTree===t&&!!t);
   $('target').classList.toggle('impact',this.time<(this.impactUntil||0));
   if(!this.started)return;
   if(!visible){$('action').hidden=this.paused;$('chop').disabled=false;$('action-text').textContent='Swing axe';$('context').textContent='';return;}
   $('action').hidden=this.paused;
-  const spec=TREES[t.type],near=this.distance<=(t.windthrow?.94:CHOP_REACH),p=new THREE.Vector3(t.x,t.y+2,t.z).project(this.camera);
+  const spec=TREES[t.type],near=this.sight?this.sight.reachable:this.distance<=(t.windthrow?.94:CHOP_REACH),p=new THREE.Vector3(t.x,t.y+2,t.z).project(this.camera);
   $('target').hidden=p.z>1||p.z<0||Math.abs(p.x)>1||Math.abs(p.y)>1;
   $('target').style.left=`${THREE.MathUtils.clamp((p.x*.5+.5)*innerWidth,70,innerWidth-70)}px`;$('target').style.top=`${THREE.MathUtils.clamp((-p.y*.5+.5)*innerHeight,130,innerHeight-120)}px`;
-  $('tree-name').textContent=(t.windthrow?'Fallen trunk':figuredTree(t)?(t.type===3?'Curly maple':'Figured oak'):spec.name)+(this.lockedTree?' · Locked':'');$('tree-health').style.width=`${t.hp/(t.maxHp||spec.health)*100}%`;
+  $('tree-name').textContent=(t.windthrow?'Fallen trunk':figuredTree(t)?(t.type===3?'Curly maple':'Figured oak'):spec.name)+(this.lockedTree===t?' · Locked':'');$('tree-health').style.width=`${t.hp/(t.maxHp||spec.health)*100}%`;
   $('tree-meta').textContent=near?`${chopCount(t.hp,strokePower(this.state,t,AXES[this.state.axe].power))} · ${this.workReward(t)} wood`:`${Math.ceil(this.distance)} m away`;
   const locked=!canHarvest(this.state,t.type),full=!this.workFits(t),reserved=this.state.woodland.reserved.includes(t.id);if(reserved){$('chop').disabled=false;$('action-text').textContent='Reserved tree';$('context').textContent='A keeper for this clearing';return;}$('chop').disabled=false;$('action-text').textContent=locked?'Hardwood locked':full?'Return to camp':near?(t.windthrow?'Buck fallen trunk':'Chop tree'):'Swing axe';$('context').textContent=locked?'Build the woodshed and equip the felling axe':full?'This tree’s full yield will not fit. Empty your bag first.':t.windthrow?'Cut along the chalk ring · Hold Shift for a heavy stroke':isHardwood(t.type)?(figuredTree(t)?'Figured grain · Extra hardwood · ':'Hardwood · ')+'Shift + chop for a heavy stroke':'';
  }

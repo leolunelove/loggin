@@ -35,6 +35,10 @@ export class Follow {
     this.pitch = 0.05; // + looks down on him
     this.want = 6.4;
     this.distance = 6.4;
+    this.shoulder = false;
+    this.shoulderBlend = 0;
+    this.shoulderDistance = 1.65;
+    this.fieldOfView = camera.fov;
     this.side = 0.95;
     this.lift = 0.85;
     this.pivot = new THREE.Vector3();
@@ -54,8 +58,9 @@ export class Follow {
   set pitch(value) { this._pitch = this.aimPitch = value; }
 
   look(look, dt = 1 / 60) {
-    this.aimYaw -= look.x;
-    this.aimPitch = THREE.MathUtils.clamp(this.aimPitch + look.y, -0.75, 1.2);
+    const sensitivity=1-this.shoulderBlend*.32;
+    this.aimYaw -= look.x*sensitivity;
+    this.aimPitch = THREE.MathUtils.clamp(this.aimPitch + look.y*sensitivity, -0.75, 1.2);
     // A short, frame-rate independent filter removes mouse-event steps without a long camera trail.
     this._yaw = damp(this._yaw, this.aimYaw, 32, dt);
     this._pitch = damp(this._pitch, this.aimPitch, 32, dt);
@@ -67,7 +72,15 @@ export class Follow {
     if (this.free) { cam.position.copy(this.free.position); cam.lookAt(this.free.target); return; }
     if (!this.lookPrepared) this.look(look, dt);
     this.lookPrepared = false;
-    this.want = THREE.MathUtils.clamp(this.want + zoom * 0.5, 2.8, 13);
+    const close=this.shoulder&&!this.interior&&!this.rest;
+    this.shoulderBlend=damp(this.shoulderBlend,close?1:0,close?11:8,dt);
+    if(this.shoulderBlend<.0004)this.shoulderBlend=0;
+    const blend=this.shoulderBlend;
+    if(close)this.shoulderDistance=THREE.MathUtils.clamp(this.shoulderDistance+zoom*.18,1.42,2.45);
+    else this.want=THREE.MathUtils.clamp(this.want+zoom*.5,2.8,13);
+    const lens=this.fieldOfView-4*blend;
+    if(cam.isPerspectiveCamera&&Math.abs(cam.fov-lens)>.007){cam.fov=lens;cam.updateProjectionMatrix();}
+    const boom=THREE.MathUtils.lerp(this.want,this.shoulderDistance,blend);
     if(this.rest){
       const r=this.rest,focus=r.target,orbit=r.orbit||0,tilt=r.tilt||0;
       this.restCheck=(this.restCheck||0)-dt;
@@ -92,32 +105,42 @@ export class Follow {
       this.exitBlend=1.15;this.pivot.set(target.x,target.y+1.35,target.z);return;
     }
     const oldPosition=(this.exitBlend>0||oldRotation)?cam.position.clone():null;
-    const goal = new THREE.Vector3(target.x, target.y + 1.35, target.z);
+    const goal = new THREE.Vector3(target.x,target.y+1.35+.15*blend,target.z);
     if (this.pivot.lengthSq() === 0) this.pivot.copy(goal);
-    this.pivot.x = damp(this.pivot.x, goal.x, 10, dt);
-    this.pivot.z = damp(this.pivot.z, goal.z, 10, dt);
-    this.pivot.y = damp(this.pivot.y, goal.y, 5, dt);
+    this.pivot.x = damp(this.pivot.x, goal.x, 10+10*blend, dt);
+    this.pivot.z = damp(this.pivot.z, goal.z, 10+10*blend, dt);
+    this.pivot.y = damp(this.pivot.y, goal.y, 5+9*blend, dt);
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const back = new THREE.Vector3(-Math.sin(this.yaw) * cp, sp, -Math.cos(this.yaw) * cp);
     const right = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
     const k = Math.min(1, this.want / 6.4);
     // Keep the shoulder offset outside trunks, then leave clearance around the camera.
-    const shoulder=this.side*k,sign=Math.sign(shoulder)||1;
+    const shoulder=THREE.MathUtils.lerp(this.side*k,1.13,blend),sign=Math.sign(shoulder)||1;
     const sideHit=castRay(this.pivot,right.clone().multiplyScalar(sign),Math.abs(shoulder)+.25);
     const side=sideHit==null?shoulder:sign*Math.min(Math.abs(shoulder),Math.max(0,sideHit-.3));
     const from = this.pivot.clone().addScaledVector(right,side);
     let hit=null;
     for(const offset of [new THREE.Vector3(),right.clone().multiplyScalar(.25),right.clone().multiplyScalar(-.25),new THREE.Vector3(0,.2,0),new THREE.Vector3(0,-.2,0)]){
-      const d=castRay(from.clone().add(offset),back,this.want+.4);
+      const d=castRay(from.clone().add(offset),back,boom+.4);
       if(d!=null&&(hit==null||d<hit))hit=d;
     }
-    const free = hit == null ? this.want : Math.max(0.8, hit - 0.3);
-    this.distance = free < this.distance ? damp(this.distance, free, 18, dt) : damp(this.distance, free, 2.5, dt);
+    const clearance=THREE.MathUtils.lerp(.30,.23,blend);
+    const available=hit==null?boom:Math.max(.075,Math.min(boom,hit-clearance));
+    this.distance=damp(this.distance,available,available<this.distance?18:2.5+5*blend,dt);
+    if(hit!=null&&blend>.025)this.distance=Math.min(this.distance,available);
     cam.position.copy(from).addScaledVector(back, this.distance);
     const floor = groundAt(cam.position.x, cam.position.z) + 0.45;
     let raised = 0;
     if (cam.position.y < floor) { raised = floor - cam.position.y; cam.position.y = floor; }
-    cam.lookAt(from.x - back.x * 6, from.y - back.y * 6 + this.lift * k - raised * this.sink, from.z - back.z * 6);
+    const lookAt=from.clone().addScaledVector(back,-6);
+    lookAt.y+=this.lift*k-raised*this.sink;
+    if(blend>0){
+      // Converge the offset shoulder sight at working distance to remove close-range parallax.
+      const cut=this.pivot.clone().addScaledVector(back,-1.12);cut.y-=.22;
+      const direction=lookAt.clone().sub(cam.position).normalize().lerp(cut.sub(cam.position).normalize(),blend).normalize();
+      lookAt.copy(cam.position).add(direction);
+    }
+    cam.lookAt(lookAt);
     if(oldRotation){
       const keep=Math.exp(-(this.restExit>0?2.2:4.8)*dt);
       cam.position.lerp(oldPosition,keep);cam.quaternion.slerp(oldRotation,keep);

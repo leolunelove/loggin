@@ -21,7 +21,9 @@ export function trunkHull(tree, trunkAt, top) {
 }
 export function plantTrunk(world,R,tree) {
   if (!tree.hull) return null;
-  return world.createCollider(R.ColliderDesc.convexHull(tree.hull).setTranslation(tree.x,tree.y,tree.z));
+  const collider=world.createCollider(R.ColliderDesc.convexHull(tree.hull).setTranslation(tree.x,tree.y,tree.z));
+  collider.standingTree=tree;
+  return collider;
 }
 
 export function fallingTrunk(world,R,tree) {

@@ -288,18 +288,33 @@ if(!capture){
 
 // Draws while the page says the demo can be seen, and not at all while it can't.
 let running = false;
+let graphicsLost = false;
 let last = 0;
 function run() {
-  const want = shown && !capture;
+  const want = shown && !capture && !graphicsLost && !document.hidden;
   if (want === running) return;
   running = want;
   last = performance.now();
   renderer.setAnimationLoop(want ? () => { const now = performance.now(); if(!game.editingClothes)tick((now - last) / 1000); last = now; } : null);
 }
+const loadingPanel=document.getElementById('loading');
+document.addEventListener('visibilitychange',run);
+renderer.domElement.addEventListener('webglcontextlost',event=>{
+  event.preventDefault();graphicsLost=true;run();
+  if(game.started&&!game.externalSaveChange&&!game.resetting)game.save();
+  input.release();
+  document.getElementById('loading-label').textContent='Restoring the forest graphics…';
+  const retry=document.getElementById('reload-forest');retry.hidden=false;retry.onclick=()=>location.reload();
+  loadingPanel.hidden=false;
+});
+renderer.domElement.addEventListener('webglcontextrestored',()=>{
+  graphicsLost=false;loadingPanel.hidden=true;document.getElementById('reload-forest').hidden=true;
+  shade.refresh();fitView();game.syncCapture();run();
+});
 fitView();
 loaded = true;
 run();
-document.getElementById('loading')?.remove();
+loadingPanel.hidden=true;
 await game.audio.preload();
 game.ready();
 block.ready();

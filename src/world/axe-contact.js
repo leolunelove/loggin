@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CHOP_REACH } from '../mechanics.js';
 import {riverCenter,riverDistance} from './river.js';
+import {AXE_GROUPS} from './woodland-physics.js';
 
 const up=new THREE.Vector3(0,1,0),reach=CHOP_REACH;
 // The assist finds the surface of the cylinder, even when the player is by its end.
@@ -29,6 +30,37 @@ export function looseAim(trees,feet,yaw,pitch=0){
   }
   return best;
 }
+// The sight uses the centre of the frame actually shown to the player. Near trees expose
+// their cut bark to this query, exactly as they do to the solid axe. A rail wins if it is nearer.
+export function shoulderSight(game){
+  const {camera,physics,RAPIER:R,player,heldAxe,follow}=game,feet=player.feet;
+  const direction=camera.getWorldDirection(new THREE.Vector3());
+  const ray=new R.Ray(camera.position,direction),hit=physics.castRayAndGetNormal(ray,22,true,R.QueryFilterFlags.EXCLUDE_SENSORS,AXE_GROUPS,player.collider,heldAxe?.body);
+  const point=hit?new THREE.Vector3().copy(ray.pointAt(hit.timeOfImpact)):null;
+  const dx=Math.sin(follow.yaw),dz=Math.cos(follow.yaw);
+  const depth=(feet.x-camera.position.x)*dx+(feet.z-camera.position.z)*dz+1.12;
+  const along=direction.x*dx+direction.z*dz;
+  const freePoint=camera.position.clone().addScaledVector(direction,Math.max(0,depth/Math.max(.20,along)));
+  const offset=new THREE.Vector2(freePoint.x-feet.x,freePoint.z-feet.z).clampLength(0,1.18);
+  freePoint.set(feet.x+offset.x,THREE.MathUtils.clamp(freePoint.y,feet.y-.025,feet.y+1.74),feet.z+offset.y);
+  if(!hit)return {point:freePoint,freePoint,reachable:false};
+  const distance=Math.hypot(point.x-feet.x,point.z-feet.z),height=point.y-feet.y;
+  const reachable=distance<=reach+.015&&height>=-.16&&height<=1.76,collider=hit.collider;
+  const tree=collider.standingTree||game.field?.windthrows().find(t=>t.body?.handle===collider.handle);
+  const normal=new THREE.Vector3().copy(hit.normal);if(normal.dot(direction)>0)normal.negate();
+  const sight={point,normal,freePoint,distance,reachable,collider,tree:tree&&!tree.down?tree:null};
+  if(!reachable||tree)return sight;
+  for(const trunk of game.looseTimber||[]){
+    const stump=trunk.stumpCollider?.handle===collider.handle;
+    const part=stump?null:trunk.sections?.find(p=>p.body.collider(0).handle===collider.handle);
+    if(!part&&!stump)continue;
+    sight.timber={kind:stump?'stump':'section',tree:trunk,part,point,x:point.x,y:point.y,z:point.z,r:.12,type:trunk.type};
+    if(part){const body=part.body;sight.body=body;sight.local=point.clone().sub(body.translation()).applyQuaternion(new THREE.Quaternion().copy(body.rotation()).invert());}
+    break;
+  }
+  return sight;
+}
+
 export function facesWork(tree,feet,yaw,pitch=0){
   const x=tree.x-feet.x,z=tree.z-feet.z,length=Math.hypot(x,z);
   if(length>.05&&(x*Math.sin(yaw)+z*Math.cos(yaw))/length<.55)return false;
