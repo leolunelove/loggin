@@ -110,3 +110,6 @@ The stone hearth outside the shack takes **12 ordinary logs from stored camp sup
 
 ### Sit by the fire
 Finishing the campfire also gives you a timber bench. Existing completed fires gain it automatically. Approach the bench and press **E / left-click** to sit. The character settles onto the seat, rests their hands, and stows the axe and bag while the camera eases into a fireside view. Mouse look adjusts that view gently. Press **E**, click **Stand up**, or use **WASD** to stand, then resume walking. Escape releases the cursor so you can leave the view running; day/night, smoke and crackling continue.
+
+### Weather in the woods
+Clear spells and rain drift through the day in seeded, three-hour game-time weather windows with gradual transitions. Roughly one morning in three brings mist between dawn and midmorning. Forecasts derive from the saved camp seed, day and hour, so menus and reloads cannot reroll them. Rain has wind-blown streaks, small ground splashes, a cooler overcast sky and thicker distance haze. Cabin, completed porch and sawmill roofs keep their covered areas dry. Stereo rain audio blends the outdoor wash into a closer wooden-roof patter under shelter, muffles the woods indoors and follows the Sound toggle. Fire and bench remain available in the rain.

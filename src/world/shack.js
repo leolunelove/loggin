@@ -121,6 +121,8 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  for(let i=0;i<3;i++)campBox('porch',(i+1)*4,1.22,.18,1.35,0,[-1.22+i*1.22,.09,2.4]);
  for(const x of [-1.8,1.8]){campBox('porch',12,.12,1,.12,1,[x,.6,2.95]);campBox('porch',12,.12,.12,1.35,1,[x,1.1,2.4]);}
  campBox('porch',12,1.3,.12,.4,1,[0,-.04,3.22]);
+ for(const x of [-1.8,1.8])campBox('porch',12,.12,2.3,.12,1,[x,1.15,2.95]);
+ const porchRoof=campBox('porch',12,4.1,.13,1.7,2,[0,2.3,2.4]);porchRoof.rotation.x=.06;porchRoof.userData.shell='roof';
  for(let i=0;i<6;i++)campBox('lodge',(i+1)*4,.6,.25,2.6,1,[-1.5+i*.6,.06,-2.85]);
  for(let i=0;i<6;i++){const m=campBox('lodge',(i+1)*4,.58,2,.14,0,[-1.5+i*.6,1.15,-4.1]);m.userData.shell='back';}
  for(const x of [-1.8,1.8])for(let i=0;i<3;i++){const m=campBox('lodge',(i+1)*8,.14,2,.84,0,[x,1.15,-1.95-i*.84]);m.userData.shell=x<0?'left':'right';}

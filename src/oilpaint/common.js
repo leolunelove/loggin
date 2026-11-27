@@ -54,7 +54,7 @@ function noiseSheet(size = 256, seed = 7) {
 export function createShared() {
   return {
     uTime: { value: 0 },
-    uDaylight:{value:1},uDusk:{value:0},uNight:{value:0},
+    uRain:{value:0},uOvercast:{value:0},uDaylight:{value:1},uDusk:{value:0},uNight:{value:0},
     uMoonDir:{value:new THREE.Vector3(.4,.65,-.65).normalize()},
     uCampLights:{value:Array.from({length:5},()=>new THREE.Vector4())},
     uPixel: { value: 0.001 }, // metres one pixel covers at one metre from the eye
@@ -90,6 +90,8 @@ precision highp float;
 precision highp sampler2DShadow;
 #define TAU 6.28318530718
 uniform float uTime;
+uniform float uRain;
+uniform float uOvercast;
 uniform float uDaylight;
 uniform float uDusk;
 uniform float uNight;
@@ -220,6 +222,7 @@ vec3 hazed(vec3 c, vec3 world) {
   vec3 moon=mix(c*vec3(.16,.22,.34),vec3(grey)*vec3(.22,.31,.48),.45);
   vec3 daylight=c*mix(vec3(1.),vec3(1.13,.86,.69),uDusk*.5);
   c=mix(moon,daylight,uDaylight);
+  c=mix(c,c*vec3(.67,.73,.79),uOvercast*.6);
   float warm=0.;
   for(int i=0;i<5;i++){float d=length(world-uCampLights[i].xyz);float fall=max(0.,1.-d/6.);warm+=uCampLights[i].w*fall*fall;}
   c+=vec3(1.,.51,.18)*min(warm,1.8)*(.16+c*.78);

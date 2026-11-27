@@ -1,3 +1,5 @@
+import {weatherAt,shelterAt} from './weather.js';
+import {createWeather} from './world/weather.js';
 import {seatedPose} from './figure/sit.js';
 import {advanceClock,canSleep,sleepUntilMorning,daylightAt,clockLabel,sleepFade} from './daylight.js';
 import {contributeFire,contributeMill,beginMilling,advanceMilling,contributePlanks,PROJECTS} from './camp.js';
@@ -36,6 +38,7 @@ export class Lumberjack {
   this.unloadAnimation=new UnloadAnimation({scene,shared,figure,animator,home,axe:this.axe,axePaint:this.axePaint,paint});
   forest.trees.forEach((t,i)=>{t.id=i;t.hp=TREES[t.type].health;if(this.state.down[i]){t.down=true;t.regrow=this.state.down[i];forest.poseTree(t,0,0,1,true);if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}this.makeStump(t);this.makeLogs(t,Math.sin(t.seed),Math.cos(t.seed));}});
   if(Object.keys(this.state.down).length)shade.refresh();
+  this.weatherFX=createWeather(shared,home,heightAt);scene.add(this.weatherFX.group);
   this.bind();this.renderHud();this.updateSaveNote();this.applyQuality();
  }
  save(){
@@ -346,12 +349,21 @@ export class Lumberjack {
  }
  update(dt){
   this.updateDaylight(dt);
+  const forecast=this.weatherOverride||weatherAt(this.state);this.weather=forecast;
+  const u=this.shared;u.uRain.value=forecast.rain;u.uOvercast.value=forecast.overcast;
+  u.uHazeDensity.value=.0105+forecast.rain*.009+forecast.mist*.038;
+  u.uHaze.value.lerp(new THREE.Color(.48,.55,.58).multiplyScalar(.2+.8*u.uDaylight.value),forecast.mist*.55+forecast.rain*.25);
+  u.uHazeSun.value.lerp(new THREE.Color(.55,.6,.64).multiplyScalar(.15+.85*u.uDaylight.value),forecast.overcast*.9);u.uHazeGlow.value.multiplyScalar(1-forecast.overcast*.9);
+  this.audio.daylight=u.uDaylight.value*(1-forecast.rain);
+  this.weatherFX.update(document.hidden?0:dt,this.camera,this.state,forecast,this.state.low,this.insideShack);
+  $('camp-clock').textContent+=' · '+forecast.label;
   const room=this.home.updateInterior?.(dt,this.player.feet,this.camera,this.state);
   if(room){this.insideShack=room.inside;this.follow.interior=room.camera;if(room.changed)this.shade.refresh();}
   this.home.updateMill?.(dt,!!this.state.millJob&&this.started);
   if(this.started&&advanceMilling(this.state,dt)){this.renderHud();this.save();this.toast('Two planks cut and stacked at the sawmill.');this.audio.unload(this.home.dropoff);}
   if($('upgrades').open)this.renderCamp();
   this.audio.listener={x:this.player.feet.x,z:this.player.feet.z,yaw:this.follow.yaw};
+  if(this.started)this.audio.updateRain(forecast.rain,shelterAt(this.home.group.position,this.state,this.player.feet),!document.hidden);
   this.home.fire?.update(this.time,this.camera,1-this.shared.uDaylight.value);
   if(this.started&&this.home.fire)this.audio.updateFire(this.home.fire.position,this.state.fire>=12&&!document.hidden,this.insideShack);
   for(let i=this.chips.length-1;i>=0;i--){const c=this.chips[i];c.life-=dt;c.v.y-=9*dt;c.mesh.position.addScaledVector(c.v,dt);c.mesh.rotation.x+=dt*6;if(c.life<.2)c.mesh.scale.multiplyScalar(Math.max(0,1-dt*8));if(c.life<=0){this.scene.remove(c.mesh);this.chips.splice(i,1);}}

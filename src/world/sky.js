@@ -15,7 +15,7 @@ vec3 skyColour(vec3 v) {
   c=mix(c,c*vec3(1.14,.68,.43),uDusk*.65);
   vec3 night=mix(vec3(.014,.022,.055),vec3(.055,.075,.13),1.-max(v.y,0.));
   night+=vec3(.06,.07,.075)*pow(max(dot(v,uMoonDir),0.),70.);
-  return mix(night,c,uDaylight);
+  return mix(mix(night,c,uDaylight),mix(vec3(.025,.035,.06),vec3(.32,.38,.43),uDaylight),uOvercast*.8);
 }
 `;
 
@@ -39,7 +39,7 @@ export function createSky(shared) {
       void main() {
         vec3 v=normalize(vDir),c=skyColour(v)*.97;
         vec3 cell=floor(v*640.);float star=step(.9983,hash4(dot(cell,vec3(1.,113.,971.))).x);
-        c+=vec3(.5,.53,.46)*star*smoothstep(.1,.35,v.y)*uNight;
+        c+=vec3(.5,.53,.46)*star*smoothstep(.1,.35,v.y)*uNight*(1.-uOvercast);
         float moon=smoothstep(.99925,.9995,dot(v,uMoonDir));
         c+=vec3(.65,.7,.58)*moon*uNight;
         outC=vec4(c,1.);

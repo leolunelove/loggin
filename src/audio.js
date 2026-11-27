@@ -1,3 +1,5 @@
+import {rainSamples} from './rain-audio.js';
+import {rainMix} from './weather.js';
 import {fireSamples,fireMix} from './fire-audio.js';
 // Local, preloaded field recordings. No runtime service, requests or generated impact tones.
 const FILES=['axe-1','axe-2','axe-3','axe-4','trunk-crack','fall-rush','tree-land'];
@@ -32,6 +34,11 @@ export class ForestAudio {
     const gain=c.createGain();gain.gain.value=.035;source.connect(filter).connect(gain).connect(this.master);source.start();
     this.birds=setInterval(()=>{if(!document.hidden&&this.on&&(this.daylight??1)>.25&&this.random()<.6)this.bird();},4200);
     this.birds.unref?.();
+  }
+  updateRain(intensity,shelter,active=true){
+    const c=this.context;if(!c)return;
+    if(intensity>.01&&!this.rainVoices){this.rainVoices=[false,true].map(roof=>{const channels=rainSamples(c.sampleRate,roof),buffer=c.createBuffer(2,channels[0].length,c.sampleRate);channels.forEach((data,i)=>buffer.getChannelData(i).set(data));const source=c.createBufferSource(),level=c.createGain(),filter=c.createBiquadFilter();source.buffer=buffer;source.loop=true;level.gain.value=0;filter.type='lowpass';source.connect(filter).connect(level).connect(this.master);source.start();return {source,level,filter};});}
+    if(!this.rainVoices)return;const mix=rainMix(active&&this.on?intensity:0,shelter);this.rainVoices.forEach((v,i)=>{v.level.gain.setTargetAtTime(i?mix.roof:mix.woods,c.currentTime,.65);v.filter.frequency.setTargetAtTime(i?3500:mix.cutoff,c.currentTime,.4);});
   }
   updateFire(position,burning,inside=false){
     const c=this.context;if(!c)return;
