@@ -4,6 +4,30 @@ import * as THREE from 'three';
 
 const damp = (a, b, rate, dt) => b + (a - b) * Math.exp(-rate * dt);
 
+const UP=new THREE.Vector3(0,1,0);
+const restAngles=[0,.22,-.22,.45,-.45,.72,-.72,1.03,-1.03,1.35,-1.35];
+function firesideEye(rest,castRay,groundAt,previousAngle=0) {
+  const focus=rest.target,offset=rest.position.clone().sub(focus),ray=new THREE.Vector3();
+  const sights=[focus,rest.fire,rest.sitter].filter(Boolean);
+  let bestScore=-Infinity,best;
+  for(const angle of restAngles){
+    const eye=offset.clone().applyAxisAngle(UP,(rest.orbit||0)+angle).add(focus);
+    eye.y=Math.max(eye.y+(rest.tilt||0),groundAt(eye.x,eye.z)+.6);
+    let clear=1,focusRange=1;
+    for(const p of sights){
+      ray.subVectors(eye,p);const distance=ray.length();
+      const hit=castRay(p,ray.multiplyScalar(1/distance),distance+.28);
+      const fraction=hit==null?1:THREE.MathUtils.clamp((hit-.28)/distance,0,1);
+      clear=Math.min(clear,fraction);if(p===focus)focusRange=fraction;
+    }
+    const score=clear-Math.abs(angle)*.035-Math.abs(previousAngle-angle)*.025;
+    if(score>bestScore){bestScore=score;best={eye,angle,focusRange};}
+    if(angle===0&&clear===1)return best;
+  }
+  if(best.focusRange<1){best.eye.lerpVectors(focus,best.eye,Math.max(.06,best.focusRange));best.eye.y=Math.max(best.eye.y,groundAt(best.eye.x,best.eye.z)+.42);}
+  return best;
+}
+
 export class Follow {
   constructor(camera) {
     this.camera = camera;
@@ -39,12 +63,17 @@ export class Follow {
     this.lookPrepared = false;
     this.want = THREE.MathUtils.clamp(this.want + zoom * 0.5, 2.8, 13);
     if(this.rest){
-      const r=this.rest,focus=r.target.clone(),offset=r.position.clone().sub(focus).applyAxisAngle(new THREE.Vector3(0,1,0),r.orbit||0),eye=focus.clone().add(offset);eye.y+=r.tilt||0;
-      eye.y=Math.max(eye.y,groundAt(eye.x,eye.z)+.6);
+      const r=this.rest,focus=r.target,orbit=r.orbit||0,tilt=r.tilt||0;
+      this.restCheck=(this.restCheck||0)-dt;
+      if(!this.restShot||this.restCheck<=0||Math.abs(orbit-this.lastOrbit)>.012||Math.abs(tilt-this.lastTilt)>.012){
+        this.restShot=firesideEye(r,castRay,groundAt,this.restShot?.angle);
+        this.restCheck=.28;this.lastOrbit=orbit;this.lastTilt=tilt;
+      }
+      const eye=this.restShot.eye;
       if(!this.restFocus)this.restFocus=new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion).multiplyScalar(6).add(cam.position);
       cam.position.lerp(eye,1-Math.exp(-2.2*dt));this.restFocus.lerp(focus,1-Math.exp(-2.2*dt));cam.lookAt(this.restFocus);this.restActive=true;return;
     }
-    if(this.restActive){this.restActive=false;this.restFocus=null;this.restExit=1.4;}
+    if(this.restActive){this.restActive=false;this.restFocus=null;this.restShot=null;this.restExit=1.4;}
     const oldRotation=this.restExit>0?cam.quaternion.clone():null;
 
     if(this.interior){

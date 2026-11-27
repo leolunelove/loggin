@@ -34,7 +34,7 @@ export function createHandcart(game,craft) {
   }
   for(const side of [-1,1])for(let i=0;i<4;i++)pole(body,'cut',[side*.32,.86,1.42+i*.033],[side*.32,.86,1.435+i*.033],.054);
   join(body);join(hardware);
-  let worker=null,towing=false,initialized=false;const loadLevels=load.map(()=>0);
+  let worker=null,towing=false,initialized=false,axleTravel=0;const workerFoot=new THREE.Vector3();const loadLevels=load.map(()=>0);
   const lengths=routes.map(r=>r.length),v=new THREE.Vector3(),left=new THREE.Vector3(),right=new THREE.Vector3();
   function createWorker(){
     const source=game.figure.man,object=clone(source.object),bones={};object.name='Trail hauler';
@@ -42,7 +42,9 @@ export function createHandcart(game,craft) {
     const jacket=[[.54,.68,.66],[.31,.43,.43],[.17,.27,.28]],trousers=[[.39,.43,.39],[.23,.28,.26],[.15,.17,.19]];
     const skin=[[.84,.64,.46],[.57,.38,.25],[.31,.21,.16]],cap=[[.86,.55,.35],[.57,.32,.22],[.30,.20,.17]];
     const leather=[[.57,.47,.35],[.36,.29,.22],[.22,.19,.16]],linen=[[.85,.73,.51],[.63,.54,.35],[.37,.32,.24]];
-    const fabrics=[cap,leather,linen].map(p=>{const m=paint(game.shared,p);m.uniforms.uCloth.value=.85;return m;});
+    const cloth=[cap,leather,linen];
+    const fabrics=cloth.map(p=>{const m=paint(game.shared,p);m.uniforms.uCloth.value=.85;return m;});
+    const fitted=cloth.map(p=>paint(game.shared,p,{skinned:true}));
     const pins=[],up=new THREE.Vector3(0,1,0);
     object.traverse(o=>{if(o.isBone)bones[o.name]=o;
       if(o.name==='wood-carrying-pack')o.visible=false;
@@ -50,7 +52,7 @@ export function createHandcart(game,craft) {
         o.visible=o.userData.hatStyle===1||o.userData.coatStyle===2;
         if(o.visible){
           const fabric=o.userData.hatStyle===1?0:o.userData.fabric===3?2:1;
-          o.material=fabrics[fabric];pins.push({mesh:o,count:fabric===0?25:12,style:()=>({pal:3+fabric,size:[.016,.047],dir:up})});
+          o.material=(o.isSkinnedMesh?fitted:fabrics)[fabric];pins.push({mesh:o,count:fabric===0?25:12,style:()=>({pal:3+fabric,size:[.016,.047],dir:up})});
         }
       }
       if(o.isSkinnedMesh&&/casualsuit/.test(o.name)){
@@ -62,7 +64,7 @@ export function createHandcart(game,craft) {
       }
     });
     const mixer=new THREE.AnimationMixer(object),walk=mixer.clipAction(source.clips.Walk).play(),idle=mixer.clipAction(source.clips.Idle).play();
-    const strokes=pinDabs(game.shared,[jacket,trousers,skin,cap,leather,linen],pins);
+    const strokes=pinDabs(game.shared,[jacket,trousers,skin,cap,leather,linen],pins,{surface:true});
     crew.add(object,strokes.mesh);worker={object,bones,mixer,walk,idle,strokes};
   }
   function nearestRoute(){
@@ -106,7 +108,14 @@ export function createHandcart(game,craft) {
       }
     }
     const dist=c.x===null?0:Math.hypot(x-c.x,z-c.z),speed=dt?Math.min(3.4,dist/dt):0;
-    if(c.running&&c.x!==null)yaw=c.yaw+Math.atan2(Math.sin(yaw-c.yaw),Math.cos(yaw-c.yaw))*(1-Math.exp(-5*dt));
+    const oldYaw=c.x===null?yaw:c.yaw;
+    let turn=Math.atan2(Math.sin(yaw-oldYaw),Math.cos(yaw-oldYaw));
+    if(c.running&&c.x!==null){
+      turn=THREE.MathUtils.clamp(turn*(1-Math.exp(-6*dt)),-2.55*dt,2.55*dt);
+      yaw=oldYaw+turn;
+    }
+    const midYaw=oldYaw+turn/2;
+    const travel=c.x===null?0:(x-c.x)*Math.sin(midYaw)+(z-c.z)*Math.cos(midYaw);
     c.x=x;c.z=z;c.yaw=yaw;
     left.set(x+Math.cos(yaw)*.60,0,z-Math.sin(yaw)*.60);right.set(2*x-left.x,0,2*z-left.z);
     left.y=game.heightAt(left.x,left.z);right.y=game.heightAt(right.x,right.z);
@@ -114,17 +123,23 @@ export function createHandcart(game,craft) {
     axle.position.set(x,h+(c.running?.114:.044),z);axle.rotation.order='YXZ';axle.rotation.y=yaw;
     axle.rotation.z=THREE.MathUtils.clamp(Math.atan2(left.y-right.y,1.2),-.20,.20);
     const rise=game.heightAt(x+Math.sin(yaw),z+Math.cos(yaw))-h;axle.rotation.x=-Math.atan(rise);
-    wheels.forEach(o=>o.rotation.x+=dist/.45);body.rotation.x=Math.sin(wheels[0].rotation.x*2)*Math.min(.012,speed*.005);hardware.visible=w.axle;
+    for(const wheel of wheels)wheel.rotation.x+=(travel-wheel.position.x*turn)/.45;
+    body.rotation.x=Math.sin(wheels[0].rotation.x*2)*Math.min(.012,speed*.005);hardware.visible=w.axle;
+    axleTravel+=Math.abs(travel)+.30*Math.abs(turn);
+    const fullness=c.load/cartCapacity(s),spacing=(w.axle?3.2:2.55)-.48*fullness;
+    if(axleTravel>=spacing){axleTravel%=spacing;if(dt>0)game.audio.cartRoll(axle.position,fullness);}
     const count=Math.ceil(Math.sqrt(c.load/cartCapacity(s))*load.length);
     load.forEach((part,i)=>{const goal=i<count?1:0;loadLevels[i]=initialized?THREE.MathUtils.damp(loadLevels[i],goal,6+i*.35,dt):goal;
       part.visible=loadLevels[i]>.008;part.scale.setScalar(Math.max(.001,loadLevels[i]));part.position.y=.72+(i<6?0:i<11?1:2)*.145+(1-loadLevels[i])*.18;});initialized=true;
     axle.updateMatrixWorld(true);
     if(c.running && !worker)createWorker();
-    if(worker){worker.object.visible=c.running;worker.strokes.mesh.visible=false;
+    if(worker){const wasWalking=worker.object.visible;worker.object.visible=c.running;worker.strokes.mesh.visible=false;
       if(c.running){
         const p=v.set(0,0,1.66).applyMatrix4(axle.matrixWorld);worker.object.position.set(p.x,game.heightAt(p.x,p.z)+.085,p.z);worker.object.rotation.y=yaw;
-        const weight=THREE.MathUtils.clamp(speed/.9,0,1);
-        worker.walk.setEffectiveWeight(weight);worker.idle.setEffectiveWeight(1-weight);worker.walk.timeScale=speed/1.45;worker.mixer.update(dt);
+        const stride=wasWalking&&dt>0&&workerFoot.lengthSq()>0?Math.min(3.1,workerFoot.distanceTo(worker.object.position)/dt):speed;
+        workerFoot.copy(worker.object.position);
+        const weight=THREE.MathUtils.clamp(stride/.85,0,1);
+        worker.walk.setEffectiveWeight(weight);worker.idle.setEffectiveWeight(1-weight);worker.walk.timeScale=stride/1.45;worker.mixer.update(dt);
         worker.object.updateMatrixWorld(true);const distance=game.camera.position.distanceToSquared(worker.object.position);
         if(distance<45*45)grip(worker);
         if(distance<32*32){worker.strokes.mesh.visible=true;worker.strokes.update();}

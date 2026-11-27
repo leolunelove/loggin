@@ -56,7 +56,7 @@ export function createShared() {
     uTime: { value: 0 },
     uRain:{value:0},uOvercast:{value:0},uDaylight:{value:1},uDusk:{value:0},uNight:{value:0},
     uMoonDir:{value:new THREE.Vector3(.4,.65,-.65).normalize()},
-    uCampLights:{value:Array.from({length:11},()=>new THREE.Vector4())},
+    uCampLights:{value:Array.from({length:11},()=>new THREE.Vector4(0,0,0,0))},
     uPixel: { value: 0.001 }, // metres one pixel covers at one metre from the eye
     uSunDir: { value: SUN.clone() },
     uWind: { value: new THREE.Vector3(WIND.x, WIND.y, 1) }, // direction on the ground (x, z) and strength

@@ -7,7 +7,7 @@ A small third-person lumberjack game in an autumn forest painted in oils. Chop t
 ## The loop
 
 1. Hold left-click beside a tree. Overhead, diagonal and compact chops bite progressively into the trunk.
-2. Felled wood goes into your canvas bag. Follow the compass back to the starting shack.
+2. Felled wood goes into your canvas bag. On your first trip, follow the compass to the shack rack and tap E or left-click to start stacking. Later, the bearing picks the nearest restored home, open rack or parked cart with room for the whole bag. Mark a discovered home under **U → Woodland** to keep that bearing across saves.
 3. At the outdoor rack, press E or left-click once. Your character stows the axe, lifts bundles from the bag and stacks them at camp. Wood transfers when each bundle lands. Moving cancels and keeps unplaced logs in the bag.
 4. Press U to spend stored wood on axes, swing speed or yield. New axes have distinct heads, handles and fittings.
 5. Return to the woods. Birch, beech, maple and oak offer different rewards; trees regrow after 90 seconds.
@@ -18,7 +18,7 @@ Oak and maple are hardwood: build the woodshed and equip the felling axe to harv
 
 No hunger, stamina, accounts, server or external runtime services. Progress and preferences stay in this browser. Existing Woodsmoke saves migrate into an isolated camp save so older open builds cannot overwrite new progression; moving to another hostname starts a separate browser save.
 
-Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Lock onto an aimed tree with right-click or Q, then press again to release. Felling, range and menus also release the lock.
+Closing the workbench with its close button or U returns control to the forest. Escape releases the mouse. Tap for one stroke or hold for a run of swings. Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Lock onto an aimed tree with right-click or Q, then press again to release. Felling, range and menus also release the lock.
 
 **Settings → What’s new · Changelog** contains illustrated field notes with screenshots of the game.
 
@@ -43,7 +43,7 @@ After the woodshed, open **U → Camp** near the shack.
 
 A restored home's ledger has **Home**, **Trail & cart** and **Projects** pages. Stored wood is shared instantly. You can spend it at another home while the hauler is still on the road.
 
-- **Haul timber.** Finish a 40-log trail, build a handcart for 8 planks, then hire a hauler for 16 ordinary logs. Press R beside the cart to stow a bag, take the handles or send a hired hand on rounds. The cart holds 192 logs. It rolls faster on connected trails and slowly across rough woodland.
+- **Haul timber.** Finish a 40-log trail, build a handcart for 8 planks, then hire a hauler for 16 ordinary logs. Press R beside the cart to stow a bag, take the handles or send a hired hand on rounds. The cart holds 192 logs. Its wheels follow turns independently and its wooden axle creaks as it travels. It rolls faster on connected trails and slowly across rough woodland.
 - **Orchard Rest.** Take apples from the basket or the home ledger. A lunch lasts three camp hours and gives a 16% faster sprint. Find the blazed post to learn how to build three working trail lanterns.
 - **Riverwatch.** Build the footbridge in four spans and cross to a stacking rack beside the eastern grove. Loads left there go straight into shared stock and appear in the hauler’s collection queue. The old ferryman left a pennant for the landing.
 - **Pine Hollow.** Dress the axe edge for 8 hardwood and 4 planks, reinforce the cart to hold 288 logs, and lay timber steps to the charcoal kiln. Its old rafters teach you how to build a rain shelter and delivery rack along the trail.
@@ -53,7 +53,7 @@ Detailed tree crowns fade into painted silhouettes between 68 and 106 metres. Ra
 
 ## Your lumberjack and world
 
-Choose a work shirt, quilted vest or split mill apron and pair it with a field brim, watch cap or rail cap. Five sets of colour swatches cover shirt, hat, bag, skin and hair. Turn the preview to see the fit from behind. It uses the same painted character, equipment, idle animation and bag load as the forest. Revisit **Settings → Visit the outfitter** to change clothes where you stand.
+Choose a work shirt, quilted vest or split mill apron and pair it with a field brim, watch cap or rail cap. Five sets of colour swatches cover shirt, hat, bag, skin and hair. Turn the preview to see the fit from behind or choose **Close-up** to inspect the cap, face and stitching. It uses the same painted character, equipment, idle animation and bag load as the forest. Revisit **Settings → Visit the outfitter** to change clothes where you stand.
 
 New camps roll a random seed for terrain, tree layout and a winding, shallow river. A clear camp footprint and nearby starter trees keep the first deliveries approachable. The entry sequence reveals ground, water, tree batches and camp from an overview. Reloading a save rebuilds the same world; it does not reroll progress. Legacy seed-zero saves preserve their tree ordering.
 

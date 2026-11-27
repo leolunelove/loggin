@@ -48,6 +48,8 @@ test('all nine workwear and hat pairings stay on the correct bones and repaint i
    const clothes=parts.filter(m=>m.visible&&m.userData.coatStyle>=0);
    assert.ok(hats.length>=2);assert.ok(hats.every(m=>m.userData.hatStyle===headwear&&m.parent===man.bones.Head));
    assert.equal(clothes.length>0,workwear>0);assert.ok(clothes.every(m=>m.userData.coatStyle===workwear));
+   for(const layer of clothes){assert.ok(layer.isSkinnedMesh);const w=layer.geometry.attributes.skinWeight;
+     for(let v=0;v<w.count;v++)assert.ok(Math.abs(w.getX(v)+w.getY(v)+w.getZ(v)+w.getW(v)-1)<.0001);}
    const bounds=new THREE.Box3();for(const hat of hats)bounds.expandByObject(hat);
    assert.ok(bounds.min.y>1.65&&bounds.max.y<2.03&&bounds.getSize(new THREE.Vector3()).x>.18);
  }

@@ -164,7 +164,7 @@ function respawn() {
 }
 
 const size = new THREE.Vector2();
-function tick(dt) {
+function tick(dt,draw=true) {
   dt = Math.min(dt, 1 / 20);
   time += dt;
   const inp = input.read(dt);
@@ -195,6 +195,7 @@ function tick(dt) {
   follow.update(dt, root, inp.look, inp.zoom, (o, d, max) => player.castRay(o, d, max), heightAt);
   camera.updateMatrixWorld(true);
   game.update(dt);
+  if(!draw)return;
   renderer.getDrawingBufferSize(size);
   shared.uTime.value = time;
   shared.uPixel.value = (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / size.y;
@@ -206,7 +207,7 @@ function tick(dt) {
 
 window.lab = {
   THREE, player, follow, camera, input, animator, figure, shared, frame, renderer, timings, game, forest, counts: forest.counts, heightAt, respawn, way,
-  step(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) tick(dt); },
+  step(dt = 1 / 60, n = 1, drawEveryFrame = true) { for (let i = 0; i < n; i++) tick(dt,drawEveryFrame||i===n-1); },
   setInput(fn) { input.override = fn; },
   /** Puts him at (x, z) on the ground, facing (fx, fz), with the eye behind him. */
   teleport(x, z, fx, fz) {

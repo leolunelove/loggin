@@ -1,3 +1,4 @@
+import {timberSamples} from './timber-audio.js';
 import {rainSamples} from './rain-audio.js';
 import {rainMix} from './weather.js';
 import {fireSamples,fireMix} from './fire-audio.js';
@@ -94,6 +95,21 @@ export class ForestAudio {
   upgrade(){
     if(!this.context||!this.on)return;const c=this.context;
     [440,554,659].forEach((hz,i)=>{const o=c.createOscillator(),g=c.createGain(),t=c.currentTime+i*.09;o.type='sine';o.frequency.value=hz;g.gain.setValueAtTime(.035,t);g.gain.exponentialRampToValueAtTime(.001,t+.4);o.connect(g).connect(this.master);o.start(t);o.stop(t+.45);o.onended=()=>{o.disconnect();g.disconnect();};});
+  }
+  timberVoice(name,position,settings){
+    if(!this.on||!this.context||Math.hypot(position.x-this.listener.x,position.z-this.listener.z)>22)return;
+    if(!this.buffers.has(name)){
+      const c=this.context,data=timberSamples(c.sampleRate,name==='cart-creak',this.random);
+      const buffer=c.createBuffer(1,data.length,c.sampleRate);buffer.getChannelData(0).set(data);this.buffers.set(name,buffer);
+    }
+    this.sample(name,{...settings,position});
+  }
+  stack(position,amount){
+    const weight=clamp(amount/22,0,1);
+    this.timberVoice('rack-knock',position,{gain:.47+.2*weight,rate:1.10-.15*weight+this.random()*.06});
+  }
+  cartRoll(position,fullness){
+    this.timberVoice('cart-creak',position,{gain:.16+.10*fullness,rate:.91+.14*this.random()-.12*fullness});
   }
   unload(position){
     // A short, low wooden clunk with a second quieter log settling onto the rack.

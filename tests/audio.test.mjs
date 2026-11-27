@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {timberSamples} from '../src/timber-audio.js';
 import {ForestAudio} from '../src/audio.js';
 import {createTreeFall,treeFallPose,trunkGroundGap} from '../src/mechanics.js';
 
@@ -29,6 +30,20 @@ test('a fall has one crack, a growing rush, and exactly one landing at contact',
 });
 test('mute also suppresses newly requested axe and fall sounds',async()=>{
  const {a,c}=await engine();await a.start(false);const start=c.sources.length;a.hit();a.land(a.beginFall({type:0,r:.5,x:0,z:0}));assert.equal(c.sources.length,start);assert.equal(a.master.gain.value,0);clearInterval(a.birds);
+});
+test('log bundles have a second settling knock and the axle has a distinct bounded friction sound',()=>{
+  let seed=4;const random=()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/4294967296);
+  const rate=22050,stack=timberSamples(rate,false,random),creak=timberSamples(rate,true,random);
+  const energy=(s,a,b)=>s.slice(rate*a,rate*b).reduce((n,v)=>n+v*v,0);
+  for(const s of [stack,creak]){assert.ok(s.every(Number.isFinite));assert.ok(s.every(v=>Math.abs(v)<=.8));assert.ok(Math.abs(s.at(-1))<.001);}
+  assert.ok(energy(stack,0,.012)>.01);assert.ok(energy(stack,.076,.092)>energy(stack,.060,.076));assert.ok(energy(creak,.08,.23)>.05);
+});
+test('cart and rack voices stay local, respect mute and reuse their own wood samples',async()=>{
+  const {a,c}=await engine(),p={x:0,z:1};let count=c.sources.length;
+  a.cartRoll({x:30,z:0},1);assert.equal(c.sources.length,count);
+  a.cartRoll(p,1);a.cartRoll(p,.1);a.stack(p,15);assert.equal(c.sources.length,count+3);
+  assert.equal(c.sources.at(-3).buffer,c.sources.at(-2).buffer);assert.notEqual(c.sources.at(-1).buffer,c.sources.at(-2).buffer);
+  await a.start(false);a.stack(p,8);a.cartRoll(p,1);assert.equal(c.sources.length,count+3);clearInterval(a.birds);
 });
 test('a missing audio file does not reject forest preload',async()=>{
  const warn=console.warn;console.warn=()=>{};try{const a=new ForestAudio({fetcher:async()=>({ok:false})});assert.deepEqual(await a.preload(),[]);}finally{console.warn=warn;}

@@ -55,7 +55,7 @@ export function createWoodPack(shared,man,{paint,canvasPalette}){
  man.object.add(group);man.object.updateMatrixWorld(true);
  // Attach in the bind pose so both straps and bag stay on the torso during walks and axe swings.
  man.bones.spine_03.attach(group);man.object.updateMatrixWorld(true);
- const painted=pinDabs(shared,palettes,parts);
+ const painted=pinDabs(shared,palettes,parts,{surface:true});
  let count=0,initialized=false;
  return {
   group,paint:painted,logs,

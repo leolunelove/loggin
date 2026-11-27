@@ -34,6 +34,8 @@ export const SETUP = {
 // the clips that came from the anymove page: their hands come with them
 const ANYMOVE_HANDS = /^(Run|Sprint|Idle_Tired|Idle_To_Run|Idle_To_Sprint|Run_To_Idle|Sprint_To_Idle)$/;
 
+const gaitMeasurements=new WeakMap();
+
 export class Animator {
   constructor(man, setup = SETUP) {
     this.man = man;
@@ -42,12 +44,18 @@ export class Animator {
     this.bones = man.bones;
     this.mixer = new THREE.AnimationMixer(this.object);
     this.info = {};
-    this.analyze();
+    const measured=setup===SETUP&&man.template&&gaitMeasurements.get(man.template);
+    if(measured)Object.assign(this,measured);
+    else{
+      this.analyze();
+      if(setup===SETUP&&man.template)gaitMeasurements.set(man.template,{info:this.info,postureFix:this.postureFix,postureReport:this.postureReport});
+    }
     // two actions per clip: the current layer and the one fading out may both use a clip
     this.actions = [{}, {}, {}];
     for (const [name, clip] of Object.entries(man.clips)) {
       for (let k = 0; k < 3; k++) {
-        const a = this.mixer.clipAction(k ? clip.clone() : clip);
+        // Give each mixer slot its own clip identity. Keyframe tracks are read-only.
+        const a = this.mixer.clipAction(k ? new THREE.AnimationClip(clip.name,clip.duration,clip.tracks,clip.blendMode) : clip);
         a.play(); a.setEffectiveWeight(0); a.timeScale = 0;
         this.actions[k][name] = a;
       }
@@ -74,7 +82,7 @@ export class Animator {
     const mixer = new THREE.AnimationMixer(rig);
     const bones = {}; rig.traverse((o) => { if (o.isBone) bones[o.name] = o; });
     rig.updateMatrixWorld(true);
-    const inv = new THREE.Matrix4(), p = new THREE.Vector3();
+    const rootAt = new THREE.Vector3(), p = new THREE.Vector3();
     for (const [name, raw] of Object.entries(this.man.raw)) {
       const clip = this.man.clips[name];
       const a = mixer.clipAction(raw); a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; a.play();
@@ -83,11 +91,11 @@ export class Animator {
       for (let i = 0; i < n; i++) {
         mixer.setTime((i / (n - 1)) * clip.duration);
         rig.updateMatrixWorld(true);
-        inv.copy(bones.root.matrixWorld).invert();
+        rootAt.setFromMatrixPosition(bones.root.matrixWorld);
         for (const s of ['l', 'r']) {
           bones[`foot_${s}`].getWorldPosition(p);
           feet[s + 'w'].push(p.clone()); // with root travel: world, for stance detection
-          feet[s].push(p.clone().sub(new THREE.Vector3().setFromMatrixPosition(bones.root.matrixWorld))); // relative to root, character space
+          feet[s].push(p.clone().sub(rootAt)); // relative to root, character space
         }
         bones.pelvis.getWorldPosition(p); feet.pelvis.push(p.y);
       }
@@ -118,7 +126,8 @@ export class Animator {
       this.info[name] = info;
     }
     this.postureFix = this.measurePosture(rig, bones, mixer);
-    rig.traverse((o) => o.geometry?.dispose?.());
+    mixer.uncacheRoot(rig);
+    rig.traverse(o=>o.skeleton?.dispose());
   }
 
   /** Shoulders' forward offset from the ankles in the standing idle (m, + = in front). */

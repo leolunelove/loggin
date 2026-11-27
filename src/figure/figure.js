@@ -17,6 +17,13 @@ uniform float uGrain;uniform float uDistanceHaze;uniform float uCloth;uniform fl
 in vec3 vWorld; in vec3 vN; in vec3 vBind;
 layout(location = 0) out vec4 outC;
 void main() {
+  #ifdef QUILTED
+    float ax=abs(vBind.x),front=smoothstep(.015,.10,vBind.z);
+    float opening=(.008+.095*smoothstep(1.30,1.52,vBind.y))*front;
+    float armhole=mix(.242,.174,smoothstep(1.33,1.50,vBind.y));
+    float top=1.557-.034*smoothstep(.11,.205,ax);
+    if(vBind.y<1.032||vBind.y>top||ax>armhole||(front>.5&&ax<opening))discard;
+  #endif
   vec3 Nn = normalize(vN);
   if (!gl_FrontFacing) Nn = -Nn;
   float n = texture(tNoise, vBind.xy * uGrain + vBind.z * 1.7).r;
@@ -37,6 +44,14 @@ void main() {
     vec3 modelled=mix(low,mid,.22+.55*skyFill);
     c=mix(c,mix(modelled,high,smoothstep(.29,.94,lit)),.52);
   }
+  #ifdef QUILTED
+    float seam=abs(fract((vBind.y-1.041)*12.)-.5);
+    float binding=min(min(armhole-ax,top-vBind.y),vBind.y-1.032);
+    if(front>.5)binding=min(binding,ax-opening);
+    c*=.97+.045*sin((vBind.y-1.041)*12.*TAU);
+    c*=1.-.19*smoothstep(.43,.49,seam);
+    c=mix(c,c*.61,1.-smoothstep(.003,.008,binding));
+  #endif
   // light thrown up by the ground (warm, off the leaves), cool light from the sky into the shade
   c += uBounce * max(-Nn.y, 0.0) * (1.0 - lit);
   c = mix(c, c * vec3(0.86, 0.92, 1.18), (1.0 - lit) * max(Nn.y, 0.0) * 0.6);
@@ -48,11 +63,12 @@ void main() {
 `;
 
 // A palette is [light, half-tone, shade] and, where a lamp is carried, the thing's own colour for its light to fall on.
-export function paint(shared, [L, M, S, A = L], { skinned = false, lower = null, split = -10, grain = 2.2 } = {}) {
+export function paint(shared, [L, M, S, A = L], { skinned = false, lower = null, split = -10, grain = 2.2, quilted = false } = {}) {
   const col = (c) => ({ value: new THREE.Color(...c) });
   const [L2, M2, S2, A2 = L2] = lower ?? [L, M, S, A];
   return new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
+    defines:quilted?{QUILTED:1}:{},
     side: THREE.DoubleSide,
     uniforms: { ...shared,uDistanceHaze:{value:1},uCloth:{value:skinned?1:0},uTimber:{value:0}, uL: col(L), uM: col(M), uS: col(S), uL2: col(L2), uM2: col(M2), uS2: col(S2), uOwn: col(A), uOwn2: col(A2), uSplit: { value: split }, uGrain: { value: grain } },
     vertexShader: skinned ? /* glsl */ `
@@ -134,7 +150,7 @@ export async function createFigure(shared, onProgress, palettes = {}, appearance
   });
   if (shoes) parts.push({ mesh: shoes, count: 70, style: () => ({ pal: 3, size: [0.045, 0.085], dir: FWD }) });
   if (hair) parts.push({ mesh: hair, count: 50, style: () => ({ pal: 4, size: [0.035, 0.07], dir: UP }) });
-  const bodyDabs = pinDabs(shared, [SHIRT, TROUSERS, SKIN, BOOTS, HAIR], parts);
+  const bodyDabs = pinDabs(shared, [SHIRT, TROUSERS, SKIN, BOOTS, HAIR], parts,{surface:true});
   dabs.add(bodyDabs.mesh);
 
   function update(dt) {

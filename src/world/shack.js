@@ -146,7 +146,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  for(const x of [-.73,.73]){for(const z of [-.17,.17])benchBox(.13,.46,.13,1,x,.23,z);benchBox(.12,.67,.12,1,x,.76,.28);}
  for(const dy of [.82,1.05])benchBox(1.9,.16,.1,0,0,dy,.28);
  campColliders.push({key:'fire',stage:12,x:benchPosition.x,y:benchPosition.y+.55,z:benchPosition.z,hx:.96,hy:.55,hz:.33});
- const bench={position:benchPosition,yaw:Math.PI,camera:{position:benchPosition.clone().add(new THREE.Vector3(4,2.7,4.9)),target:firePosition.clone().add(new THREE.Vector3(.65,.95,-1.1))}};
+ const bench={position:benchPosition,yaw:Math.PI,camera:{position:benchPosition.clone().add(new THREE.Vector3(4,2.7,4.9)),target:firePosition.clone().add(new THREE.Vector3(.65,.95,-1.1)),fire:firePosition.clone().add(new THREE.Vector3(0,.93,0)),sitter:benchPosition.clone().add(new THREE.Vector3(0,1.36,0))}};
  parts.forEach(({mesh})=>mesh.userData.shown=mesh.visible);
  group.updateMatrixWorld(true);
  const painted=pinDabs(shared,palettes,parts);painted.update();

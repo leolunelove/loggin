@@ -21,7 +21,7 @@ test('legacy wood is stored; carried wood survives reload and cannot buy upgrade
 
 test('unloading requires reaching the outdoor rack and transfers exactly once',()=>{
  const g=Object.create(Lumberjack.prototype),s=freshState();s.carried=8;
- let feedback=0;Object.assign(g,{state:s,home:{dropoff:{x:3,y:0,z:4}},player:{feet:{x:0,y:0,z:0}},renderHud(){},save(){},audio:{unload(){feedback++;}},shade:{refresh(){}},toast(){}});
+ let feedback=0;Object.assign(g,{state:s,home:{dropoff:{x:3,y:0,z:4}},player:{feet:{x:0,y:0,z:0}},renderHud(){},save(){},audio:{stack(){feedback++;}},shade:{refresh(){}},toast(){}});
  assert.equal(g.unload(),0);assert.equal(s.carried,8);g.player.feet={x:3,y:0,z:5};
  assert.equal(g.unload(),8);assert.equal(s.wood,0);assert.equal(s.carried,8);assert.equal(g.unload(),0);g.updateDelivery(1.14);assert.equal(s.wood,8);assert.equal(s.carried,0);assert.equal(feedback,1);g.updateDelivery(.4);assert.equal(g.delivery,null);
  assert.equal(atWoodRack(g.home,{x:3,y:3,z:4}),false);assert.equal(homeDistance(g.home,{x:3,z:4+UNLOAD_REACH+.01})>UNLOAD_REACH,true);
@@ -31,6 +31,7 @@ test('a rack action takes precedence over chopping nearby trees',()=>{
  const g=Object.create(Lumberjack.prototype),t={x:0,z:-1,r:.2,type:1,tier:0};let unloads=0;
  Object.assign(g,{state:freshState(),time:0,started:true,paused:false,touch:false,held:false,swing:{t},input:{active:true,keys:new Set(['KeyE']),mouse:{left:false}},player:{feet:{x:0,y:0,z:0},grounded:true,speed:0},home:{dropoff:{x:0,y:0,z:0}},camera:{position:{x:0,z:4}},follow:{yaw:Math.PI,look(){}},forest:{trees:[t]},unload(){unloads++;}});
  g.before(.1,{move:{x:0,y:0},look:{x:0,y:0},device:'keyboard'});assert.equal(g.swing,null);assert.equal(unloads,1);
+ g.input.keys.clear();g.before(.016,{move:{x:0,y:0},look:{x:0,y:0},device:'keyboard',interactPressed:true});assert.equal(unloads,2,'a tap released before the frame still starts the unload');
 });
 
 test('shack fits between original trees, casts shadows and updates a painted stored woodpile',()=>{

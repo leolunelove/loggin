@@ -3,6 +3,7 @@ import {CUTS,OUTFITS,sanitizeAppearance} from './appearance.js';
 import {WORLD,randomSeed} from './world/seed.js';
 document.documentElement.dataset.scene='autumn';
 const $=id=>document.getElementById(id);
+const campAge=s=>`Day ${s.day} · ${s.felled} ${s.felled===1?'tree':'trees'} felled`;
 let storage;try{storage=localStorage;}catch{storage=null;}
 if(storage&&new URLSearchParams(location.search).has('woodlandReview'))storage=reviewStorage(storage);
 WORLD.storage=storage;
@@ -30,7 +31,7 @@ if(new URLSearchParams(location.search).has('capture')){WORLD.seed=state.seed;WO
 else{
  $('loading').hidden=true;$('outfitter').hidden=false;
  $('grow-world').textContent=saved.status==='new'?'Grow my forest':'Return to my camp';
- $('lobby-note').textContent=saved.status==='new'?'New camp · Random woodland':`Day ${state.day} · ${state.felled} trees felled`;
+ $('lobby-note').textContent=saved.status==='new'?'New camp · Random woodland':campAge(state);
  const labels={workwear:'Workwear',headwear:'Headwear',shirt:'Shirt',hat:'Hat',pack:'Bag',skin:'Skin tone',hair:'Hair'};
  for(const [key,label] of Object.entries(labels)){
    const swatches=OUTFITS[key],options=swatches||CUTS[key].map(name=>[name]);
@@ -61,17 +62,17 @@ else{
     const out=radio.closest('fieldset').querySelector('output');
     if(radio.checked&&out)out.textContent=radio.getAttribute('aria-label');
   }
-  const exitOnEscape=event=>{if(event.key==='Escape'){event.preventDefault();finish(false);}};
-  const finish=apply=>{
+  const exitOnEscape=event=>{if(event.key==='Escape'){event.preventDefault();finish(false,false);}};
+  const finish=(apply,recapture=true)=>{
     document.removeEventListener('keydown',exitOnEscape);
     if(apply&&!game.externalSaveChange){game.state.appearance={...appearance};game.figure.setAppearance(appearance);game.save();}
     closePreview();game.editingClothes=false;game.paused=!!game.externalSaveChange;game.input.lockable=!game.touch&&!game.paused;game.input.clear();game.syncCapture();
-    if(game.input.lockable)game.input.capture();
+    if(recapture&&game.input.lockable)game.input.capture();
   };
   $('grow-world').disabled=false;$('grow-world').textContent='Wear this outfit';$('grow-world').onclick=()=>finish(true);
   document.addEventListener('keydown',exitOnEscape);
   $('cancel-outfit').hidden=false;$('cancel-outfit').onclick=()=>finish(false);$('undo-reset').hidden=true;
-  $('lobby-note').textContent='Day '+game.state.day+' · '+game.state.felled+' trees felled';
+  $('lobby-note').textContent=campAge(game.state);
   $('outfitter').hidden=false;showPreview(game.state);$('grow-world').focus({preventScroll:true});
  });
 }

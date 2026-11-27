@@ -31,6 +31,13 @@ test('one click commits one impact, never an extra held swing',()=>{
   for(let i=0;i<55;i++)g.before(.02,frame());
   assert.equal(g.hits.length,1);assert.equal(g.swing,null);
 });
+test('a tap between frames survives the turn to face a tree, then produces exactly one contact',()=>{
+  const g=rig();g.player.yaw=Math.PI-.5;
+  g.before(.02,{...frame(),chopPressed:true});assert.equal(g.swing,null);
+  g.player.yaw=Math.PI;
+  for(let i=0;i<65;i++)g.before(.02,frame());
+  assert.equal(g.hits.length,1);assert.equal(g.swing,null);
+});
 test('movement during windup keeps the stroke and movement input alive',()=>{
  const g=rig();g.input.mouse.left=true;g.before(.15,frame());assert.ok(g.swing);g.input.mouse.left=false;
  const next=frame(1);g.before(.02,next);assert.ok(g.swing);assert.equal(next.move.x,1);assert.equal(next.sprint,false);

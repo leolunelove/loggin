@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Loggin’ woodland playtest</title>
 <style>body{margin:0;background:#292e25;color:#eee0c2;font:13px system-ui}header{padding:7px;display:flex;gap:5px;align-items:center;flex-wrap:wrap}button{background:#e6d7b8;color:#272c25;border:0;padding:6px 9px}output{font:12px monospace}iframe{display:block;border:0;width:100%;height:calc(100vh - 80px)}</style>
-<header><button data-place="0">Orchard</button><button data-place="1">Riverwatch</button><button data-place="2">Pine Hollow</button><button id="supplies">Supply restored homes</button><button id="cart">Visit cart</button><button id="round">Follow hauler</button><button id="walk">Walk forward</button><button id="action">Interact</button><button id="field">Field action</button><button id="clue">Next find</button><button id="trunk">Visit windthrow</button><button id="chop">Hold axe</button><button id="keeper">Visit keeper</button><button id="rack">Visit east rack</button><button id="bridge">Cross bridge</button><button id="toss">Pack logs</button><button id="dusk">Evening</button><button id="rain">Show rain</button><button id="still">Save cart still</button><output>Loading the wood…</output></header>
+<header><button data-place="0">Orchard</button><button data-place="1">Riverwatch</button><button data-place="2">Pine Hollow</button><button id="supplies">Supply restored homes</button><button id="sign">Camp fingerpost</button><button id="cart">Visit cart</button><button id="round">Follow hauler</button><button id="walk">Walk forward</button><button id="action">Interact</button><button id="field">Field action</button><button id="clue">Next find</button><button id="trunk">Visit windthrow</button><button id="chop">Hold axe</button><button id="keeper">Visit keeper</button><button id="rack">Visit east rack</button><button id="bridge">Cross bridge</button><button id="toss">Pack logs</button><button id="dusk">Evening</button><button id="rain">Show rain</button><button id="still">Save cart still</button><output>Loading the wood…</output></header>
 <iframe title="Playable forest" src="/?capture&amp;nopad&amp;woodlandReview"></iframe>
 <script type="module">
 const frame=document.querySelector('iframe'),out=document.querySelector('output');let lab,g;
@@ -15,6 +15,12 @@ function shot(eye,look){lab.view(eye,look);lab.step(.025,1);}
 function key(k){lab.input.override=()=>({...neutral(),[k]:true});lab.step(.025,1);lab.input.override=neutral;g.updatePrompt();report();}
 for(const b of document.querySelectorAll('[data-place]'))b.onclick=()=>{const h=g.exploration.sites[+b.dataset.place],p=h.dropoff;visit(p.x,p.z+1.1,p.x,p.z-1);};
 $('supplies').onclick=()=>{Object.assign(g.state,{wood:400,hardwood:60,planks:80,shed:40,sawmill:40,axe:2,carried:18,carriedHardwood:3});for(const p of g.state.places)Object.assign(p,{found:true,wood:24,planks:8,trail:40});g.exploration.sync(g.state);g.field.sync();g.renderHud();g.shade.refresh();g.save();report();};
+$('sign').onclick=()=>{
+ const p=g.exploration.guide.position;g.state.hour=15.4;
+ g.weatherOverride={rain:0,mist:0,overcast:.12,label:'Clear'};
+ visit(p.x-1.8,p.z+1.3,p.x,p.z);
+ shot([p.x+3.45,p.y+1.92,p.z+3.65],[p.x-.46,p.y+1.25,p.z]);g.updatePrompt();
+};
 $('cart').onclick=()=>{const p=g.cart.axle.position;visit(p.x+1.3,p.z+.45,p.x,p.z);};
 $('round').onclick=()=>{const c=g.state.woodland.cart;for(let j=0;j<8;j++)g.cart.update(.4);const p=g.cart.axle.position,y=c.yaw,dx=Math.sin(y),dz=Math.cos(y);
  shot([p.x+dz*3.4+dx*2.7,p.y+1.85,p.z-dx*3.4+dz*2.7],[p.x+dx*.43,p.y+.90,p.z+dz*.43]);report();};

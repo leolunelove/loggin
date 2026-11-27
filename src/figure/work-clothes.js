@@ -8,22 +8,73 @@ export function tint(material,palette,lower=palette) {
   }
 }
 
+// Take weights from neighbouring shirt vertices so a sewn panel bends with the same ribs,
+// shoulders and hips as the underlying shirt through the full axe stroke.
+function garmentWeights(suit){
+  const {position,skinIndex,skinWeight}=suit.geometry.attributes,rows=new Map();
+  for(let v=0;v<position.count;v++){
+    if(Math.abs(position.getX(v))>.36)continue;
+    const row=Math.floor(position.getY(v)*16);
+    if(!rows.has(row))rows.set(row,[]);rows.get(row).push(v);
+  }
+  return geometry=>{
+    const pos=geometry.attributes.position,ids=[],weights=[];
+    for(let i=0;i<pos.count;i++){
+      const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i),row=Math.floor(y*16),near=[];
+      for(let j=row-1;j<=row+1;j++)for(const v of rows.get(j)||[]){
+        const d=(x-position.getX(v))**2+(y-position.getY(v))**2+(z-position.getZ(v))**2;
+        if(near.length===3&&d>=near[2].d)continue;
+        near.push({v,d});near.sort((a,b)=>a.d-b.d);near.length=Math.min(3,near.length);
+      }
+      const influences=new Map();
+      for(const {v,d} of near)for(let k=0;k<4;k++){
+        const bone=skinIndex.getComponent(v,k),w=skinWeight.getComponent(v,k);
+        if(w)influences.set(bone,(influences.get(bone)||0)+w/Math.max(.00005,d));
+      }
+      const sorted=[...influences].sort((a,b)=>b[1]-a[1]).slice(0,4),sum=sorted.reduce((s,p)=>s+p[1],0);
+      for(let k=0;k<4;k++){ids.push(sorted[k]?.[0]??0);weights.push(sorted[k]?sorted[k][1]/sum:0);}
+    }
+    geometry.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(ids,4));
+    geometry.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));
+  };
+}
+
 export function workClothes(shared,man,paint,hatPalette,clothPalette) {
   const leather=[[.63,.43,.24],[.34,.23,.16],[.18,.15,.13]], lining=[[.90,.80,.58],[.64,.52,.34],[.33,.28,.22]];
   const palettes=[hatPalette,clothPalette,leather,lining],materials=palettes.map(p=>paint(shared,p));
   for(const mat of materials)mat.uniforms.uCloth.value=.85;
   const hats=[[],[],[]],coats=[[],[],[]],parts=[],up=new THREE.Vector3(0,1,0);
-  function piece(set,bone,geometry,slot,x,y,z,scale,count=45) {
-    const m=new THREE.Mesh(geometry,materials[slot]);m.position.set(x,y,z);m.scale.set(...scale);
-    m.layers.enable(1);m.name='work-clothing';m.userData.hatStyle=hats.indexOf(set);m.userData.coatStyle=coats.indexOf(set);m.userData.fabric=slot;man.object.add(m);man.object.updateMatrixWorld(true);bone.attach(m);
-    set.push(m);parts.push({mesh:m,count,style:()=>({pal:slot,size:count>120?[.024,.055]:[.012,.031],dir:up})});return m;
+  let suit;man.object.traverse(o=>{if(o.isSkinnedMesh&&o.name.includes('casualsuit'))suit=o;});
+  const fit=garmentWeights(suit),fabrics=palettes.map(p=>paint(shared,p,{skinned:true}));
+  function piece(set,bone,geometry,slot,x,y,z,scale,count=45,tilt=0) {
+    const coat=coats.indexOf(set);let m;
+    if(coat>=0){
+      geometry.scale(...scale);geometry.rotateZ(tilt);geometry.translate(x,y,z);fit(geometry);
+      m=new THREE.SkinnedMesh(geometry,fabrics[slot]);suit.parent.add(m);m.bind(suit.skeleton,suit.bindMatrix);m.frustumCulled=false;
+    }else{
+      m=new THREE.Mesh(geometry,materials[slot]);m.position.set(x,y,z);m.scale.set(...scale);
+      man.object.add(m);man.object.updateMatrixWorld(true);bone.attach(m);
+    }
+    m.layers.enable(1);m.name='work-clothing';m.userData.hatStyle=hats.indexOf(set);m.userData.coatStyle=coat;m.userData.fabric=slot;
+    set.push(m);parts.push({mesh:m,count,style:()=>({pal:slot,size:count>120?[.019,.043]:[.009,.023],dir:up})});return m;
   }
   const head=man.bones.Head,chest=man.bones.spine_03,hips=man.bones.pelvis;
-  const lathe=points=>new THREE.LatheGeometry(points.map(([r,y])=>new THREE.Vector2(r,y)),24);
+  const lathe=(points,ribs=0)=>{
+    const g=new THREE.LatheGeometry(points.map(([r,y])=>new THREE.Vector2(r,y)),ribs?96:24);
+    if(ribs){
+      const p=g.attributes.position;
+      for(let i=0;i<p.count;i++){
+        const x=p.getX(i),z=p.getZ(i),k=1+.021*Math.cos(ribs*Math.atan2(x,z));
+        p.setXYZ(i,x*k,p.getY(i),z*k);
+      }
+      g.computeVertexNormals();
+    }
+    return g;
+  };
   const felt=piece(hats[0],head,lathe([[0,.15],[.09,.135],[.14,.075],[.15,0],[.23,-.035],[.35,-.085],[.37,-.07]]),0,0,1.815,-.012,[.86,.87,.86],140);
   piece(hats[0],head,new THREE.CylinderGeometry(.15,.157,.044,22,1,true),2,0,1.836,-.012,[.86,.87,.86]);
   piece(hats[1],head,lathe([[.148,-.07],[.156,0],[.151,.075],[.119,.138],[.055,.175],[0,.18]]),0,0,1.811,-.006,[.70,.71,.75],85);
-  piece(hats[1],head,lathe([[.15,-.068],[.169,-.059],[.167,-.006],[.153,.001]]),0,0,1.811,-.006,[.70,.71,.75],45);
+  piece(hats[1],head,lathe([[.15,-.068],[.169,-.059],[.167,-.006],[.153,.001]],24),0,0,1.811,-.006,[.70,.71,.75],45);
   piece(hats[2],head,lathe([[.14,-.03],[.164,.005],[.18,.065],[.135,.116],[0,.124]]),0,0,1.799,0,[.75,.80,.81],95);
   piece(hats[2],head,new THREE.SphereGeometry(1,18,8),2,0,1.785,.096,[.126,.014,.104],60);
   // Sew the vest and apron around the actual width of the character's chest and hips.
@@ -38,29 +89,28 @@ export function workClothes(shared,man,paint,hatPalette,clothPalette) {
   }
   const sew=(set,bone,geo,slot,count)=>piece(set,bone,geo,slot,0,0,0,[1,1,1],count);
   const rounded=n=>Math.sign(n)*Math.abs(n)**.82;
-  const waist=[1.036,.206,.032,.160],rib=(y,w,z,d)=>[[y-.009,w-.004,z,d-.005],[y,w,z,d],[y+.045,w+.008,z,d+.010]];
-  const vestRows=[waist,...rib(1.09,.199,.032,.157),...rib(1.19,.192,.032,.158),...rib(1.29,.202,.031,.160),
-    [1.37,.219,.023,.161],[1.44,.229,.015,.151],[1.486,.164,.010,.115],[1.513,.109,.012,.090]];
-  function vestPoint(row,u){
-    const [y,w,z,d]=vestRows[row],top=THREE.MathUtils.smoothstep(y,1.32,1.51);
-    const slit=.096+top*.55,angle=slit+u*(Math.PI*2-2*slit),side=Math.sin(angle),front=Math.cos(angle);
-    const armhole=Math.exp(-((y-1.437)**2)/.00095)*Math.abs(side)**5*.072;
-    return [w*rounded(side),y-armhole-Math.max(0,front)**3*top*.039,z+d*rounded(front)];
+  // Cut the vest from the shirt's own rigged surface, with a little loft between the quilt lines.
+  const vestGeo=suit.geometry.clone(),vp=vestGeo.attributes.position,vn=vestGeo.attributes.normal;
+  const sourceIndex=vestGeo.index,indices=[];
+  for(let i=0;i<(sourceIndex?.count??vp.count);i+=3){
+    const face=[0,1,2].map(k=>sourceIndex?sourceIndex.getX(i+k):i+k);
+    if(face.some(v=>vp.getY(v)>.975&&vp.getY(v)<1.61&&Math.abs(vp.getX(v))<.28))indices.push(...face);
   }
-  sew(coats[1],chest,panel(vestRows.length,32,vestPoint),1,240);
+  vestGeo.setIndex(indices);
+  for(let i=0;i<vp.count;i++){
+    const y=vp.getY(i),loft=.012+.010*(.5-.5*Math.cos((y-1.041)*Math.PI*24));
+    vp.setXYZ(i,vp.getX(i)+loft*vn.getX(i),y+loft*vn.getY(i),vp.getZ(i)+loft*vn.getZ(i));
+  }
+  const quilt=paint(shared,clothPalette,{skinned:true,quilted:true}),vest=new THREE.SkinnedMesh(vestGeo,quilt);
+  suit.parent.add(vest);vest.bind(suit.skeleton,suit.bindMatrix);vest.frustumCulled=false;vest.layers.enable(1);
+  vest.name='work-clothing';Object.assign(vest.userData,{hatStyle:-1,coatStyle:1,fabric:1});coats[1].push(vest);
   // A lined stand collar stays visible above the loaded pack.
   sew(coats[1],chest,panel(3,24,(j,u)=>{
     const a=.66+u*(Math.PI*2-1.32),r=[.116,.128,.125][j];
     return [r*Math.sin(a),[1.477,1.539,1.548][j]-.025*Math.cos(a),.01+r*.84*Math.cos(a)];
   }),3,38);
   for(const side of [-1,1]){
-    const shoulder=[[1.442,.147],[1.494,.114],[1.531,.012],[1.499,-.097],[1.448,-.131]];
-    sew(coats[1],chest,panel(shoulder.length,5,(j,u)=>{
-      const across=side<0?1-u:u;
-      return [side*(.084+.122*across),shoulder[j][0]-.035*across,shoulder[j][1]*(1-.19*across)];
-    }),2,23);
-    const pocket=piece(coats[1],chest,new THREE.BoxGeometry(.073,.025,.014),2,side*.113,1.127,.178,[1,1,1],8);
-    pocket.rotation.z=side*.19;
+    piece(coats[1],chest,new THREE.BoxGeometry(.073,.025,.014),2,side*.113,1.127,.178,[1,1,1],8,side*.19);
   }
 
   // The leather bib curves around the ribs. Each skirt panel leaves a working split
@@ -83,15 +133,15 @@ export function workClothes(shared,man,paint,hatPalette,clothPalette) {
   sew(coats[2],hips,panel(2,28,(j,u)=>{
     const a=u*Math.PI*2;return [.221*rounded(Math.sin(a)),1.007+j*.058,.031+.184*rounded(Math.cos(a))];
   }),1,33);
-  const tie=piece(coats[2],hips,new THREE.BoxGeometry(.035,.18,.018),3,-.209,.965,-.025,[1,1,1],10);tie.rotation.z=-.21;
+  piece(coats[2],hips,new THREE.BoxGeometry(.035,.18,.018),3,-.209,.965,-.025,[1,1,1],10,-.21);
   sew(coats[2],chest,panel(3,6,(j,u)=>[(u-.5)*[.098,.142,.144][j]+.030,[1.129,1.145,1.231][j],.212-.019*(u-.25)**2]),2,20);
   sew(coats[2],chest,panel(2,6,(j,u)=>[(u-.5)*.145+.030,1.223+j*.010,.214-.019*(u-.25)**2]),3,6);
-  const strokes=pinDabs(shared,palettes,parts);
+  const strokes=pinDabs(shared,palettes,parts,{surface:true});
   return {hat:felt,mesh:strokes.mesh,update:strokes.update,
     set(a,p){tint(materials[0],p.HAT);strokes.setPalette(0,p.HAT);
       const waxed=[[.79,.66,.45],[.50,.385,.24],[.25,.205,.16]];
       const vest=p.SHIRT.map((c,i)=>c.map((v,k)=>waxed[i][k]*.70+v*.30));
-      tint(materials[1],vest);strokes.setPalette(1,vest);
+      tint(fabrics[1],vest);tint(quilt,vest);strokes.setPalette(1,vest);
       hats.forEach((set,i)=>set.forEach(m=>m.visible=i===a.headwear));
       coats.forEach((set,i)=>set.forEach(m=>m.visible=i===a.workwear));
     }};
