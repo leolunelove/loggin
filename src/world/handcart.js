@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {paint} from '../figure/figure.js';
+import {pinDabs} from '../oilpaint/pins.js';
 import {solveArm} from '../figure/chop.js';
 import {advanceHaul,cartCapacity,connected,noteFreight} from '../woodland.js';
 import {depositWood} from '../economy.js';
@@ -38,16 +39,31 @@ export function createHandcart(game,craft) {
   function createWorker(){
     const source=game.figure.man,object=clone(source.object),bones={};object.name='Trail hauler';
     object.position.set(0,0,0);object.rotation.set(0,0,0);
+    const jacket=[[.54,.68,.66],[.31,.43,.43],[.17,.27,.28]],trousers=[[.39,.43,.39],[.23,.28,.26],[.15,.17,.19]];
+    const skin=[[.84,.64,.46],[.57,.38,.25],[.31,.21,.16]],cap=[[.86,.55,.35],[.57,.32,.22],[.30,.20,.17]];
+    const leather=[[.57,.47,.35],[.36,.29,.22],[.22,.19,.16]],linen=[[.85,.73,.51],[.63,.54,.35],[.37,.32,.24]];
+    const fabrics=[cap,leather,linen].map(p=>{const m=paint(game.shared,p);m.uniforms.uCloth.value=.85;return m;});
+    const pins=[],up=new THREE.Vector3(0,1,0);
     object.traverse(o=>{if(o.isBone)bones[o.name]=o;
       if(o.name==='wood-carrying-pack')o.visible=false;
       if(o.name==='work-clothing'){
         o.visible=o.userData.hatStyle===1||o.userData.coatStyle===2;
-        if(o.visible)o.material=o.userData.hatStyle===1?mats.cloth:o.userData.fabric===3?mats.cut:mats.dark;
+        if(o.visible){
+          const fabric=o.userData.hatStyle===1?0:o.userData.fabric===3?2:1;
+          o.material=fabrics[fabric];pins.push({mesh:o,count:fabric===0?25:12,style:()=>({pal:3+fabric,size:[.016,.047],dir:up})});
+        }
       }
-      if(o.isSkinnedMesh && /casualsuit/.test(o.name))o.material=paint(game.shared,[[.54,.68,.66],[.31,.43,.43],[.17,.27,.28]],{skinned:true,lower:[[.39,.43,.39],[.23,.28,.26],[.15,.17,.19]],split:.98,grain:2.6});
+      if(o.isSkinnedMesh&&/casualsuit/.test(o.name)){
+        o.material=paint(game.shared,jacket,{skinned:true,lower:trousers,split:.98,grain:2.6});
+        pins.push({mesh:o,count:135,style:p=>({pal:p.y<.98?1:0,size:[.024,.06],dir:up})});
+      }else if(o.isSkinnedMesh&&/generic/.test(o.name)){
+        o.material=paint(game.shared,skin,{skinned:true});
+        pins.push({mesh:o,count:40,accept:p=>Math.abs(p.x)>.37||p.y>1.56&&p.z<.055,style:()=>({pal:2,size:[.017,.041],dir:up})});
+      }
     });
     const mixer=new THREE.AnimationMixer(object),walk=mixer.clipAction(source.clips.Walk).play(),idle=mixer.clipAction(source.clips.Idle).play();
-    crew.add(object);worker={object,bones,mixer,walk,idle};
+    const strokes=pinDabs(game.shared,[jacket,trousers,skin,cap,leather,linen],pins);
+    crew.add(object,strokes.mesh);worker={object,bones,mixer,walk,idle,strokes};
   }
   function nearestRoute(){
     const c=game.state.woodland.cart;let best=null;
@@ -104,12 +120,14 @@ export function createHandcart(game,craft) {
       part.visible=loadLevels[i]>.008;part.scale.setScalar(Math.max(.001,loadLevels[i]));part.position.y=.72+(i<6?0:i<11?1:2)*.145+(1-loadLevels[i])*.18;});initialized=true;
     axle.updateMatrixWorld(true);
     if(c.running && !worker)createWorker();
-    if(worker){worker.object.visible=c.running;
+    if(worker){worker.object.visible=c.running;worker.strokes.mesh.visible=false;
       if(c.running){
         const p=v.set(0,0,1.66).applyMatrix4(axle.matrixWorld);worker.object.position.set(p.x,game.heightAt(p.x,p.z)+.085,p.z);worker.object.rotation.y=yaw;
         const weight=THREE.MathUtils.clamp(speed/.9,0,1);
         worker.walk.setEffectiveWeight(weight);worker.idle.setEffectiveWeight(1-weight);worker.walk.timeScale=speed/1.45;worker.mixer.update(dt);
-        worker.object.updateMatrixWorld(true);if(game.camera.position.distanceToSquared(worker.object.position)<45*45)grip(worker);
+        worker.object.updateMatrixWorld(true);const distance=game.camera.position.distanceToSquared(worker.object.position);
+        if(distance<45*45)grip(worker);
+        if(distance<32*32){worker.strokes.mesh.visible=true;worker.strokes.update();}
       }
     }
     return changed;

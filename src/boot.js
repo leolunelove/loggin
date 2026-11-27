@@ -61,12 +61,15 @@ else{
     const out=radio.closest('fieldset').querySelector('output');
     if(radio.checked&&out)out.textContent=radio.getAttribute('aria-label');
   }
+  const exitOnEscape=event=>{if(event.key==='Escape'){event.preventDefault();finish(false);}};
   const finish=apply=>{
+    document.removeEventListener('keydown',exitOnEscape);
     if(apply&&!game.externalSaveChange){game.state.appearance={...appearance};game.figure.setAppearance(appearance);game.save();}
     closePreview();game.editingClothes=false;game.paused=!!game.externalSaveChange;game.input.lockable=!game.touch&&!game.paused;game.input.clear();game.syncCapture();
     if(game.input.lockable)game.input.capture();
   };
   $('grow-world').disabled=false;$('grow-world').textContent='Wear this outfit';$('grow-world').onclick=()=>finish(true);
+  document.addEventListener('keydown',exitOnEscape);
   $('cancel-outfit').hidden=false;$('cancel-outfit').onclick=()=>finish(false);$('undo-reset').hidden=true;
   $('lobby-note').textContent='Day '+game.state.day+' · '+game.state.felled+' trees felled';
   $('outfitter').hidden=false;showPreview(game.state);$('grow-world').focus({preventScroll:true});

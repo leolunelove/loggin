@@ -40,15 +40,17 @@ export async function createLobbyPreview(element,getAppearance,camp) {
     const aspect=landscape.image?landscape.image.width/landscape.image.height:1.5;
     landscape.repeat.set(Math.min(1,camera.aspect/aspect),Math.min(1,aspect/camera.aspect));
     landscape.offset.set((1-landscape.repeat.x)*.62,(1-landscape.repeat.y)*.52);
-    camera.position.set(0,1.22,Math.max(5.55,2.45/camera.aspect));
+    camera.position.set(0,1.22,Math.max(5.55,4.65/camera.aspect));
     camera.lookAt(0,.94,0);camera.updateProjectionMatrix();
     shared.uPixel.value=2*Math.tan(Math.PI/12)/renderer.getDrawingBufferSize(size).y;
   }
   element.append(renderer.domElement);const observer=new ResizeObserver(resize);observer.observe(element);resize();
-  let angle=.40,last=0,selection='';
+  let angle=-.62,last=0,selection='';
   const turn=(dir)=>angle+=dir*Math.PI/3;
-  document.getElementById('turn-character').onclick=()=>turn(1);
-  document.getElementById('turn-back').onclick=()=>turn(-1);
+  const forward=()=>turn(1),back=()=>turn(-1);
+  const key=e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();turn(e.key==='ArrowRight'?1:-1);}};
+  const next=document.getElementById('turn-character'),previous=document.getElementById('turn-back');
+  next.onclick=forward;previous.onclick=back;element.addEventListener('keydown',key);
   renderer.setAnimationLoop(time=>{
     if(document.hidden||element.clientWidth===0)return;
     const dt=Math.min(.05,(time-last)/1000);last=time;
@@ -60,7 +62,7 @@ export async function createLobbyPreview(element,getAppearance,camp) {
     shade.update(scene,man.object.position);frame.render(scene,camera);
   });
   return ()=>{disposed=true;renderer.setAnimationLoop(null);observer.disconnect();animator.mixer.stopAllAction();
-    if(element.contains(renderer.domElement)){document.getElementById('turn-character').onclick=null;document.getElementById('turn-back').onclick=null;}
+    element.removeEventListener('keydown',key);if(next.onclick===forward)next.onclick=null;if(previous.onclick===back)previous.onclick=null;
     const geometry=new Set(),materials=new Set();scene.traverse(o=>{if(o.geometry)geometry.add(o.geometry);if(o.material)for(const m of [].concat(o.material))materials.add(m);});
     geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());landscape.dispose();shade.dispose();frame.dispose();
     for(const key of ['tHeight','tLand','tNoise','tBrush'])shared[key].value.dispose();

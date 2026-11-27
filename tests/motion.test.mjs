@@ -12,6 +12,9 @@ import {Animator} from '../src/figure/animator.js';
 import {ChopAnimation,AXE_BLADE,LOWER_GRIP} from '../src/figure/chop.js';
 import {chopContact,swingPose,CHOP_REACH,IMPACT_AT,SWING_VARIANTS,chooseSwing} from '../src/mechanics.js';
 import {Lumberjack} from '../src/game.js';
+import {createHandcart} from '../src/world/handcart.js';
+import {woodcraft} from '../src/world/woodcraft.js';
+import {buildTrail} from '../src/world/trail.js';
 import {freshState,swingDuration} from '../src/economy.js';
 
 const parse=async name=>{const b=await fs.readFile(new URL('../public/figure/'+name,import.meta.url));return new GLTFLoader().parseAsync(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength),'');};
@@ -51,6 +54,24 @@ test('all nine workwear and hat pairings stay on the correct bones and repaint i
  const other=characterPalettes({...a,hat:3});wardrobe.set({...a,hat:3},other);
  assert.deepEqual(wardrobe.hat.material.uniforms.uM.value.toArray(),other.HAT[1]);
  const marks=wardrobe.mesh.material.uniforms.FIG_M.value[0];assert.deepEqual(marks.toArray(),other.HAT[1]);
+});
+
+test('a parked cart credits only the load that fits and a separate animated worker takes the handles',async()=>{
+ const state=Object.assign(freshState(),{wood:200,carried:39,carriedHardwood:8}),man=await character();
+ Object.assign(state.places[0],{found:true,wood:24,planks:8,trail:40});
+ const c=state.woodland.cart;Object.assign(c,{built:true,hired:true,load:170,route:0,progress:1});
+ const route=buildTrail({x:0,z:80},{x:-29,z:55},{d:6},()=>0,new THREE.MeshBasicMaterial(),{});
+ const game={state,figure:{man},heightAt:()=>0,scene:new THREE.Scene(),camera:new THREE.PerspectiveCamera(),shared:{},
+   player:{feet:new THREE.Vector3(),yaw:0},exploration:{routes:[route]}};
+ const cart=createHandcart(game,woodcraft({}));cart.update(0);
+ assert.equal(cart.stow(),0);game.player.feet.copy(cart.axle.position);game.camera.position.copy(game.player.feet);
+ assert.equal(cart.stow(),22);assert.equal(cart.stow(),0);assert.equal(state.wood,222);assert.equal(state.carried,17);
+ assert.ok(cart.emptyAtDepot());assert.equal(cart.emptyAtDepot(),false);assert.equal(state.woodland.freight[0],192);
+ assert.ok(cart.hitch());assert.ok(cart.towing);assert.ok(cart.dispatch());assert.equal(cart.towing,false);
+ cart.update(1);cart.update(.1);assert.equal(c.load,192);assert.equal(state.wood,222);
+ const hauler=game.scene.getObjectByName('Trail hauler');assert.ok(hauler?.visible);assert.notEqual(hauler,man.object);
+ let crewBone,crewSkin;hauler.traverse(o=>{if(o.name==='hand_r')crewBone=o;if(o.isSkinnedMesh&&/generic/.test(o.name))crewSkin=o;});
+ assert.notEqual(crewBone,man.bones.hand_r);assert.ok(crewSkin.material.uniforms.uCloth.value);
 });
 
 test('character turning follows the shortest arc and eases into its final heading',()=>{
