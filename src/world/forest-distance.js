@@ -1,0 +1,87 @@
+import * as THREE from 'three';
+import {dabGeometry,dabMesh} from '../oilpaint/dabs.js';
+import {COMMON} from '../oilpaint/common.js';
+
+export const VIEW_RANGE={detailStart:68,detailEnd:106,horizon:165,tile:30};
+export const RANGE_GLSL=`
+float woodDetail(float d){return 1.-smoothstep(68.,106.,d);}
+float woodHorizon(){return 165.-min(1.,max(uRain,(uHazeDensity-.012)*19.))*24.;}
+`;
+const key=(x,z)=>Math.floor(x/VIEW_RANGE.tile)+','+Math.floor(z/VIEW_RANGE.tile);
+function bound(x,z){const size=VIEW_RANGE.tile;return {x:(Math.floor(x/size)+.5)*size,z:(Math.floor(z/size)+.5)*size};}
+export function nearTile(t,p,reach){const dx=Math.max(0,Math.abs(t.x-p.x)-15),dz=Math.max(0,Math.abs(t.z-p.z)-15);return dx*dx+dz*dz<reach*reach;}
+
+// The source arrays retain their tree-ID ranges for chopping. Only changed ranges are
+// mirrored into these spatial batches, which can be skipped before drawing any strokes.
+export function tileDabs(source){
+  const attrs=source.geometry.attributes,points=attrs.aPos,count=points.count,tiles=[],index=new Map();
+  const owner=new Uint16Array(count),local=new Uint32Array(count);
+  const names=Object.keys(attrs).filter(n=>attrs[n].isInstancedBufferAttribute);
+  for(let i=0;i<count;i++){
+    const x=points.getX(i),z=points.getZ(i),k=key(x,z);
+    if(!index.has(k)){index.set(k,tiles.length);tiles.push({...bound(x,z),count:0});}
+    const j=index.get(k);owner[i]=j;local[i]=tiles[j].count++;
+  }
+  for(const t of tiles){
+    const data={};for(const n of names){const size=attrs[n].itemSize;data[n]=[new Float32Array(t.count*size),size];}
+    t.mesh=dabMesh(dabGeometry(t.count,data),source.material,source.renderOrder);
+    t.mesh.geometry.boundingSphere=new THREE.Sphere(new THREE.Vector3(t.x,11,t.z),53);t.mesh.frustumCulled=true;
+  }
+  function copy(i){const dest=tiles[owner[i]].mesh.geometry.attributes;
+    for(const n of names){const a=attrs[n],size=a.itemSize;
+      for(let k=0;k<size;k++)dest[n].array[local[i]*size+k]=a.array[i*size+k];}
+  }
+  for(let i=0;i<count;i++)copy(i);
+  function sync(start,end){
+    const changed=new Set();for(let i=start;i<end;i++){copy(i);changed.add(owner[i]);}
+    for(const j of changed)for(const n of names)tiles[j].mesh.geometry.attributes[n].needsUpdate=true;
+  }
+  return {tiles,sync};
+}
+export function tileTrunks(source,trees){
+  const g=source.geometry,tiles=new Map();
+  for(const t of trees){
+    const k=key(t.x,t.z);
+    if(!tiles.has(k))tiles.set(k,{...bound(t.x,t.z),indices:[]});
+    const list=tiles.get(k).indices;for(let i=t.indexStart;i<t.indexEnd;i++)list.push(g.index.array[i]);
+  }
+  for(const t of tiles.values()){
+    const geom=new THREE.BufferGeometry();for(const [n,a] of Object.entries(g.attributes))geom.setAttribute(n,a);
+    geom.setIndex(t.indices);delete t.indices;
+    geom.boundingSphere=new THREE.Sphere(new THREE.Vector3(t.x,12,t.z),53);
+    t.mesh=new THREE.Mesh(geom,source.material);
+  }return [...tiles.values()];
+}
+export function silhouettes(shared,trees,lobes){
+  const data=[],shape=[],active=new Float32Array(trees.length).fill(1);
+  for(const t of trees){
+    let wide=1,top=t.y+t.h,bottom=top,centerX=0,centerZ=0;const [a,b]=t.ranges.lobes;
+    for(let i=a;i<b;i++){centerX+=lobes[i*4];centerZ+=lobes[i*4+2];}
+    centerX/=b-a;centerZ/=b-a;
+    for(let i=a;i<b;i++){const j=i*4,r=lobes[j+3];wide=Math.max(wide,Math.hypot(lobes[j]-centerX,lobes[j+2]-centerZ)+r);top=Math.max(top,lobes[j+1]+r);bottom=Math.min(bottom,lobes[j+1]-r);}
+    data.push(t.x,t.y,t.z,top-t.y);shape.push(wide,Math.max(.24,(bottom-t.y)/(top-t.y)),t.family,t.seed);
+    t.impostorIndex=shape.length/4-1;
+  }
+  const geometry=dabGeometry(trees.length,{aTree:[new Float32Array(data),4],aShape:[new Float32Array(shape),4],aActive:[active,1]});
+  const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:shared,side:THREE.DoubleSide,
+    vertexShader:`${COMMON}\n${RANGE_GLSL}
+    in vec4 aTree;in vec4 aShape;in float aActive;out vec2 vCard;out vec4 vShape;out vec3 vWorld;out float vCover;
+    void main(){float dist=length(aTree.xz-cameraPosition.xz);float end=woodHorizon();
+      vCover=(1.-woodDetail(dist))*(1.-smoothstep(end-17.,end,dist))*aActive;
+      if(vCover<.003){gl_Position=vec4(2.,2.,2.,1.);return;}
+      vec2 side=normalize(vec2(cameraPosition.z-aTree.z,aTree.x-cameraPosition.x)+vec2(.0001));
+      vCard=vec2(position.x,position.y*.5+.5);vShape=aShape;
+      vWorld=aTree.xyz+vec3(side.x*position.x*aShape.x,vCard.y*aTree.w,side.y*position.x*aShape.x);
+      gl_Position=projectionMatrix*viewMatrix*vec4(vWorld,1.);}`,
+    fragmentShader:`${COMMON}\nin vec2 vCard;in vec4 vShape;in vec3 vWorld;in float vCover;out vec4 outC;
+    void main(){vec2 uv=vCard;float seed=vShape.w;float y=(uv.y-vShape.y)/(1.-vShape.y);
+      float grain=texture(tNoise,uv*vec2(3.1,5.)+fract(seed)).r;
+      float center=.12*sin(seed+uv.y*4.);float trunk=abs(uv.x-center*uv.y)/(.034*(1.-uv.y*.65));
+      float canopy=length(vec2((uv.x-center)*1.13,(y-.5)*2.04))+.09*sin(uv.x*12.+seed)+.11*sin(y*15.+seed)+.13*(grain-.5);
+      if((canopy>1.||y<0.)&&(trunk>1.||uv.y>.72))discard;
+      float dither=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715))));if(dither>vCover)discard;
+      vec3 leaf=mix(vec3(.50,.42,.25),vec3(.66,.46,.27),fract(vShape.z*.37));leaf*=.88+.19*y+.13*grain;
+      vec3 c=(canopy<=1.&&y>=0.)?leaf:vec3(.36,.33,.30);outC=vec4(hazed(c,vWorld),1.);}`});
+  const mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;
+  return {mesh,set(t,shown){const a=geometry.attributes.aActive,i=t.impostorIndex;if(a.getX(i)!==Number(shown)){a.setX(i,Number(shown));a.needsUpdate=true;}}};
+}

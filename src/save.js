@@ -2,6 +2,11 @@ import { freshState, sanitize } from './economy.js';
 export const LEGACY_SAVE_KEY='woodsmoke-save-v1';
 export const SAVE_KEY='loggin-camp-v2';
 export const RESET_BACKUP_KEY=SAVE_KEY+'-before-reset';
+// Local development review can exercise real persistence alongside a player's camp.
+export function reviewStorage(storage) {
+  const key=k=>'loggin-woodland-review/'+k;
+  return {eventKey:key(SAVE_KEY),getItem:k=>storage.getItem(key(k)),setItem:(k,v)=>storage.setItem(key(k),v),removeItem:k=>storage.removeItem(key(k))};
+}
 export function newCamp(storage,state){
  try{
   const previous=storage.getItem(SAVE_KEY)||storage.getItem(SAVE_KEY+'-backup');

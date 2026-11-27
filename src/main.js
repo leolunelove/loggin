@@ -74,7 +74,7 @@ lap('start');
 // the wanderer's files are the large ones: they start coming down now, while the wood is made
 let told = 0;
 const say = (value, label) => { told = Math.max(told, value); block.progress(told, label); };
-const figureComing = createFigure(shared, (done) => say(0.05 + 0.55 * done, 'Fetching the wanderer'),characterPalettes(WORLD.state?.appearance));
+const figureComing = createFigure(shared, (done) => say(0.05 + 0.55 * done, 'Fetching the wanderer'),characterPalettes(WORLD.state?.appearance),WORLD.state?.appearance);
 
 const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
 await prepareLand((done) => { say(0.03 + 0.07 * done, 'Laying the ground'); return turn(); });
@@ -266,12 +266,14 @@ lap('first frame');
 if(!capture){
  const h=home.group.position;
  follow.free={position:new THREE.Vector3(h.x+19,h.y+13,h.z+20),target:new THREE.Vector3(h.x+7,h.y+1,h.z-6)};
+ const equipment=new THREE.Group();equipment.add(game.axe,game.axePaint.mesh);scene.add(equipment);
  const meshes=forest.group.children.map(mesh=>({mesh,count:mesh.geometry.index?.count,instances:mesh.geometry.instanceCount}));
  document.body.classList.add('generating');
  for(let i=0;i<=30;i++){
   const p=i/30,trees=THREE.MathUtils.clamp((p-.28)/.55,0,1);
   land.mesh.visible=p>.08;floor.group.visible=p>.15;river.visible=p>.24;sky.group.visible=true;
-  home.group.visible=home.paint.mesh.visible=p>.82;man.object.visible=figure.dabs.visible=p>.93;leaves.mesh.visible=p>.9;kick.mesh.visible=p>.93;
+  game.exploration.group.visible=game.field.group.visible=game.cart.group.visible=p>.82;
+  home.group.visible=home.paint.mesh.visible=p>.82;equipment.visible=man.object.visible=figure.dabs.visible=p>.93;leaves.mesh.visible=p>.9;kick.mesh.visible=p>.93;
   for(const {mesh,count,instances} of meshes){if(count)mesh.geometry.setDrawRange(0,Math.floor(count*trees/3)*3);if(Number.isFinite(instances))mesh.geometry.instanceCount=Math.floor(instances*trees);}
   block.progress(p,p<.1?'First light':p<.24?'Laying the land':p<.35?'Finding the river':p<.82?'Growing your forest':p<.94?'Making camp':'Your little life in the woods');
   tick(1/30);await new Promise(resolve=>setTimeout(resolve,65));
@@ -288,7 +290,7 @@ function run() {
   if (want === running) return;
   running = want;
   last = performance.now();
-  renderer.setAnimationLoop(want ? () => { const now = performance.now(); tick((now - last) / 1000); last = now; } : null);
+  renderer.setAnimationLoop(want ? () => { const now = performance.now(); if(!game.editingClothes)tick((now - last) / 1000); last = now; } : null);
 }
 fitView();
 loaded = true;

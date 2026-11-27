@@ -10,6 +10,7 @@ export function createOutpostHouse(shared,site,heightAt,index,{makePaint=paint}=
  const y=Math.max(...[-X,X].flatMap(x=>[-Z,Z].map(z=>heightAt(site.x+x,site.z+z))));
  const group=new THREE.Group();group.name=spec.name;group.position.set(site.x,y,site.z);
  const palettes=[spec.wall,[[.55,.38,.23],[.28,.22,.16],[.13,.14,.12]],[[.47,.53,.43],[.25,.32,.29],[.12,.2,.2]],[[.7,.69,.59],[.4,.43,.39],[.22,.27,.27]],[[.98,.79,.45],[.6,.45,.25],[.26,.25,.19]],[[.85,.81,.65],[.51,.56,.46],[.24,.3,.26]]],mats=palettes.map(p=>makePaint(shared,p)),parts=[],colliders=[];
+ for(const m of mats)if(m.uniforms?.uDistanceHaze)m.uniforms.uDistanceHaze.value=.81;
  const box=(a,b,c,x,dy,z,pal=0,shell=null)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(a,b,c),mats[pal]);mesh.position.set(x,dy,z);mesh.userData.shell=shell;group.add(mesh);parts.push({mesh,count:Math.max(12,Math.min(150,Math.ceil(a*b*c*25+20))),style:()=>({pal,size:[.09,.26],dir:new THREE.Vector3(0,1,0)})});return mesh;};
  const collision=(x,dy,z,hx,hy,hz)=>colliders.push({x:site.x+x,y:y+dy,z:site.z+z,hx,hy,hz});
  box(w+.2,.22,d+.2,0,-.02,0,3);collision(0,-.02,0,X+.1,.11,Z+.1);

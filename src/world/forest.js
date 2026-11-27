@@ -1,3 +1,4 @@
+import {RANGE_GLSL,tileDabs,tileTrunks,silhouettes,nearTile} from './forest-distance.js';
 import {WORLD} from './seed.js';
 import {riverDistance} from './river.js';
 // The wood: tall beeches with a scatter of birch, maple and old oak, thinned along the way and opened at the
@@ -108,6 +109,7 @@ export function createForest(shared) {
   const v = new THREE.Vector3();
 
   for (const t of trees) {
+    t.indexStart=wood.index.length;
     t.ranges = { wood: [wood.position.length / 3], bark: [barkDabs.length / 13], leaf: [leafDabs.length / 10], lobes: [lobes.length / 4] };
     const full = t.tier === 0, some = t.tier === 1;
     const top = t.h * (t.type === BIRCH ? 0.95 : 0.8);
@@ -211,6 +213,7 @@ export function createForest(shared) {
       const across = Math.min(0.5, r * (t.type === BIRCH ? 1.5 : 0.75)) * (some ? 1.5 : 1);
       barkDabs.push(p.x + nx * r, p.y, p.z + nz * r, t.lean[0], 1, t.lean[1], nx, 0, nz, rand() * 1000, across, t.type, (t.type === BIRCH ? Math.min(0.5, r * 2.3) : 1.0 + rand() * 1.5) * (some ? 1.6 : 1));
     }
+    t.indexEnd=wood.index.length;
     t.ranges.wood.push(wood.position.length / 3);
     t.ranges.bark.push(barkDabs.length / 13);
     t.ranges.leaf.push(leafDabs.length / 10);
@@ -257,9 +260,12 @@ export function createForest(shared) {
     fragmentShader: /* glsl */ `
       ${COMMON}
       ${BARK}
+      ${RANGE_GLSL}
       in vec3 vWorld; in vec3 vN; in vec3 vData; in float vCut;
       layout(location = 0) out vec4 outC;
       void main() {
+        float detail=woodDetail(length(vWorld.xz-cameraPosition.xz));
+        if(detail<.999 && detail<=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715)))))discard;
         vec3 Nn = normalize(vN);
         float grain = texture(tNoise, vec2(atan(Nn.z, Nn.x) * 1.3 + vData.y, vWorld.y * 0.07)).r;
         vec3 c = bark(int(vData.x + 0.5), vWorld, Nn, grain, vData.z) * (0.72 + 0.3 * grain);
@@ -282,10 +288,10 @@ export function createForest(shared) {
   }
   const barkVisible=new Float32Array(nb).fill(1);
   const barkMesh = dabMesh(dabGeometry(nb, { aPos: [bp, 3], aDir: [bd, 3], aNrm: [bn, 3], aData: [bx, 4], aVisible:[barkVisible,1] }), dabMaterial(shared, {
-    head: BARK + /* glsl */ `in vec3 aPos; in vec3 aDir; in vec3 aNrm; in vec4 aData; in float aVisible;`,
+    head: BARK + RANGE_GLSL + /* glsl */ `in vec3 aPos; in vec3 aDir; in vec3 aNrm; in vec4 aData; in float aVisible;`,
     body: /* glsl */ `
       void makeDab(inout Dab d) {
-        if(aVisible<.5){d.alive=0.0;return;}
+        d.alive=woodDetail(length(aPos.xz-cameraPosition.xz));if(aVisible<.5||d.alive<.004){d.alive=0.0;return;}
         vec4 r = hash4(aData.x);
         int k = int(aData.z + 0.5);
         vec3 Nn = normalize(aNrm);
@@ -319,7 +325,7 @@ export function createForest(shared) {
     for (let k = 0; k < 4; k++) lx[i * 4 + k] = leafDabs[i * 10 + 6 + k];
   }
   const leafMesh = dabMesh(dabGeometry(nl, { aPos: [lp, 3], aNrm: [ln, 3], aData: [lx, 4] }), dabMaterial(shared, {
-    head: LEAF + /* glsl */ `in vec3 aPos; in vec3 aNrm; in vec4 aData;`,
+    head: LEAF + RANGE_GLSL + /* glsl */ `in vec3 aPos; in vec3 aNrm; in vec4 aData;`,
     body: /* glsl */ `
       void makeDab(inout Dab d) {
         vec4 r = hash4(aData.x);
@@ -327,10 +333,10 @@ export function createForest(shared) {
         vec3 toEye = cameraPosition - aPos;
         float dist = length(toEye);
         // far crowns are fewer, larger touches
-        float keep = mix(1.0, 0.3, smoothstep(35.0, 130.0, dist));
+        float keep = mix(1.0, 0.3, smoothstep(35.0, 106.0, dist));
         // (they leave and come back by growing, never at a stroke)
         d.alive = aData.w > 0.5 ? 1.0 : smoothstep(0.0, 1.0, (keep - q.w) / 0.12);
-        if (d.alive <= 0.0) return;
+        d.alive*=woodDetail(length(toEye.xz));if (d.alive <= 0.0) return;
         float gust = gustAt(aPos.xz);
         vec3 P = aPos;
         float high = clamp((P.y - heightAt(P.xz)) / 20.0, 0.1, 1.0);
@@ -386,9 +392,13 @@ export function createForest(shared) {
   shade.add(balls);
 
   const group = new THREE.Group();
-  group.add(woodMesh, barkMesh, leafMesh);
+  woodMesh.visible=false;group.add(woodMesh);
+  const barkTiles=tileDabs(barkMesh),leafTiles=tileDabs(leafMesh),far=silhouettes(shared,trees,lobes);
+  const tiles=[...tileTrunks(woodMesh,trees),...barkTiles.tiles,...leafTiles.tiles];
+  group.add(far.mesh);for(const t of tiles)group.add(t.mesh);
+  function updateDistance(eye){for(const t of tiles)t.mesh.visible=nearTile(t,eye,124);}
   // Keep each tree's own brush marks together when it falls. Unchanged trees retain their original buffers.
-  function poseTree(t, angle, dx, dz, hidden = false, sink = 0) {
+  function poseTree(t, angle, dx, dz, hidden = false, sink = 0, scale = 1) {
     if (!t.original) {
       t.original = [];
       for (const [g, names, range] of [[woodGeometry, ['position', 'normal'], t.ranges.wood], [barkMesh.geometry, ['aPos', 'aDir', 'aNrm'], t.ranges.bark], [leafMesh.geometry, ['aPos', 'aNrm'], t.ranges.leaf]]) {
@@ -396,12 +406,12 @@ export function createForest(shared) {
       }
     }
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(dz, 0, -dx).normalize(), angle);
-    const origin = new THREE.Vector3(t.x, t.y + 0.38, t.z), v = new THREE.Vector3();
+    const origin = new THREE.Vector3(t.x, t.y + (scale===1?.38:0), t.z), v = new THREE.Vector3();
     for (const {attr, name, start, end, data} of t.original) {
       const point = name === 'position' || name === 'aPos';
       for (let i = start; i < end; i++) {
         v.fromArray(data, (i-start)*3);
-        if (point) v.sub(origin);
+        if (point) v.sub(origin).multiplyScalar(scale);
         v.applyQuaternion(q);
         if (point) v.add(origin);
         if (point) v.y -= hidden ? 250 : sink;
@@ -410,18 +420,19 @@ export function createForest(shared) {
       attr.needsUpdate = true;
     }
     for (let i = t.ranges.lobes[0]; i < t.ranges.lobes[1]; i++) {
-      const r = lobes[i*4+3]*0.36;
-      v.set(lobes[i*4], lobes[i*4+1], lobes[i*4+2]).sub(origin).applyQuaternion(q).add(origin);
+      const r = lobes[i*4+3]*0.36*scale;
+      v.set(lobes[i*4], lobes[i*4+1], lobes[i*4+2]).sub(origin).multiplyScalar(scale).applyQuaternion(q).add(origin);
       v.y -= hidden ? 250 : sink;
       m4.makeScale(r,r*0.8,r).setPosition(v); balls.setMatrixAt(i,m4);
     }
     balls.instanceMatrix.needsUpdate = true;
+    barkTiles.sync(...t.ranges.bark);leafTiles.sync(...t.ranges.leaf);far.set(t,!hidden&&scale>.84&&Math.abs(angle)<.07);
   }
   function carveTree(t,contact,nx,nz,damage){
     poseTree(t,0,1,0);
     if(!t.uncut)t.uncut=t.original.map(o=>o.data.slice());
     t.original.forEach((o,i)=>o.data.set(t.uncut[i]));
-    const cut={...cutShape(t.r,damage),...contact,nx,nz,radius:t.r};
+    const cut={...cutShape(t.r,damage,t.type===OAK||t.type===MAPLE),...contact,nx,nz,radius:t.r};
     const pos=t.original.find(o=>o.attr===woodGeometry.attributes.position),normal=t.original.find(o=>o.attr===woodGeometry.attributes.normal);
     const marks=woodGeometry.attributes.aCut;
     for(let i=0;i<pos.data.length;i+=3){
@@ -448,6 +459,6 @@ export function createForest(shared) {
     woodGeometry.attributes.aCut.needsUpdate=true;barkMesh.geometry.attributes.aVisible.needsUpdate=true;
     t.uncut=null;t.cut=null;poseTree(t,0,1,0);
   }
-  function clearBrush(x,z,radius){for(const [mesh,start]of [[leafMesh,brushStart.leaf],[barkMesh,brushStart.bark]]){const attr=mesh.geometry.attributes.aPos;let changed=false;for(let i=start;i<attr.count;i++)if(attr.getY(i)>-100&&Math.hypot(attr.getX(i)-x,attr.getZ(i)-z)<radius){attr.setY(i,-250);changed=true;}if(changed)attr.needsUpdate=true;}}
-  return { clearBrush,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
+  function clearBrush(x,z,radius){for(const [mesh,start]of [[leafMesh,brushStart.leaf],[barkMesh,brushStart.bark]]){const attr=mesh.geometry.attributes.aPos;let changed=false;for(let i=start;i<attr.count;i++)if(attr.getY(i)>-100&&Math.hypot(attr.getX(i)-x,attr.getZ(i)-z)<radius){attr.setY(i,-250);(mesh===leafMesh?leafTiles:barkTiles).sync(i,i+1);changed=true;}if(changed)attr.needsUpdate=true;}}
+  return { updateDistance,clearBrush,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
 }

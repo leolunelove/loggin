@@ -18,6 +18,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  const y=Math.max(...[-1.8,1.8].flatMap(x=>[-1.5,1.5].map(z=>heightAt(site.x+x,site.z+z))));
  group.position.set(site.x,y,site.z);
  const palettes=[PLANK,TIMBER,ROOF,DARK,CUT,WINDOW,[[.85,.88,.80],[.45,.52,.48],[.17,.22,.22]],[[.89,.86,.72],[.57,.59,.46],[.23,.28,.25]]],materials=palettes.map(p=>makePaint(shared,p,{grain:4})),parts=[];
+ for(const m of materials)if(m.uniforms?.uDistanceHaze)m.uniforms.uDistanceHaze.value=.81;
  const colliders=[];let shell=null;const rearDoorParts=[];
  function part(geometry,pal,position,count=35,size=[.1,.32],dir=UP){
   const m=new THREE.Mesh(geometry,materials[pal]);m.position.set(...position);if(shell)m.userData.shell=shell;group.add(m);

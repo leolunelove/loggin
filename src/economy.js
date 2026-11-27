@@ -1,3 +1,4 @@
+import {readWoodland} from './woodland.js';
 import {freshPlaces} from './exploration.js';
 import {sanitizeAppearance,defaultAppearance} from './appearance.js';
 export const AXES = [
@@ -13,7 +14,7 @@ export const TREES = [
   { name: 'Old oak', health: 16, wood: 45 },
   { name: 'Maple', health: 9, wood: 22 },
 ];
-export const freshState = () => ({ version: 1, places:freshPlaces(), day:1, hour:9, fire:0, wood: 0, carried: 0, seed:0, appearance:defaultAppearance(), sawmill:0, planks:0, porch:0, lodge:0, millJob:null, shed: 0, hardwood: 0, carriedHardwood: 0, total: 0, felled: 0, axe: 0, speed: 0, yield: 0, sound: true, low: false, sensitivity: 1, down: {} });
+export const freshState = () => ({ version: 1, places:freshPlaces(), woodland:readWoodland(), day:1, hour:9, fire:0, wood: 0, carried: 0, seed:0, appearance:defaultAppearance(), sawmill:0, planks:0, porch:0, lodge:0, millJob:null, shed: 0, hardwood: 0, carriedHardwood: 0, total: 0, felled: 0, axe: 0, speed: 0, yield: 0, sound: true, low: false, sensitivity: 1, down: {} });
 export function sanitize(data) {
   const s = freshState();
   // Existing balances remain stored at the shack. New harvests travel in the bag.
@@ -24,6 +25,8 @@ export function sanitize(data) {
   for (const [k,v] of Object.entries(data?.down || {})) if (/^\d{1,5}$/.test(k) && Number.isFinite(v) && v > Date.now()) s.down[k] = Math.min(v, Date.now()+90000);
   s.shed=Math.max(0,Math.min(40,Math.floor(Number(data?.shed)||0)));
   s.carriedHardwood=Math.min(s.carried,s.carriedHardwood);
+  s.hardwood=Math.min(s.wood,s.hardwood);
+  s.woodland=readWoodland(data?.woodland);
   s.seed=Math.max(0,Math.min(4294967295,Math.floor(Number(data?.seed)||0)));
   s.appearance=sanitizeAppearance(data?.appearance);
   for(const [key,max] of [['sawmill',40],['porch',12],['lodge',24]])s[key]=Math.max(0,Math.min(max,Math.floor(Number(data?.[key])||0)));
@@ -43,7 +46,7 @@ export function purchase(s,kind) {
   const cost=upgradeCost(s,kind);
   if (cost === null || s.wood < cost || (kind==='axe' && s.axe>=1 && (s.hardwood||0)<8)) return false;
   if(kind==='axe' && s.axe>=1)s.hardwood-=8;
-  s.wood -= cost; s[kind]++; return true;
+  s.wood -= cost; s.hardwood=Math.min(s.hardwood,s.wood); s[kind]++; return true;
 }
 export function depositWood(s,requested=s.carried) {
   const amount=Math.min(s.carried,Math.max(0,requested),Math.max(0,1e12-s.wood));

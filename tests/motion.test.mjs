@@ -5,6 +5,9 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {Follow} from '../src/figure/camera.js';
 import {Player} from '../src/figure/player.js';
+import {workClothes} from '../src/figure/work-clothes.js';
+import {paint} from '../src/figure/figure.js';
+import {characterPalettes,defaultAppearance} from '../src/appearance.js';
 import {Animator} from '../src/figure/animator.js';
 import {ChopAnimation,AXE_BLADE,LOWER_GRIP} from '../src/figure/chop.js';
 import {chopContact,swingPose,CHOP_REACH,IMPACT_AT,SWING_VARIANTS,chooseSwing} from '../src/mechanics.js';
@@ -30,6 +33,24 @@ test('mouse look settles quickly without overshoot and gives the same turn at 30
   follow.yaw=0;follow.look({x:0,y:0},1/fps);assert.equal(follow.yaw,0,'respawn/external heading resets do not spring back');
  }
  for(const r of results)assert.ok(Math.abs(r[0]-results[0][0])<1e-9);
+});
+
+test('all nine workwear and hat pairings stay on the correct bones and repaint in place',async()=>{
+ const man=await character(),a=defaultAppearance(),p=characterPalettes(a);
+ const wardrobe=workClothes({},man,paint,p.HAT,p.SHIRT),parts=[];
+ man.object.traverse(o=>{if(o.name==='work-clothing')parts.push(o);});
+ for(let headwear=0;headwear<3;headwear++)for(let workwear=0;workwear<3;workwear++){
+   wardrobe.set({...a,headwear,workwear},p);wardrobe.update();
+   const hats=parts.filter(m=>m.visible&&m.userData.hatStyle>=0);
+   const clothes=parts.filter(m=>m.visible&&m.userData.coatStyle>=0);
+   assert.ok(hats.length>=2);assert.ok(hats.every(m=>m.userData.hatStyle===headwear&&m.parent===man.bones.Head));
+   assert.equal(clothes.length>0,workwear>0);assert.ok(clothes.every(m=>m.userData.coatStyle===workwear));
+   const bounds=new THREE.Box3();for(const hat of hats)bounds.expandByObject(hat);
+   assert.ok(bounds.min.y>1.65&&bounds.max.y<2.03&&bounds.getSize(new THREE.Vector3()).x>.18);
+ }
+ const other=characterPalettes({...a,hat:3});wardrobe.set({...a,hat:3},other);
+ assert.deepEqual(wardrobe.hat.material.uniforms.uM.value.toArray(),other.HAT[1]);
+ const marks=wardrobe.mesh.material.uniforms.FIG_M.value[0];assert.deepEqual(marks.toArray(),other.HAT[1]);
 });
 
 test('character turning follows the shortest arc and eases into its final heading',()=>{

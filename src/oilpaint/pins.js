@@ -43,15 +43,14 @@ export function pinDabs(shared, palettes, parts) {
   pins.forEach((pin, i) => aData.set([pin.seed, pin.size[0], pin.size[1], pin.pal], i * 4));
   const geometry = dabGeometry(count, { aPos: [aPos, 3], aDir: [aDir, 3], aNrm: [aNrm, 3], aVisible: [aVisible, 1] }, true);
   geometry.setAttribute('aData', new THREE.InstancedBufferAttribute(aData, 4));
-  const list = (k) => palettes.map((p) => `vec3(${p[k].map((x) => x.toFixed(3))})`).join(', ');
+  const colors = k => ({value: palettes.map(p => new THREE.Vector3(...(p[k] ?? p[0])))});
+  const paletteUniforms = {FIG_L:colors(0), FIG_M:colors(1), FIG_S:colors(2), FIG_A:colors(3)};
   const n = palettes.length;
   const mesh = dabMesh(geometry, dabMaterial(shared, {
     head: /* glsl */ `
       in vec3 aPos; in vec3 aDir; in vec3 aNrm; in vec4 aData; in float aVisible;
-      const vec3 FIG_L[${n}] = vec3[${n}](${list(0)});
-      const vec3 FIG_M[${n}] = vec3[${n}](${list(1)});
-      const vec3 FIG_S[${n}] = vec3[${n}](${list(2)});
-      const vec3 FIG_A[${n}] = vec3[${n}](${palettes.map((p) => `vec3(${(p[3] ?? p[0]).map((x) => x.toFixed(3))})`).join(', ')});`,
+      uniform vec3 FIG_L[${n}], FIG_M[${n}], FIG_S[${n}], FIG_A[${n}];`,
+    uniforms: paletteUniforms,
     body: /* glsl */ `
       void makeDab(inout Dab d) {
         if (aVisible < 0.5) { d.alive = 0.0; return; }
@@ -82,6 +81,9 @@ export function pinDabs(shared, palettes, parts) {
   return {
     mesh,
     count,
+    setPalette(index,palette) {
+      Object.values(paletteUniforms).forEach((u,k)=>u.value[index].set(...(palette[k]??palette[0])));
+    },
     update() {
       for (let i = 0; i < count; i++) {
         const pin = pins[i], m = pin.mesh, k = i * 3;

@@ -32,16 +32,28 @@ The finished porch adds a rug. Completing the cabin extension removes the rear p
 
 ## Build a bigger camp
 
-After the woodshed, use **U → Grow your camp** while near the shack:
+After the woodshed, open **U → Camp** near the shack.
 
 - Contribute up to 8 hardwood at a time to the sawmill. Its foundations, posts, beams, cutting bed and roof appear as the 40-hardwood project advances. Contributions consume stored hardwood and its corresponding logs.
 - At the completed sawmill, 8 ordinary stored logs become 2 planks in 3 seconds. Hardwood is reserved for construction and tools. An active cutting job survives a reload and completes only once.
 - Spend 12 planks on the visible camp porch to cut milling time to 2 seconds.
 - Then spend 24 planks on a cabin extension, adding a visible rear room and 32 carrying capacity.
 
+## Life along the trails
+
+A restored home's ledger has **Home**, **Trail & cart** and **Projects** pages. Stored wood is shared instantly. You can spend it at another home while the hauler is still on the road.
+
+- **Haul timber.** Finish a 40-log trail, build a handcart for 8 planks, then hire a hauler for 16 ordinary logs. Press R beside the cart to stow a bag, take the handles or send a hired hand on rounds. The cart holds 192 logs. It rolls faster on connected trails and slowly across rough woodland.
+- **Orchard Rest.** Take apples from the basket or the home ledger. A lunch lasts three camp hours and gives a 16% faster sprint. Find the blazed post to learn how to build three working trail lanterns.
+- **Riverwatch.** Build the footbridge in four spans and cross to a stacking rack beside the eastern grove. Loads left there go straight into shared stock and appear in the hauler’s collection queue. The old ferryman left a pennant for the landing.
+- **Pine Hollow.** Dress the axe edge for 8 hardwood and 4 planks, reinforce the cart to hold 288 logs, and lay timber steps to the charcoal kiln. Its old rafters teach you how to build a rain shelter and delivery rack along the trail.
+- **Tend the woods.** Cut windthrown trunks along their chalk rings, hold Shift for a stronger stroke on tough wood, and look for figured oak and curly maple. Near a home, press R to blaze a mature tree for protection. Felled clearings flower, grow saplings and fill in with young trees as they recover.
+
+Detailed tree crowns fade into painted silhouettes between 68 and 106 metres. Rain and morning mist draw in the horizon while roofs and chimney smoke remain visible as bearings.
+
 ## Your lumberjack and world
 
-Choose shirt, hat, bag, skin tone and hair in the live 3D entry preview. Turn the character to inspect the outfit before entering. Choices are saved with the camp.
+Choose a work shirt, quilted vest or split mill apron and pair it with a field brim, watch cap or rail cap. Five sets of colour swatches cover shirt, hat, bag, skin and hair. Turn the preview to see the fit from behind. It uses the same painted character, equipment, idle animation and bag load as the forest. Revisit **Settings → Visit the outfitter** to change clothes where you stand.
 
 New camps roll a random seed for terrain, tree layout and a winding, shallow river. A clear camp footprint and nearby starter trees keep the first deliveries approachable. The entry sequence reveals ground, water, tree batches and camp from an overview. Reloading a save rebuilds the same world; it does not reroll progress. Legacy seed-zero saves preserve their tree ordering.
 
@@ -57,6 +69,8 @@ New camps roll a random seed for terrain, tree layout and a winding, shallow riv
 | Hold left mouse / E / Space | Chop nearby trees |
 | E / left mouse at rack | Start unloading |
 | Right-click / Q | Toggle tree lock; strafe while keeping the tree in view |
+| R | Manage the nearby handcart, or reserve/release an eligible tree near a home |
+| Shift + chop | Heavy stroke on hardwood or a fallen trunk |
 | Mouse wheel | Zoom |
 | U | Upgrades |
 | Esc | Release cursor / close menu |

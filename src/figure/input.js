@@ -97,6 +97,7 @@ export class Input {
       strafe: this.active || k.has('KeyF'),
       jump: this.pressed.has('Space'),
       interactPressed:this.pressed.has('KeyE')||this.pressed.has('Interact'),
+      fieldPressed:this.pressed.has('KeyR'),
       aimPressed: this.pressed.has('Aim') || this.pressed.has('KeyQ'),
       look: { x: this.mouse.x * this.sensitivity + this.touchLook.x, y: this.mouse.y * this.sensitivity + this.touchLook.y },
       zoom: this.mouse.wheel,

@@ -85,7 +85,8 @@ export class Player {
     else if (input.device === 'pad' && mag < 0.6) speed = S.walk * (mag / 0.6);
     else if (input.sprint && (!input.strafe || m.y > 0.7)) speed = S.sprint;
     else speed = input.device === 'pad' ? THREE.MathUtils.lerp(S.walk, S.run, (mag - 0.6) / 0.4) : S.run;
-    return { dir, mag, speed:speed*(input.trailBoost?1.25:1), dirYaw: Math.atan2(dir.x, dir.z) };
+    const scale=(input.trailBoost?1.25:1)*(input.provisioned&&input.sprint?1.16:1);
+    return { dir, mag, scale, speed:input.cartSpeed?Math.min(speed,input.cartSpeed):speed*scale, dirYaw: Math.atan2(dir.x, dir.z) };
   }
 
   // --- each frame ---------------------------------------------------------------------------
@@ -119,14 +120,14 @@ export class Player {
       }
       // start walking from standing: a real first step
       // (not while pushing into a wall: he'd replay the first step over and over)
-      if (idle && !(this.wallTime > 0) && !this.strafe && want.mag > 0.05 && want.speed <= A.setup.speeds.walk + 0.01 && Math.abs(angleWrap(want.dirYaw - this.yaw)) < 0.9 && this.grounded) {
+      if (idle && !input.cartSpeed && !(this.wallTime > 0) && !this.strafe && want.mag > 0.05 && want.speed <= A.setup.speeds.walk + 0.01 && Math.abs(angleWrap(want.dirYaw - this.yaw)) < 0.9 && this.grounded) {
         this.yaw = want.dirYaw;
         this.mode = 'start';
         A.enter(A.oneShot('start', 'AM_Idle_To_Walk', { from: 0.06, to: 0.62, rate: 1.15 }), 0.2);
         return this.step(dt, new THREE.Vector3(), true);
       }
       // the same into a run or sprint: anymove's first steps, from a stand to 5 m/s in about a second
-      if (idle && !(this.wallTime > 0) && !this.strafe && want.mag > 0.05 && want.speed > A.setup.speeds.walk + 0.1 && Math.abs(angleWrap(want.dirYaw - this.yaw)) < 0.9 && this.grounded) {
+      if (idle && !input.cartSpeed && !(this.wallTime > 0) && !this.strafe && want.mag > 0.05 && want.speed > A.setup.speeds.walk + 0.1 && Math.abs(angleWrap(want.dirYaw - this.yaw)) < 0.9 && this.grounded) {
         this.yaw = want.dirYaw;
         this.mode = 'start';
         A.enter(A.oneShot('start', want.speed > A.setup.speeds.run + 0.1 ? 'Idle_To_Sprint' : 'Idle_To_Run', { from: 0.03, to: 0.72 }), 0.15);
@@ -134,13 +135,13 @@ export class Player {
       }
       // stop: let go while moving
       this.moveTime = this.speed > 0.5 ? (this.moveTime ?? 0) + dt : 0;
-      if (!this.strafe && want.mag < 0.05 && this.grounded && this.speed > 0.9 && this.moveTime > 0.6) {
+      if (!input.cartSpeed && !this.strafe && want.mag < 0.05 && this.grounded && this.speed > 0.9 && this.moveTime > 0.6) {
         const clip = this.speed > A.setup.speeds.run + 0.4 ? 'Sprint_To_Idle' : this.speed > 2.4 ? 'Run_To_Idle' : 'AM_Walk_To_Idle';
         const from = A.match(clip, A.currentFeet(), 0, 0.3);
         this.mode = 'stop';
         this.stopSpeed = this.speed;
         A.enter(A.oneShot('stop', clip, { from, to: 0.92 }), 0.22);
-        if (this.sprintTime > 1.5) this.tiredFor = 6;
+        if (this.sprintTime > 1.5 && !input.provisioned) this.tiredFor = 6;
         return this.step(dt, new THREE.Vector3(), true);
       }
       // ordinary movement
@@ -157,7 +158,7 @@ export class Player {
         const fwd = Math.cos(ang), side = Math.abs(Math.sin(ang));
         const S = A.setup.speeds;
         const cap = input.sprint && fwd > 0.7 ? S.sprint : fwd >= 0 ? THREE.MathUtils.lerp(S.strafeJog, S.run * 0.82, fwd * fwd) * (1 - side * 0) : THREE.MathUtils.lerp(S.strafeJog, S.walk * 1.15, fwd * fwd);
-        const target = Math.min(want.speed, cap);
+        const target = Math.min(want.speed, cap*want.scale);
         this.speed = approach(this.speed, target, (target > this.speed ? this.t.accel.run : this.t.decel) * dt);
         if (want.mag > 0.05) this.moveAngle = ang;
         this.moveDir = want.mag > 0.05 ? want.dir.clone() : this.moveDir ?? f.clone();

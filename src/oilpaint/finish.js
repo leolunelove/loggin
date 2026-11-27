@@ -103,6 +103,7 @@ export function createFrame(renderer, shared, { samples = 4 } = {}) {
   return {
     target,
     uniforms,
+    dispose() { target.dispose(); quad.geometry.dispose(); material.dispose(); },
     resize() {
       renderer.getDrawingBufferSize(size);
       target.setSize(size.x, size.y);

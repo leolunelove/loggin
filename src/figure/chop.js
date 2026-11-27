@@ -53,6 +53,7 @@ export class ChopAnimation {
   const {man,animator,axe}=this,body=man.object,b=man.bones,scale=1+tier*.04;
   const variant=SWING_VARIANTS[swing?.variant]||SWING_VARIANTS[0];
   const p=swing?(swing.poseProgress??swing.age/swing.duration):0,pose=swing?swingPose(p,swing.variant,swing.finishing):null;
+  if(pose&&swing.t.windthrow){const crouch=smooth(p/.35)*(1-smooth((p-.59)/.41));pose.sink+=.27*crouch;pose.lean+=.46*crouch;}
   if(swing)this.release=0;else this.release=Math.min(1,this.release+dt/.14);
   const releaseWeight=1-smooth(this.release),lean=pose?.lean??(this.last?.lean||0)*releaseWeight,twist=pose?.twist??(this.last?.twist||0)*releaseWeight;
   const bodyQ=body.getWorldQuaternion(new THREE.Quaternion()),forward=new THREE.Vector3(0,0,1).applyQuaternion(bodyQ),right=new THREE.Vector3(-1,0,0).applyQuaternion(bodyQ);

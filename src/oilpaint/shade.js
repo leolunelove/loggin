@@ -42,6 +42,7 @@ export function createShade(renderer, shared, still, { sun = SUN, size = [4096, 
   shared.tFigShade.value = fig.depthTexture;
   const depthOnly = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
   return {
+    dispose() { wood.dispose(); fig.dispose(); depthOnly.dispose(); },
     refresh() {
       renderer.setRenderTarget(wood); renderer.clear(); renderer.render(still, sunCam); renderer.setRenderTarget(null);
     },

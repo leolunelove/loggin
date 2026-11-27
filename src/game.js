@@ -1,3 +1,8 @@
+import {woodcraft} from './world/woodcraft.js';
+import {createHandcart} from './world/handcart.js';
+import {createFieldwork} from './world/fieldwork.js';
+import {outpostPage,cartPage,haulStatus} from './woodland-ui.js';
+import {PROJECT,FINDS,useSpecialty,contributeLocal,hireHauler,noteFreight,figuredTree,strokePower,packedLunch,recoveryAge} from './woodland.js';
 import {createSettlements} from './world/settlements.js';
 import {PLACES,restored,contributePlace} from './exploration.js';
 import {weatherAt,shelterAt} from './weather.js';
@@ -11,7 +16,7 @@ import {newCamp,SAVE_KEY} from './save.js';
 import * as THREE from 'three';
 import { paint } from './figure/figure.js';
 import { pinDabs } from './oilpaint/pins.js';
-import { AXES, TREES, upgradeCost, purchase, swingDuration, rewardFor, depositWood, bagCapacity, isHardwood, canHarvest, harvestFits } from './economy.js';
+import { AXES, TREES, upgradeCost, purchase, swingDuration, rewardFor, depositWood, bagCapacity, isHardwood, canHarvest, } from './economy.js';
 import { atWoodRack,homeDistance } from './world/home-site.js';
 const $ = id => document.getElementById(id);
 const UP = new THREE.Vector3(0,1,0);
@@ -30,7 +35,7 @@ const nice = n => new Intl.NumberFormat('en',{notation:n>=10000?'compact':'stand
 export class Lumberjack {
  constructor({scene,camera,renderer,shared,forest,player,input,figure,animator,physics,RAPIER,shade,heightAt,follow,home}) {
   Object.assign(this,{scene,camera,renderer,shared,forest,player,input,figure,animator,physics,RAPIER,shade,heightAt,follow,home});
-  try{this.storage=window.localStorage;}catch{this.storage=null;}
+  try{this.storage=WORLD.storage===undefined?window.localStorage:WORLD.storage;}catch{this.storage=null;}
   const saved=readSave(this.storage);if(WORLD.state)saved.state=WORLD.state;
   this.state=saved.state;this.saveStatus=saved.status;this.input.sensitivity=.0022*this.state.sensitivity;this.audio=new ForestAudio();this.started=false;this.paused=false;this.held=false;this.swing=null;this.target=null;this.chips=[];this.falling=[];this.time=0;this.uiClock=0;
   this.woodPaint=paint(shared,WOOD);this.cutPaint=paint(shared,CUT);this.steelPaint=paint(shared,STEEL);
@@ -41,7 +46,9 @@ export class Lumberjack {
   forest.trees.forEach((t,i)=>{t.id=i;t.hp=TREES[t.type].health;if(this.state.down[i]){t.down=true;t.regrow=this.state.down[i];forest.poseTree(t,0,0,1,true);if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}this.makeStump(t);this.makeLogs(t,Math.sin(t.seed),Math.cos(t.seed));}});
   if(Object.keys(this.state.down).length)shade.refresh();
   this.weatherFX=createWeather(shared,home,heightAt);scene.add(this.weatherFX.group);
-  this.exploration=createSettlements(this);this.exploration.sync(this.state);shade.refresh();
+  this.exploration=createSettlements(this);this.exploration.sync(this.state);
+  const craft=woodcraft(shared);this.field=createFieldwork(this,craft);this.field.sync();
+  this.cart=createHandcart(this,craft);this.cart.update(0);shade.refresh();
   this.bind();this.renderHud();this.updateSaveNote();this.applyQuality();
  }
  save(){
@@ -82,9 +89,14 @@ export class Lumberjack {
   $('start').onclick=start;
   $('ledger-workbench').onclick=()=>{$('ledger').addEventListener('close',()=>this.open('upgrades'),{once:true});$('ledger').close();};
   $('sleep').onclick=()=>{if(!this.insideShack||!canSleep(this.state))return;$('ledger').addEventListener('close',()=>this.beginSleep(),{once:true});$('ledger').close();};
-  $('outpost-project').onclick=e=>{const kind=e.target.closest('[data-outpost]')?.dataset.outpost;if(!kind)return;const p=this.state.places[this.placeIndex];if(kind==='unload'){depositWood(this.state,this.state.carried);}else if(kind==='sleep'&&restored(p)&&canSleep(this.state)){$('outpost').addEventListener('close',()=>{this.beginSleep(true);},{once:true});$('outpost').close();return;}else contributePlace(this.state,this.placeIndex,kind);this.exploration.sync(this.state);this.shade.refresh();this.renderHud();this.renderOutpost();this.save();};
+  $('outpost-project').onclick=e=>this.networkAction(e);
+  $('cart-project').onclick=e=>this.networkAction(e);
+  $('field-action').onclick=()=>{if(this.started&&!this.paused)this.useFieldKey();};
+  $('change-outfit').onclick=()=>{$('settings').addEventListener('close',()=>window.dispatchEvent(new CustomEvent('loggin:outfitter',{detail:this})),{once:true});$('settings').close();};
+  $('bench-tabs').onclick=e=>{const selected=e.target.closest('[data-bench]');if(!selected)return;
+    for(const tab of $('bench-tabs').querySelectorAll('button')){const active=tab===selected;tab.setAttribute('aria-pressed',String(active));$(tab.dataset.bench).hidden=!active;}};
   $('reload-save').onclick=()=>location.reload();
-  addEventListener('storage',event=>{if(event.key!==SAVE_KEY||this.resetting||!event.newValue)return;this.externalSaveChange=true;this.paused=true;this.held=false;this.swing=null;this.input.lockable=false;this.input.release();$('save-conflict').hidden=false;});
+  addEventListener('storage',event=>{if(event.key!==(this.storage?.eventKey||SAVE_KEY)||this.resetting||!event.newValue)return;this.externalSaveChange=true;this.paused=true;this.held=false;this.swing=null;this.input.lockable=false;this.input.release();$('save-conflict').hidden=false;});
   $('changelog-open').onclick=()=>{$('settings').addEventListener('close',()=>this.open('changelog'),{once:true});$('settings').close();};
   $('reset-open').onclick=()=>{$('settings').addEventListener('close',()=>this.open('reset-dialog'),{once:true});$('settings').close();};
   $('reset-confirm').onclick=()=>{this.save();const next=freshState();next.seed=randomSeed();next.appearance={...this.state.appearance};next.low=this.state.low;next.sound=this.state.sound;this.resetting=true;if(newCamp(this.storage,next))location.reload();else{this.resetting=false;this.toast('The camp could not reset. Browser storage is unavailable.');}};
@@ -126,14 +138,84 @@ export class Lumberjack {
   const stop=()=>{stickId=null;this.input.touchMove={x:0,y:0};knob.style.transform='';};stick.onpointerup=stop;stick.onpointercancel=stop;stick.onlostpointercapture=stop;
  }
  ready(){ $('intro').hidden=false; }
- open(id){if(this.paused||this.sleeping||!this.started)return;this.paused=true;this.held=false;this.input.lockable=false;this.input.release();this.syncCapture();if(id==='outpost')this.renderOutpost();else if(id==='upgrades')this.renderUpgrades();else if(id==='ledger')this.renderLedger();else this.renderSettings();$(id).showModal();}
+ open(id){if(this.paused||this.sleeping||!this.started)return;this.paused=true;this.held=false;this.input.lockable=false;this.input.release();this.syncCapture();if(id==='field-note'){const f=FINDS[this.findKey];$('find-title').textContent=f.name;$('find-story').textContent=f.story;$('find-reward').textContent=f.reward;}else if(id==='outpost')this.renderOutpost();else if(id==='cart-panel')$('cart-project').innerHTML=cartPage(this);else if(id==='upgrades')this.renderUpgrades();else if(id==='ledger')this.renderLedger();else this.renderSettings();$(id).showModal();}
  applyQuality(){
   const low=this.state.low;
   this.renderer.setPixelRatio(Math.min(devicePixelRatio,low?1:1.5));this.renderer.setSize(innerWidth,innerHeight);
   if(this.frame){this.frame.uniforms.uShafts.value=low?0:1;this.frame.resize();}
   if(this.leaves)this.leaves.mesh.geometry.instanceCount=low?900:2400;
  }
- renderOutpost(){const i=this.placeIndex,p=this.state.places[i],ready=restored(p);$('outpost-title').textContent=PLACES[i].name;$('outpost-story').textContent=PLACES[i].story;const button=(kind,text,enabled)=>`<button class="paper" data-outpost="${kind}" ${enabled?'':'disabled'}>${text}</button>`;$('outpost-project').innerHTML=`<p>${this.state.wood-this.state.hardwood} ordinary logs · ${this.state.planks} planks stored · ${this.state.carried} in your bag</p><h3>${ready?'Restored home':'Restore this shack'}</h3><p>Timber ${p.wood} / 24 · Planks ${p.planks} / 8</p>`+(ready?button('unload','Empty bag here',this.state.carried>0)+button('sleep','Sleep until morning',canSleep(this.state)):`${button('wood','Repair · up to 6 stored logs',p.wood<24&&this.state.wood>this.state.hardwood)} ${button('planks','Finish · up to 2 planks',p.wood>=24&&p.planks<8&&this.state.planks>0)}`)+`<h3>Connect to home camp</h3><p>${p.trail} / 40 logs · A trail clears and grows with each contribution. Finished paths give 25% faster travel.</p>`+button('trail',p.trail===40?'Connected':'Lay trail · up to 8 stored logs',ready&&p.trail<40&&this.state.wood>this.state.hardwood); }
+ renderOutpost(){
+  const i=this.placeIndex;$('outpost-title').textContent=PLACES[i].name;$('outpost-story').textContent=PLACES[i].story;
+  $('outpost-project').innerHTML=outpostPage(this.state,i,this.placeTab||'home');
+ }
+ networkAction(e){
+  const button=e.target.closest('[data-outpost]');if(!button||button.disabled)return;
+  const action=button.dataset.outpost,s=this.state,w=s.woodland,i=this.placeIndex,p=s.places[i],atCart=$('cart-panel').open;
+  if(action.startsWith('tab-')){this.placeTab=action.slice(4);this.renderOutpost();$('outpost-project').querySelector('[data-outpost="'+action+'"]')?.focus();return;}
+  if(!atCart&&(!p||this.exploration.nearest(this.player.feet)!==i))return;
+  if(atCart&&!this.cart.near(this.player.feet))return;
+  let changed=false,structure=false;
+  if(action==='sleep'&&!atCart&&restored(p)&&canSleep(s)){
+    $('outpost').addEventListener('close',()=>this.beginSleep(true),{once:true});$('outpost').close();return;
+  }
+  if(action==='unload'&&!atCart&&restored(p)){const n=depositWood(s);noteFreight(s,i,n);changed=n>0;}
+  else if(action==='hire'&&(atCart||p?.trail===40)){changed=hireHauler(s);if(changed)this.cart.dispatch();}
+  else if(atCart){
+    if(action==='stow')changed=this.cart.stow()>0;
+    if(action==='tip')changed=this.cart.emptyAtDepot();
+    if(action==='hitch')changed=this.cart.hitch();
+    if(action==='dispatch')changed=this.cart.dispatch();
+  } else if(['wood','planks','trail'].includes(action)){changed=contributePlace(s,i,action)>0;structure=changed;}
+  else if(Object.hasOwn(PROJECT,action)){changed=contributeLocal(s,i,action);if(changed)this.field.sync();}
+  else changed=useSpecialty(s,i,action);
+  if(!changed)return;
+  if(structure){this.exploration.sync(s);this.field.sync();this.shade.refresh();}
+  this.cart.update(0);this.field.syncSupplies();this.campUiKey=null;this.renderHud();this.save();
+  if(atCart){$('cart-project').innerHTML=cartPage(this);if(action==='hitch'||action==='dispatch')$('cart-panel').close();}
+  else this.renderOutpost();
+  if(action==='meal')this.toast('Orchard lunch · Brisker sprint for three camp hours');
+  if(action==='cart')this.toast('Handcart built · Find it at the trail end outside');
+  if(action==='hire')this.toast(w.cart.running?'Hauler hired · First round underway':'Hauler hired · Send the cart from a connected trail');
+  if(['unload','stow','tip','wood','planks','trail'].includes(action)||Object.hasOwn(PROJECT,action))this.audio.unload(this.player.feet);
+ }
+ fireTakesFocus(){
+  const feet=this.player.feet;if(!this.home?.nearFire?.(feet))return false;
+  const hit=this.nearest();if(!hit.tree||hit.distance>CHOP_REACH)return true;
+  const fire=this.home.fire.position,tree=hit.tree;
+  const forwardX=Math.sin(this.follow.yaw),forwardZ=Math.cos(this.follow.yaw);
+  const alignment=p=>{const dx=p.x-feet.x,dz=p.z-feet.z;return (dx*forwardX+dz*forwardZ)/(Math.hypot(dx,dz)||1);};
+  const fireAim=alignment(fire),treeAim=alignment(tree);
+  if(fireAim<.72||fireAim<treeAim-.035)return false;
+  return fireAim>treeAim+.035||Math.hypot(fire.x-feet.x,fire.z-feet.z)<hit.distance;
+ }
+ workReward(t){return t.windthrow?5+t.section:rewardFor(this.state,t.type)+(figuredTree(t)?6:0);}
+ workFits(t){return this.state.carried+this.workReward(t)<=bagCapacity(this.state);}
+ workAllowed(t){return !this.state.woodland?.reserved.includes(t.id)&&canHarvest(this.state,t.type);}
+ workContact(t,moving){
+  const p=this.player.feet,y=this.player.visualY??p.y;
+  if(t.windthrow)return {x:t.x-.19*Math.sin(t.g.rotation.y),y:t.y+t.r*1.97,z:t.z-.19*Math.cos(t.g.rotation.y)};
+  return (moving?movingChopContact:chopContact)(t,p,y);
+ }
+ fieldKeyLabel(){
+  if(this.cart?.towing||this.cart?.near(this.player.feet))return 'Handcart';
+  if(!this.field)return '';const hit=this.nearest(),t=hit.tree;if(t&&hit.distance<=CHOP_REACH+.35&&this.field?.canReserve(t,this.state))return this.state.woodland.reserved.includes(t.id)?'Release tree':'Reserve tree';
+  return '';
+ }
+ useFieldKey(){
+  const label=this.fieldKeyLabel();if(!label)return false;
+  if(label==='Handcart'){this.open('cart-panel');return true;}
+  const ids=this.state.woodland.reserved,id=this.nearest().tree.id,k=ids.indexOf(id);
+  if(k>=0)ids.splice(k,1);else ids.push(id);
+  this.swing=null;this.field.sync();this.save();this.toast(k>=0?'Tree released for felling':'Tree reserved · A white blaze marks it');return true;
+ }
+ interactLocal(local){
+  const w=this.state.woodland;
+  if(local.type==='find'){if(w.finds.includes(local.item.key))return;w.finds.push(local.item.key);this.field.sync();this.findKey=local.item.key;this.open('field-note');}
+  else if(local.type==='meal'){if(!useSpecialty(this.state,0,'meal'))return;this.toast('Orchard lunch · Brisker sprint for three camp hours');}
+  else {const n=depositWood(this.state);if(!n)return;noteFreight(this.state,local.item.i,n);this.audio.unload(this.player.feet);this.toast(n+' logs stacked · Available at every home');}
+  this.field.syncSupplies();this.renderHud();this.save();
+ }
  renderSettings(){ $('sensitivity').value=this.state.sensitivity;$('sensitivity-value').textContent=this.state.sensitivity.toFixed(2)+'×';$('sound').textContent=this.state.sound?'On':'Off';$('sound').setAttribute('aria-pressed',String(this.state.sound));$('quality').textContent=this.state.low?'Low':'High';$('lifetime').textContent=`${nice(this.state.felled)} trees felled · ${nice(this.state.total)} wood gathered`; }
  renderHud(){ this.tools.equip(this.state.axe);this.figure.pack.setWood(this.state.carried);this.home.setWood(this.state.wood);this.home.setProject(this.state.shed||0);this.home.setCamp?.(this.state);this.syncCampColliders();$('wood').textContent=nice(this.state.carried)+' / '+bagCapacity(this.state);$('project-status').textContent=(this.state.shed||0)<40?`Woodshed · ${this.state.shed||0} / 40 timber delivered`:this.state.sawmill<40?`Sawmill · ${this.state.sawmill||0} / 40 hardwood\n${this.state.hardwood||0} hardwood stored · U to build`:`Sawmill ready · ${this.state.planks||0} planks\n${this.state.hardwood||0} hardwood stored · U for camp`; $('stored-wood').textContent=nice(this.state.wood);$('axe-name').textContent=AXES[this.state.axe].name;if($('ledger').open)this.renderLedger(); }
  renderUpgrades(){
@@ -147,6 +229,11 @@ export class Lumberjack {
     const hardLocked=kind==='axe'&&s.axe>=1&&(s.hardwood||0)<8;const cost=upgradeCost(s,kind),short=cost===null?0:Math.max(0,cost-s.wood);
     return `<div class="upgrade-row">${kind==='axe'?axeIcon(Math.min(4,s.axe+1)):''}<div class="upgrade-description"><h3>${name}</h3><p>${desc}</p><small>${level}</small></div><div class="buy-wrap"><button class="buy" data-buy="${kind}" ${cost===null||short||hardLocked?'disabled':''} aria-label="${cost===null?'Fully upgraded':`Buy ${name} for ${cost} wood`}">${cost===null?'Complete':nice(cost)+' wood'+(kind==='axe'&&s.axe>=1?' + 8 hardwood':'')}</button>${hardLocked?'<span class="shortfall">8 hardwood required</span>':''}${short?`<span class="shortfall">${nice(short)} more needed</span>`:''}</div></div>`;
   }).join('');
+  const w=s.woodland;
+  $('woodland-notes').innerHTML=PLACES.map((place,i)=>{
+    const p=s.places[i],body=p.found?(restored(p)?['Apple kitchen · Lunch each morning','East-bank expedition rack','Axes and cart fittings'][i]:'Repair the home with 24 logs and 8 planks'):['Look west for three apple trees.','Follow the river north to the landing.','Find the ridge beyond the orchard.'][i];
+    return '<section class="journal-row"><h3>'+(p.found?place.name:['Orchard','River stop','Logging lodge'][i])+'</h3><p>'+body+'</p>'+(p.found?'<p>'+p.trail+' / 40 trail logs</p>':'')+'</section>';
+  }).join('')+'<section class="journal-row"><h3>Field notes</h3><p>'+w.reserved.length+' reserved trees · '+w.finds.length+' / 3 discoveries</p>'+w.finds.map(k=>'<p>'+FINDS[k].name+' · '+FINDS[k].reward+'</p>').join('')+(w.cart.built?'<p>'+haulStatus(s)+'</p>':'')+'</section>';
   this.renderCamp();this.updateSaveNote();
  }
  syncCampColliders(){
@@ -161,6 +248,7 @@ export class Lumberjack {
   const s=this.state;
   $('sleep').disabled=!this.insideShack||!canSleep(s);$('sleep-note').textContent=canSleep(s)?'Rest until 06:30. Your bag and supplies stay safe.':'Come back after 18:00 to turn in for the night.';
   $('ledger-supplies').innerHTML=[['Ordinary logs',Math.max(0,s.wood-s.hardwood)],['Hardwood',s.hardwood||0],['Planks',s.planks||0],['In your bag',`${s.carried} / ${bagCapacity(s)}`]].map(([label,value])=>`<div><span>${label}</span><strong>${typeof value==='number'?nice(value):value}</strong></div>`).join('');
+  $('ledger-network').textContent=(s.woodland.cart.built?haulStatus(s)+' · ':'')+s.woodland.reserved.length+' reserved trees · '+s.woodland.finds.length+' / 3 woodland finds';
   $('ledger-history').textContent=this.state.places.filter(p=>p.found).length+' / 3 woodland shacks discovered · '+`${nice(s.felled)} ${s.felled===1?'tree':'trees'} felled · ${nice(s.total)} timber gathered · ${AXES[s.axe].name} equipped`;
   const projects=[['Campfire','fire',12,'A warm hearth, crackling logs and a welcoming glow'],['Woodshed','shed',40,'A bigger bag and hardwood access'],['Sawmill','sawmill',40,'Cut logs into planks'],['Camp porch','porch',12,'Faster milling'],['Cabin extension','lodge',24,'A furnished rear room and more bag space']];
   $('ledger-projects').innerHTML=projects.map(([name,key,max,benefit])=>`<div class="ledger-project"><div><h3>${name}</h3><span>${s[key]>=max?'Built':`${s[key]||0} / ${max} ${key==='shed'||key==='fire'?'timber':key==='sawmill'?'hardwood':'planks'}`}</span></div><progress max="${max}" value="${s[key]||0}"></progress><p>${benefit}</p></div>`).join('');
@@ -169,7 +257,7 @@ export class Lumberjack {
   const s=this.state,near=homeDistance(this.home,this.player.feet)<=14,working=!!s.millJob;
   const key=[s.fire,s.shed,s.sawmill,s.planks,s.porch,s.lodge,s.wood,s.hardwood,near,working,Math.ceil(s.millJob?.remaining||0)].join(':');if(key===this.campUiKey)return;this.campUiKey=key;
   const button=(kind,text,enabled)=>`<button class="buy" data-camp="${kind}" ${enabled&&near?'':'disabled'}>${text}</button>`;
-  $('camp-projects').innerHTML=`<section class="project-row"><h3>Explore the woodland</h3><p>Follow the signs beside camp. Look west for an orchard, north for the river stop and farther north-west for the old logging crew.</p>${PLACES.map((place,i)=>`<p>${this.state.places[i].found?place.name:'Undiscovered shack'} · ${this.state.places[i].trail===40?'Connected · +25% travel':restored(this.state.places[i])?'Restored':this.state.places[i].found?'Found · Needs repairs':'Explore to find it'}</p>`).join('')}</section><h3>Grow your camp</h3><p>${near?'Build with supplies stored at camp.':'Return to camp to build and cut planks.'}</p>`+
+  $('camp-projects').innerHTML=`<p>${near?'Build with supplies stored at camp.':'Return to camp to build and cut planks.'}</p>`+
    `<div class="project-row"><h3>Campfire</h3><progress max="12" value="${s.fire||0}"></progress><p>${s.fire||0} / 12 ordinary logs · A stone hearth, stacked logs, then a roaring fire.</p>${s.fire>=12?'<p>Lit · A warm welcome, day and night.</p>':button('fire','Add up to 4 logs',s.wood-s.hardwood>0)}</div>`+
    (s.shed<40?'<p>First, deliver 40 timber to finish your woodshed.</p>':`<div class="project-row"><h3>Sawmill</h3><progress max="40" value="${s.sawmill}"></progress><p>${s.sawmill} / 40 hardwood · Foundations → frame → cutting bed → roof.</p>${s.sawmill<40?button('sawmill','Build · up to 8 hardwood',s.hardwood>0):`<p>${s.planks} planks stacked · ${Math.max(0,s.wood-s.hardwood)} ordinary logs available.</p>`+button('mill',working?`Sawing… ${Math.ceil(s.millJob.remaining)}s`:'Saw 8 logs → 2 planks',!working&&s.wood-s.hardwood>=8)}</div>`+
    (s.sawmill<40?'':Object.entries(PROJECTS).map(([kind,p])=>`<div class="project-row"><h3>${p.name}</h3><progress max="${p.cost}" value="${s[kind]}"></progress><p>${s[kind]} / ${p.cost} planks · ${kind==='porch'?'A sheltered place to work. Milling speeds up to 2 seconds.':'A larger home and 32 more bag capacity.'}</p>${s[kind]>=p.cost?'<p>Complete</p>':kind==='lodge'&&s.porch<12?'<p>Finish the porch first.</p>':button(kind,'Build · up to 4 planks',s.planks>0)}</div>`).join('')));
@@ -184,7 +272,10 @@ export class Lumberjack {
  }
  nearest(){
   const t=this.lockedTree;if(t){const distance=Math.max(0,Math.hypot(t.x-this.player.feet.x,t.z-this.player.feet.z)-t.r);if(!t.down&&distance<=LOCK_REACH)return {tree:t,distance};this.lockedTree=null;}
-  return pickTree(this.forest.trees,this.player.feet,this.follow.yaw,this.camera.position);
+  const base=pickTree(this.forest.trees,this.player.feet,this.follow.yaw,this.camera.position);
+  if(!this.field)return base;
+  const fallen=pickTree(this.field.windthrows(),this.player.feet,this.follow.yaw,this.camera.position);
+  return fallen.tree&&fallen.distance<base.distance?fallen:base;
  }
  unload(){
   if(this.delivery||!this.home||!atWoodRack(this.home,this.player.feet))return 0;
@@ -200,7 +291,14 @@ export class Lumberjack {
  }
  before(dt,inp){
   this.time+=dt;
-  if(this.exploration){inp.trailBoost=this.onTrail=this.exploration.onTrail(this.player.feet,this.state);const i=this.exploration.nearest(this.player.feet);if(i>=0&&!this.state.places[i].found){this.state.places[i].found=true;this.toast('Discovered '+PLACES[i].name);this.save();}if(i>=0&&!this.paused&&(inp.interactPressed||(this.held&&!this.outpostHeld))){this.placeIndex=i;this.open('outpost');}this.outpostHeld=this.held;}
+  if(this.exploration){
+    inp.trailBoost=this.onTrail=this.exploration.onTrail(this.player.feet,this.state)||this.field?.onSteps(this.player.feet);
+    inp.provisioned=packedLunch(this.state);
+    const i=this.exploration.nearest(this.player.feet),active=this.started&&!this.paused&&!this.sleeping;
+    if(active&&i>=0&&!this.state.places[i].found){this.state.places[i].found=true;this.campUiKey=null;this.toast('Discovered '+PLACES[i].name);this.save();}
+    if(active&&i>=0&&!this.field?.fieldAction(this.player.feet,this.state)&&(inp.interactPressed||(this.held&&!this.outpostHeld))){this.placeIndex=i;this.placeTab='home';this.open('outpost');}
+    this.outpostHeld=this.held;
+  }
 
   if(this.seat){
    if(this.seated&&!this.paused&&(inp.interactPressed||(this.held&&!this.seatActionHeld)||Math.hypot(inp.move.x,inp.move.y)>.15))this.standFromBench();
@@ -220,9 +318,19 @@ export class Lumberjack {
    this.indoorActionHeld=this.held;return;
   }
   this.indoorActionHeld=false;
+  if(!inactive&&inp.fieldPressed&&this.useFieldKey())return;
+  if(this.cart?.towing){
+    this.lockedTree=null;this.swing=null;inp.cartSpeed=this.onTrail?3.5:1.18;inp.strafe=false;inp.sprint=false;
+    this.follow.look(inp.look,dt);inp.look={x:0,y:0};return;
+  }
+  const local=this.field?.fieldAction(this.player.feet,this.state);
+  if(local&&!inactive&&(inp.interactPressed||(this.held&&!this.fieldHeld))){
+    this.fieldHeld=true;this.swing=null;this.interactLocal(local);return;
+  }
+  this.fieldHeld=this.held;if(local){this.swing=null;this.follow.look(inp.look,dt);inp.look={x:0,y:0};return;}
   if(this.home?.nearBench?.(this.player.feet,this.state)&&!inactive&&(inp.interactPressed||(this.held&&!this.benchActionHeld))){this.sitOnBench();inp.move={x:0,y:0};inp.jump=false;return;}
   this.benchActionHeld=this.held;
-  if(this.home?.nearFire?.(this.player.feet)&&this.state.fire<12){
+  if(this.fireTakesFocus()&&this.state.fire<12){
    this.swing=null;this.lockedTree=null;this.follow.look(inp.look,dt);inp.look={x:0,y:0};
    const pressed=inp.interactPressed||(this.held&&!this.fireActionHeld);this.fireActionHeld=this.held;
    if(!inactive&&pressed){if(contributeFire(this.state)){this.renderHud();this.save();this.audio.unload(this.home.fire.position);this.toast(this.state.fire>=12?'Campfire lit · Make yourself at home.':`Campfire · ${this.state.fire} / 12 logs`);}else this.toast('Bring ordinary logs home and empty your bag at the wood rack first.');}return;
@@ -230,9 +338,9 @@ export class Lumberjack {
   this.fireActionHeld=false;
   if(!inactive&&inp.aimPressed){
    if(this.lockedTree)this.lockedTree=null;
-   else{const t=pickAimTree(this.forest.trees,this.player.feet,this.follow.yaw,this.camera.position);this.lockedTree=t&&this.treeVisible(t)?t:null;}
+   else{const t=pickAimTree(this.field?[...this.forest.trees,...this.field.windthrows()]:this.forest.trees,this.player.feet,this.follow.yaw,this.camera.position);this.lockedTree=t&&this.treeVisible(t)?t:null;}
   }
-  this.nearest();
+  if(this.lockedTree)this.nearest();
   if(this.lockedTree){
    const t=this.lockedTree,desired=Math.atan2(t.x-this.player.feet.x,t.z-this.player.feet.z),current=this.follow.aimYaw??this.follow.yaw;
    this.follow.aimYaw=current+Math.atan2(Math.sin(desired-current),Math.cos(desired-current));
@@ -256,14 +364,14 @@ export class Lumberjack {
   const held=this.held||padHeld||this.input.keys.has('KeyE')||this.input.keys.has('Space')||(this.input.active&&this.input.mouse.left);
   const unloading=this.home&&atWoodRack(this.home,this.player.feet);
   if(unloading){this.swing=null;if(!inactive&&held&&!moving&&this.player.grounded)this.unload();return;}
-  if(!inactive&&held&&!this.swing&&(!moving||this.lockedTree)&&this.target&&canHarvest(this.state,this.target.type)&&harvestFits(this.state,this.target.type)&&near.distance<=CHOP_REACH&&this.player.grounded&&(this.player.speed<.4||this.lockedTree)){
+  if(!inactive&&held&&!this.swing&&(!moving||this.lockedTree)&&this.target&&this.workAllowed(this.target)&&this.workFits(this.target)&&near.distance<=(this.target.windthrow?.94:CHOP_REACH)&&this.player.grounded&&(this.player.speed<.4||this.lockedTree)){
     const t=this.target,yaw=Math.atan2(t.x-this.player.feet.x,t.z-this.player.feet.z);
     inp.facingYaw=yaw;
     const off=Math.atan2(Math.sin(yaw-this.player.yaw),Math.cos(yaw-this.player.yaw));
     // Turn toward the trunk before lifting the tool, rather than snapping the whole body.
     if(Math.abs(off)<.2){
-     const variant=chooseSwing(this.lastSwingVariant,t);this.lastSwingVariant=variant;
-     this.swing={t,variant,finishing:t.hp<=AXES[this.state.axe].power,age:0,duration:swingDuration(this.state),hit:false,contact:chopContact(t,this.player.feet,this.player.visualY??this.player.feet.y)};
+     const heavy=!!inp.sprint&&(t.windthrow||isHardwood(t.type)),variant=heavy?0:t.windthrow?2:chooseSwing(this.lastSwingVariant,t);this.lastSwingVariant=variant;
+     this.swing={t,variant,heavy,finishing:t.hp<=strokePower(this.state,t,AXES[this.state.axe].power,heavy),age:0,duration:swingDuration(this.state)*(heavy?1.28:1),hit:false,contact:this.workContact(t,false)};
     }
   }
   if(this.swing){
@@ -279,10 +387,10 @@ export class Lumberjack {
  }
  standFromBench(){this.seated=false;this.follow.rest=null;this.input.clear();this.held=false;}
  pose(dt=1/60){
-  if(this.swing)this.swing.contact=movingChopContact(this.swing.t,this.player.feet,this.player.visualY??this.player.feet.y);
+  if(this.swing)this.swing.contact=this.workContact(this.swing.t,true);
   this.chopAnimation.update(dt,this.swing,this.state.axe);this.axePaint.update();this.unloadAnimation.update(dt,this.delivery,this.state);this.seatWeight=THREE.MathUtils.clamp((this.seatWeight||0)+(this.seated?dt/.65:-dt/.5),0,1);
   if(this.seat)seatedPose(this.figure.man,this.animator,this.unloadAnimation,this.seat,this.seatWeight*this.seatWeight*(3-2*this.seatWeight));
-  this.axe.visible=!this.insideShack&&!this.seat;this.axePaint.mesh.visible=this.axe.visible;
+  this.cart?.pose();this.axe.visible=!this.insideShack&&!this.seat&&!this.cart?.towing;this.axePaint.mesh.visible=this.axe.visible;
   this.figure.pack.group.visible=!this.seat;this.figure.pack.paint.mesh.visible=!this.seat;
   if(this.seat&&!this.seated&&this.seatWeight===0){this.seat=null;this.syncCapture();}
  }
@@ -304,7 +412,7 @@ export class Lumberjack {
   t.logPaint=pinDabs(this.shared,[WOOD],parts);t.logPaint.update();this.scene.add(t.logPaint.mesh);
  }
  clearRemains(t){
-  this.forest.resetCut(t);
+  this.field?.clearGrowth(t);this.forest.resetCut(t);
   for(const m of [t.stump,t.notch,t.logs,t.logPaint?.mesh])if(m){this.scene.remove(m);m.traverse(o=>o.geometry?.dispose());}
   t.stump=t.notch=t.logs=t.logPaint=null;
  }
@@ -313,11 +421,11 @@ export class Lumberjack {
   this.forest.carveTree(t,{x,y,z},-dx,-dz,damage);
  }
  hit(t){
-  if(!canHarvest(this.state,t.type)||!harvestFits(this.state,t.type)||t.down||Math.hypot(this.player.feet.x-t.x,this.player.feet.z-t.z)-t.r>CHOP_REACH+.12)return;
-  t.hp=Math.max(0,t.hp-AXES[this.state.axe].power);this.audio.hit(t.type,this.state.axe,t,t.hp<=0);t.shake=this.time;this.impactUntil=this.time+.14;
+  if(!this.workAllowed(t)||!this.workFits(t)||t.down||Math.hypot(this.player.feet.x-t.x,this.player.feet.z-t.z)-t.r>CHOP_REACH+.12)return;
+  t.hp=Math.max(0,t.hp-strokePower(this.state,t,AXES[this.state.axe].power,this.swing?.heavy));this.audio.hit(t.type,this.state.axe,t,t.hp<=0);t.shake=this.time;this.impactUntil=this.time+.14;
   const dx=t.x-this.player.feet.x,dz=t.z-this.player.feet.z,len=Math.hypot(dx,dz)||1;
   const {x,y,z}=this.swing?.contact??chopContact(t,this.player.feet,this.player.visualY??this.player.feet.y);
-  this.markCut(t,x,y,z,dx/len,dz/len);
+  if(!t.windthrow)this.markCut(t,x,y,z,dx/len,dz/len);
   const finishing=t.hp<=0,count=finishing?14:7+(this.swing?.variant??0);
   const scatter=this.swing?.variant===1?.7:.35;
   for(let i=0;i<count;i++){
@@ -327,9 +435,14 @@ export class Lumberjack {
     const push=.9+Math.random()*(finishing?2.7:1.8);
     this.chips.push({mesh,life:.6+Math.random()*.5,v:new THREE.Vector3(-dx/len*push+dz/len*side,.8+Math.random()*(finishing?2.4:1.7),-dz/len*push-dx/len*side)});
   }
+  if(t.windthrow){
+    if(t.hp<=0){const amount=this.workReward(t);this.state.woodland.sections[t.job]++;this.state.carried+=amount;this.state.total+=amount;t.down=true;
+      this.field.sync();if(this.lockedTree===t)this.lockedTree=null;this.renderHud();this.save();this.toast('Section bucked · +'+amount+' logs');}
+    return;
+  }
   if(t.hp<=0){
     t.down=true;t.regrow=Date.now()+REGROW_MS;this.state.down[t.id]=t.regrow;this.state.felled++;
-    const reward=rewardFor(this.state,t.type);this.state.carried+=reward;if(isHardwood(t.type))this.state.carriedHardwood=(this.state.carriedHardwood||0)+reward;this.state.total+=reward;
+    const reward=this.workReward(t);this.state.carried+=reward;if(isHardwood(t.type))this.state.carriedHardwood=(this.state.carriedHardwood||0)+reward;this.state.total+=reward;
     if(t.collider){this.physics.removeCollider(t.collider,true);t.collider=null;}
     if(t.notch){this.scene.remove(t.notch);t.notch.geometry.dispose();t.notch=null;}
     this.makeStump(t);this.falling.push({t,age:0,dx:dx/len,dz:dz/len,plan:createTreeFall(t,dx/len,dz/len,this.heightAt),sound:this.audio.beginFall(t)});
@@ -352,32 +465,36 @@ export class Lumberjack {
   u.uHazeSun.value.setRGB(.075,.1,.16).lerp(new THREE.Color(1,.89,.62),light.daylight);
   u.uHazeGlow.value.setRGB(.005,.008,.015).lerp(new THREE.Color(.1,.08,.02),light.daylight);
   this.home.updateLighting?.(light.night,this.time,this.state);
-  $('camp-clock').textContent=`Day ${this.state.day} · ${light.phase} · ${clockLabel(this.state)}`;
+  $('camp-clock').textContent=`Day ${this.state.day} · ${clockLabel(this.state)}${light.phase==='Day'?'':' · '+light.phase}`;
  }
  update(dt){
   this.updateDaylight(dt);
   const forecast=this.weatherOverride||weatherAt(this.state);this.weather=forecast;
   const nearPlace=this.exploration.nearest(this.player.feet),weatherHome=nearPlace>=0?this.exploration.sites[nearPlace]:this.home,weatherState=nearPlace>=0?{lodge:0,porch:0,sawmill:0,houseSpec:weatherHome.spec}:this.state;
   const u=this.shared;u.uRain.value=forecast.rain;u.uOvercast.value=forecast.overcast;
-  u.uHazeDensity.value=.0105+forecast.rain*.009+forecast.mist*.038;
+  u.uHazeDensity.value=.0118+forecast.rain*.0105+forecast.mist*.038;
+  this.forest.updateDistance(this.camera.position);this.field.updateLights(u.uNight.value);
+  const active=this.started&&!this.paused&&!document.hidden;
+  if(this.lastSupplyDay!==this.state.day){this.lastSupplyDay=this.state.day;this.field.syncSupplies();}
+  if(this.cart.update(active?dt:0)){this.field.syncSupplies();this.save();if(this.state.woodland.cart.load>0)this.audio.unload(this.cart.axle.position);}
   u.uHaze.value.lerp(new THREE.Color(.48,.55,.58).multiplyScalar(.2+.8*u.uDaylight.value),forecast.mist*.55+forecast.rain*.25);
   u.uHazeSun.value.lerp(new THREE.Color(.55,.6,.64).multiplyScalar(.15+.85*u.uDaylight.value),forecast.overcast*.9);u.uHazeGlow.value.multiplyScalar(1-forecast.overcast*.9);
   this.audio.daylight=u.uDaylight.value*(1-forecast.rain);
-  this.weatherFX.update(document.hidden?0:dt,this.camera,this.state,forecast,this.state.low,weatherHome.contains(this.player.feet,weatherState),weatherHome);
-  $('camp-clock').textContent+=' · '+forecast.label+' · '+['S','SE','E','NE','N','NW','W','SW'][((Math.round(this.follow.yaw/(Math.PI/4))%8)+8)%8];
+  this.weatherFX.update(document.hidden?0:dt,this.camera,this.state,forecast,this.state.low,weatherHome.contains(this.player.feet,weatherState),weatherHome,this.state.woodland.projects.shelter===3?this.field.shelter.position:null);
+  $('camp-clock').textContent+=(packedLunch(this.state)?' · Orchard lunch':'')+' · '+forecast.label+' · '+['S','SE','E','NE','N','NW','W','SW'][((Math.round(this.follow.yaw/(Math.PI/4))%8)+8)%8];
   const room=this.home.updateInterior?.(dt,this.player.feet,this.camera,this.state);
   if(room){this.insideShack=room.inside;this.follow.interior=room.camera;if(room.changed)this.shade.refresh();}
   const away=this.exploration?.update(dt,this.player.feet,this.camera,this.state);if(away){this.follow.interior=away.camera;this.swing=null;if(away.changed)this.shade.refresh();}
   this.home.updateMill?.(dt,!!this.state.millJob&&this.started);
   if(this.started&&advanceMilling(this.state,dt)){this.renderHud();this.save();this.toast('Two planks cut and stacked at the sawmill.');this.audio.unload(this.home.dropoff);}
-  if($('upgrades').open)this.renderCamp();
+  if($('upgrades').open&&!$('camp-projects').hidden)this.renderCamp();
   this.audio.listener={x:this.player.feet.x,z:this.player.feet.z,yaw:this.follow.yaw};
-  if(this.started)this.audio.updateRain(forecast.rain,shelterAt(weatherHome.group.position,weatherState,this.player.feet),!document.hidden);
+  if(this.started)this.audio.updateRain(forecast.rain,Math.max(this.field.dry(this.player.feet)?.82:0,shelterAt(weatherHome.group.position,weatherState,this.player.feet)),!document.hidden);
   this.home.fire?.update(this.time,this.camera,1-this.shared.uDaylight.value);
   if(this.started&&this.home.fire)this.audio.updateFire(this.home.fire.position,this.state.fire>=12&&!document.hidden,this.insideShack);
   for(let i=this.chips.length-1;i>=0;i--){const c=this.chips[i];c.life-=dt;c.v.y-=9*dt;c.mesh.position.addScaledVector(c.v,dt);c.mesh.rotation.x+=dt*6;if(c.life<.2)c.mesh.scale.multiplyScalar(Math.max(0,1-dt*8));if(c.life<=0){this.scene.remove(c.mesh);this.chips.splice(i,1);}}
   for(let i=this.falling.length-1;i>=0;i--){
-    const f=this.falling[i];f.age+=dt;const pose=treeFallPose(f.plan,f.age);
+    const f=this.falling[i];if(f.t.routeCleared){this.audio.updateFall(f.sound,1);this.falling.splice(i,1);continue;}f.age+=dt;const pose=treeFallPose(f.plan,f.age);
     this.forest.poseTree(f.t,pose.angle,f.dx,f.dz,pose.hidden,pose.sink);
     this.audio.updateFall(f.sound,pose.progress);
     if(pose.landed&&!f.thud){f.thud=true;this.makeLogs(f.t,f.dx,f.dz);this.audio.land(f.sound);this.shade.refresh();}
@@ -388,13 +505,20 @@ export class Lumberjack {
   }
   this.uiClock+=dt;
   if(this.uiClock>.1){this.uiClock=0;this.updatePrompt();}
-  if(this.time>(this.nextRegrow||0)){this.nextRegrow=this.time+2;let changed=false;for(const t of this.forest.trees)if(t.down&&!t.routeCleared&&Date.now()>=t.regrow){t.down=false;t.hp=TREES[t.type].health;t.shake=0;delete this.state.down[t.id];this.forest.poseTree(t,0,0,1);this.clearRemains(t);t.collider=this.physics.createCollider(this.RAPIER.ColliderDesc.cylinder(5,t.r*1.15).setTranslation(t.x,t.y+4.5,t.z));changed=true;}if(changed){this.shade.refresh();this.save();}}
+  if(this.time>(this.nextRegrow||0)){this.nextRegrow=this.time+2;let changed=false;const now=Date.now();for(const t of this.forest.trees)if(t.down&&!t.routeCleared&&Number.isFinite(t.regrow)){if(now<t.regrow){const age=recoveryAge(t.regrow,now,REGROW_MS);this.field.restoreGrowth(t,age);
+      if(age>.70){if(!t.growingBack){this.forest.resetCut(t);t.growingBack=true;}this.forest.poseTree(t,0,0,1,false,0,.11+.89*THREE.MathUtils.smoothstep(age,.70,1));}
+      continue;}t.growingBack=false;t.down=false;t.hp=TREES[t.type].health;t.shake=0;delete this.state.down[t.id];this.forest.poseTree(t,0,0,1);this.clearRemains(t);t.collider=this.physics.createCollider(this.RAPIER.ColliderDesc.cylinder(5,t.r*1.15).setTranslation(t.x,t.y+4.5,t.z));changed=true;}if(changed){this.shade.refresh();this.save();}}
  }
  updatePrompt(){
+  document.body.classList.toggle('rambling',this.started&&!this.paused&&this.time>32&&homeDistance(this.home,this.player.feet)>16&&this.state.carried<bagCapacity(this.state));
+  const fieldLabel=this.fieldKeyLabel();$('field-action').hidden=!this.started||this.paused||!fieldLabel||this.insideShack||!!this.seat;$('field-label').textContent=fieldLabel||'';
   $('aim-crosshair').hidden=!this.started||this.paused||!!this.lockedTree||this.insideShack||!!this.seat;
-  $('aim-status').hidden=!this.started||this.paused||this.insideShack||!!this.seat;$('aim-status').textContent=this.lockedTree?'Tree locked · RMB / Q to release':'RMB / Q · Lock a tree';
+  $('aim-status').hidden=!this.started||this.paused||this.insideShack||!!this.seat;$('aim-status').textContent=this.lockedTree?'Tree locked · RMB / Q to release':'';
   if(this.seat&&this.started&&!this.paused){$('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=!this.seated;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.seated?'Stand up':'Standing up…';$('context').textContent='Take your time · Mouse to look · WASD to stand';return;}
-  const place=this.exploration?.nearest(this.player.feet)??-1;if(place>=0&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent=PLACES[place].name;$('context').textContent='Restore · Connect · Make a home';return;}
+  const local=this.field?.fieldAction(this.player.feet,this.state);
+  if(local&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=local.type==='rack'&&!this.state.carried;$('chop-key').textContent='E';$('action-text').textContent=local.title;$('context').textContent=local.note;return;}
+  if(this.cart?.towing&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=true;return;}
+  const place=this.exploration?.nearest(this.player.feet)??-1;if(place>=0&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent=PLACES[place].name;$('context').textContent=restored(this.state.places[place])?'Open the home ledger':'Examine the abandoned home';return;}
   if(this.home?.nearBench?.(this.player.feet,this.state)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Sit by the fire';$('context').textContent='A quiet moment at camp';return;}
   if(this.insideShack&&this.started&&!this.paused){
    $('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=false;$('chop-key').textContent='E / LMB';$('action-text').textContent='Camp ledger & rest';$('context').textContent='Your supplies, tools and building progress';return;
@@ -411,7 +535,7 @@ export class Lumberjack {
     $('context').textContent=this.delivery?'Move to cancel':`${nice(this.state.wood)} wood stored at the shack`;return;
    }
   }
-  if(this.home?.nearFire?.(this.player.feet)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=this.state.fire>=12;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.state.fire>=12?'Campfire burning':'Build campfire';$('context').textContent=this.state.fire>=12?'A warm place to linger':`${this.state.fire||0} / 12 ordinary logs · Uses wood stored at camp`;return;}
+  if(this.fireTakesFocus()&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=this.state.fire>=12;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.state.fire>=12?'Campfire burning':'Build campfire';$('context').textContent=this.state.fire>=12?'A warm place to linger':`${this.state.fire||0} / 12 ordinary logs · Uses wood stored at camp`;return;}
   if(this.home?.nearDoor?.(this.player.feet)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=true;$('chop-key').textContent='WASD';$('action-text').textContent='Walk inside';$('context').textContent='The door opens as you approach';return;}
   $('chop').disabled=false;$('chop-key').textContent=this.touch?'E':this.input.active?'LMB':'E';
   const t=this.target,visible=this.started&&!this.paused&&t&&!t.down;$('target').hidden=!visible;
@@ -420,11 +544,11 @@ export class Lumberjack {
   if(!this.started)return;
   if(!visible){$('action').hidden=!this.touch;$('action-text').textContent=this.touch?'Chop':'Hold to chop';$('context').textContent='';return;}
   $('action').hidden=this.paused||(this.distance>CHOP_REACH&&!this.touch);
-  const spec=TREES[t.type],near=this.distance<=CHOP_REACH,p=new THREE.Vector3(t.x,t.y+2,t.z).project(this.camera);
+  const spec=TREES[t.type],near=this.distance<=(t.windthrow?.94:CHOP_REACH),p=new THREE.Vector3(t.x,t.y+2,t.z).project(this.camera);
   $('target').hidden=p.z>1||p.z<0||Math.abs(p.x)>1||Math.abs(p.y)>1;
   $('target').style.left=`${THREE.MathUtils.clamp((p.x*.5+.5)*innerWidth,70,innerWidth-70)}px`;$('target').style.top=`${THREE.MathUtils.clamp((-p.y*.5+.5)*innerHeight,130,innerHeight-120)}px`;
-  $('tree-name').textContent=spec.name+(this.lockedTree?' · Locked':'');$('tree-health').style.width=`${t.hp/spec.health*100}%`;
-  $('tree-meta').textContent=near?`${chopCount(t.hp,AXES[this.state.axe].power)} · ${rewardFor(this.state,t.type)} wood`:`${Math.ceil(this.distance)} m away`;
-  const locked=!canHarvest(this.state,t.type),full=!harvestFits(this.state,t.type);$('chop').disabled=locked||full;$('action-text').textContent=locked?'Hardwood locked':full?'Return to camp':this.touch?'Chop':near?'Hold to chop':'Walk closer';$('context').textContent=locked?'Build the woodshed and equip the felling axe':full?'This tree’s full yield will not fit. Empty your bag first.':isHardwood(t.type)?'Hardwood · Needed for advanced axes':'';
+  $('tree-name').textContent=(t.windthrow?'Fallen trunk':figuredTree(t)?(t.type===3?'Curly maple':'Figured oak'):spec.name)+(this.lockedTree?' · Locked':'');$('tree-health').style.width=`${t.hp/(t.maxHp||spec.health)*100}%`;
+  $('tree-meta').textContent=near?`${chopCount(t.hp,strokePower(this.state,t,AXES[this.state.axe].power))} · ${this.workReward(t)} wood`:`${Math.ceil(this.distance)} m away`;
+  const locked=!canHarvest(this.state,t.type),full=!this.workFits(t),reserved=this.state.woodland.reserved.includes(t.id);if(reserved){$('chop').disabled=true;$('action-text').textContent='Reserved tree';$('context').textContent='A keeper for this clearing';return;}$('chop').disabled=locked||full;$('action-text').textContent=locked?'Hardwood locked':full?'Return to camp':this.touch?'Chop':near?'Hold to chop':'Walk closer';$('context').textContent=locked?'Build the woodshed and equip the felling axe':full?'This tree’s full yield will not fit. Empty your bag first.':t.windthrow?'Cut along the chalk ring · Hold Shift for a heavy stroke':isHardwood(t.type)?(figuredTree(t)?'Figured grain · Extra hardwood · ':'Hardwood · ')+'Shift + chop for a heavy stroke':'';
  }
 }

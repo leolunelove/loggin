@@ -59,6 +59,7 @@ export function createWoodPack(shared,man,{paint,canvasPalette}){
  let count=0,initialized=false;
  return {
   group,paint:painted,logs,
+  setCanvas(palette){ painted.setPalette(0,palette); for(const [i,key] of ['uL','uM','uS'].entries())materials[0].uniforms[key].value.setRGB(...palette[i]);materials[0].uniforms.uOwn.value.setRGB(...palette[0]); for(const [i,key] of ['uL2','uM2','uS2'].entries())materials[0].uniforms[key].value.setRGB(...palette[i]);materials[0].uniforms.uOwn2.value.setRGB(...palette[0]); },
   setWood(wood){
    count=visibleWoodCount(wood);
    if(!initialized){initialized=true;logs.forEach((log,i)=>{log.amount=i<count?1:0;log.mesh.visible=i<count;log.mesh.scale.setScalar(i<count?1:.001);});}

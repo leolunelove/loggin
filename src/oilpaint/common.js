@@ -56,7 +56,7 @@ export function createShared() {
     uTime: { value: 0 },
     uRain:{value:0},uOvercast:{value:0},uDaylight:{value:1},uDusk:{value:0},uNight:{value:0},
     uMoonDir:{value:new THREE.Vector3(.4,.65,-.65).normalize()},
-    uCampLights:{value:Array.from({length:8},()=>new THREE.Vector4())},
+    uCampLights:{value:Array.from({length:11},()=>new THREE.Vector4())},
     uPixel: { value: 0.001 }, // metres one pixel covers at one metre from the eye
     uSunDir: { value: SUN.clone() },
     uWind: { value: new THREE.Vector3(WIND.x, WIND.y, 1) }, // direction on the ground (x, z) and strength
@@ -96,7 +96,7 @@ uniform float uDaylight;
 uniform float uDusk;
 uniform float uNight;
 uniform vec3 uMoonDir;
-uniform vec4 uCampLights[8];
+uniform vec4 uCampLights[11];
 uniform float uRiverPhase;
 float riverGap(vec2 xz){return abs(xz.x-(24.0+sin(xz.y*.035+uRiverPhase)*5.0+sin(xz.y*.08+uRiverPhase)*1.5));}
 uniform float uPixel;
@@ -217,15 +217,16 @@ float mistBetween(vec3 world) {
   float up = clamp((0.5 * (world.y + cameraPosition.y) - uFocus.y - 2.0) / 22.0, 0.0, 1.0);
   return 1.0 - exp(-dist * uHazeDensity * mix(1.2, 0.4, up) * (1.0 + 0.7 * sunward * sunward));
 }
-vec3 hazed(vec3 c, vec3 world) {
+vec3 hazeAt(vec3 c, vec3 world, float densityScale) {
   float grey=dot(c,vec3(.3,.59,.11));
   vec3 moon=mix(c*vec3(.16,.22,.34),vec3(grey)*vec3(.22,.31,.48),.45);
   vec3 daylight=c*mix(vec3(1.),vec3(1.13,.86,.69),uDusk*.5);
   c=mix(moon,daylight,uDaylight);
   c=mix(c,c*vec3(.67,.73,.79),uOvercast*.6);
   float warm=0.;
-  for(int i=0;i<8;i++){float d=length(world-uCampLights[i].xyz);float fall=max(0.,1.-d/6.);warm+=uCampLights[i].w*fall*fall;}
+  for(int i=0;i<11;i++){float d=length(world-uCampLights[i].xyz);float fall=max(0.,1.-d/6.);warm+=uCampLights[i].w*fall*fall;}
   c+=vec3(1.,.51,.18)*min(warm,1.8)*(.16+c*.78);
-  return mix(c, airColour(normalize(world - cameraPosition)), mistBetween(world));
+  return mix(c, airColour(normalize(world - cameraPosition)), 1.-pow(max(.0001,1.-mistBetween(world)),densityScale));
 }
+vec3 hazed(vec3 c,vec3 world){return hazeAt(c,world,1.);}
 `;
