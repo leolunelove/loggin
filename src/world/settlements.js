@@ -1,6 +1,6 @@
 import {pinDabs} from '../oilpaint/pins.js';
 import * as THREE from 'three';
-import {createShack} from './shack.js';import {paint} from '../figure/figure.js';import {PLACES,restored,segmentDistance} from '../exploration.js';import {riverCenter} from './river.js';
+import {createOutpostHouse,HOUSE_TYPES} from './outpost-house.js';import {paint} from '../figure/figure.js';import {PLACES,restored,segmentDistance} from '../exploration.js';import {riverCenter} from './river.js';
 // Reusable camp dressing: timber carts, wheel spokes, orchard trees, fences, barrels,
 // tool piles, washing lines, garden beds and wayfinding signs share painted palettes.
 export function createSettlements(game){
@@ -11,10 +11,10 @@ export function createSettlements(game){
  function clearAt(p,r){forest.clearBrush?.(p.x,p.z,r+1);for(const t of forest.trees)if(!t.routeCleared&&Math.hypot(t.x-p.x,t.z-p.z)<r+t.r){t.routeCleared=true;t.down=true;if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}game.clearRemains(t);forest.poseTree(t,0,0,1,true);}}
  for(let i=0;i<3;i++){
   const jitter=((game.state.seed>>>i*3)%9)-4,z=origin.z-[25,65,112][i]+jitter,x=i===1?riverCenter(z)-10:origin.x-30+jitter;
-  let site={x,z},best=Infinity;for(let a=-8;a<=8;a+=4)for(let b=-8;b<=8;b+=4){const px=Math.min(x+a,riverCenter(z+b)-8),pz=z+b,ys=[[-2,-2],[2,-2],[-2,2],[2,2]].map(([dx,dz])=>heightAt(px+dx,pz+dz)),range=Math.max(...ys)-Math.min(...ys);if(range<best){best=range;site={x:px,z:pz};}}
-  const house=createShack(shared,site,heightAt);sites.push(house);scene.add(house.group,house.paint.mesh);forest.shade.add(house.shadow);clearAt(site,6.4);
+  let site={x,z},best=Infinity;for(let a=-8;a<=8;a+=4)for(let b=-8;b<=8;b+=4){const px=Math.min(x+a,riverCenter(z+b)-8),pz=z+b,ys=[[-HOUSE_TYPES[i].w/2,-HOUSE_TYPES[i].d/2],[HOUSE_TYPES[i].w/2,-HOUSE_TYPES[i].d/2],[-HOUSE_TYPES[i].w/2,HOUSE_TYPES[i].d/2],[HOUSE_TYPES[i].w/2,HOUSE_TYPES[i].d/2]].map(([dx,dz])=>heightAt(px+dx,pz+dz)),range=Math.max(...ys)-Math.min(...ys);if(range<best){best=range;site={x:px,z:pz};}}
+  const house=createOutpostHouse(shared,site,heightAt,i);sites.push(house);scene.add(house.group,house.paint.mesh);forest.shade.add(house.shadow);clearAt(site,Math.hypot(HOUSE_TYPES[i].w,HOUSE_TYPES[i].d)/2+2);
   for(const c of house.colliders)physics.createCollider(RAPIER.ColliderDesc.cuboid(c.hx,c.hy,c.hz).setTranslation(c.x,c.y,c.z));
-  const g=new THREE.Group();g.position.set(site.x,house.group.position.y,site.z);scene.add(g);groups.push(g);label(g,PLACES[i].name,0,2,1.6);
+  const g=new THREE.Group();g.position.set(site.x,house.group.position.y,site.z);scene.add(g);groups.push(g);
   // Every settlement gets a mailbox, water barrel and hand-built fence fragments.
   box(g,.12,1.3,.12,-2.6,.65,3);box(g,.55,.34,.3,-2.6,1.3,3,2);box(g,.5,.1,.34,-2.6,1.5,3);
   const barrel=new THREE.Mesh(new THREE.CylinderGeometry(.31,.28,.7,10),mats[0]);barrel.position.set(2.4,.35,1.4);g.add(barrel);
@@ -25,7 +25,9 @@ export function createSettlements(game){
   if(i===2){box(g,1.3,.15,1.8,-3,.7,3);for(const dx of [-3.75,-2.25]){const wheel=new THREE.Mesh(new THREE.TorusGeometry(.43,.07,5,12),mats[0]);wheel.rotation.y=Math.PI/2;wheel.position.set(dx,.43,3);g.add(wheel);for(let k=0;k<4;k++){const spoke=box(g,.06,.8,.06,dx,.43,3);spoke.rotation.x=k*Math.PI/4;}}for(const dx of [-3.6,-2.4])box(g,.08,.08,2.3,dx,.7,4);for(let k=0;k<5;k++){const log=new THREE.Mesh(new THREE.CylinderGeometry(.12,.14,1.4,8),mats[0]);log.rotation.x=Math.PI/2;log.position.set(-3+(k%2)*.3,.9+Math.floor(k/2)*.18,3);rewards.add(log);}box(g,1.8,.12,.7,3,.65,3);for(const dx of [2.3,3.7])box(g,.12,.6,.5,dx,.3,3);}
   const repairs=[];for(let j=0;j<4;j++){const plank=box(g,.16,1.8,.13,-1.4+j*.9,.95,1.57);plank.rotation.z=(j%2?1:-1)*.28;repairs.push(plank);}house.group.userData.repairs=repairs;
   house.group.userData.rewards=rewards;
-  const points=[],segments=[];const start={x:origin.x-2,z:origin.z+5},end={x:site.x,z:site.z+5};const n=Math.ceil(Math.hypot(end.x-start.x,end.z-start.z)/1.4);
+  const extraX=HOUSE_TYPES[i].w/2-1.8,extraZ=HOUSE_TYPES[i].d/2-1.5;for(const child of g.children){if(child===rewards)continue;if(Math.abs(child.position.x)>2)child.position.x+=Math.sign(child.position.x)*extraX;if(child.position.z>1.5)child.position.z+=extraZ;else if(child.position.z< -1.5)child.position.z-=extraZ;}for(const child of rewards.children){if(Math.abs(child.position.x)>2)child.position.x+=Math.sign(child.position.x)*extraX;if(child.position.z>1.5)child.position.z+=extraZ;else if(child.position.z< -1.5)child.position.z-=extraZ;}
+
+  const points=[],segments=[];const start={x:origin.x-2,z:origin.z+5},end={x:site.x,z:site.z+HOUSE_TYPES[i].d/2+3};const n=Math.ceil(Math.hypot(end.x-start.x,end.z-start.z)/1.4);
   for(let k=0;k<=n;k++){const t=k/n,p={x:start.x+(end.x-start.x)*t+Math.sin(t*Math.PI)*4,z:start.z+(end.z-start.z)*t};p.x=Math.min(p.x,riverCenter(p.z)-7);points.push(p);if(k){const a=points[k-1],m=box(new THREE.Group(),1.6,.035,Math.hypot(p.x-a.x,p.z-a.z)+.1,0,0,0,1);const dx=p.x-a.x,dz=p.z-a.z,len=Math.hypot(dx,dz),nx=-dz/len*.9,nz=dx/len*.9,vertices=[];for(const [px,pz]of [[a.x+nx,a.z+nz],[a.x-nx,a.z-nz],[p.x+nx,p.z+nz],[p.x-nx,p.z-nz]])vertices.push(px,heightAt(px,pz)+.14,pz);m.geometry.dispose();m.geometry=new THREE.BufferGeometry();m.geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));m.geometry.setIndex([0,2,1,1,2,3]);m.geometry.computeVertexNormals();m.material=mats[0];scene.add(m);segments.push(m);if(k%8===0){const post=new THREE.Group();post.position.set(p.x+1.1,heightAt(p.x+1.1,p.z),p.z);box(post,.1,1.1,.1,0,.55,0);box(post,.65,.18,.09,0,1,0);scene.add(post);post.userData.segment=k;segments.push(post);}}}
   routes.push({points,segments,cleared:0});
  }

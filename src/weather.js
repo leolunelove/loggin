@@ -10,6 +10,7 @@ export function weatherAt({seed=0,day=1,hour=9}){
 }
 export function shelterAt(origin,state,feet){
  const x=feet.x-origin.x,z=feet.z-origin.z;
+ if(state.houseSpec&&Math.abs(feet.y-origin.y)<2){const {w,d}=state.houseSpec;if(Math.abs(x)<w/2&&Math.abs(z)<d/2)return 1;if(Math.abs(x)<w/2+.2&&z>=d/2&&z<d/2+2.3)return .7;return 0;}
  if(Math.abs(feet.y-origin.y)>2)return 0;
  if(Math.abs(x)<1.8&&z<1.5&&z>(state.lodge>=24?-4.1:-1.5))return 1;
  if(state.porch>=12&&Math.abs(x)<1.9&&z>=1.5&&z<3.1)return .7;

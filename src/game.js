@@ -357,7 +357,7 @@ export class Lumberjack {
  update(dt){
   this.updateDaylight(dt);
   const forecast=this.weatherOverride||weatherAt(this.state);this.weather=forecast;
-  const nearPlace=this.exploration.nearest(this.player.feet),weatherHome=nearPlace>=0?this.exploration.sites[nearPlace]:this.home,weatherState=nearPlace>=0?{lodge:0,porch:0,sawmill:0}:this.state;
+  const nearPlace=this.exploration.nearest(this.player.feet),weatherHome=nearPlace>=0?this.exploration.sites[nearPlace]:this.home,weatherState=nearPlace>=0?{lodge:0,porch:0,sawmill:0,houseSpec:weatherHome.spec}:this.state;
   const u=this.shared;u.uRain.value=forecast.rain;u.uOvercast.value=forecast.overcast;
   u.uHazeDensity.value=.0105+forecast.rain*.009+forecast.mist*.038;
   u.uHaze.value.lerp(new THREE.Color(.48,.55,.58).multiplyScalar(.2+.8*u.uDaylight.value),forecast.mist*.55+forecast.rain*.25);
