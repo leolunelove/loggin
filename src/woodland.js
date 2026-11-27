@@ -1,3 +1,4 @@
+import {cappedPower} from './woodcutting.js';
 import { restored } from './exploration.js';
 
 // Freight is a record of loads already credited to the common woodpile.
@@ -94,7 +95,7 @@ export function advanceHaul(s,dt,lengths) {
 export function figuredTree(t) { return (t.type===2||t.type===3) && (t.hero || (Math.floor(t.seed*23)>>>0)%7===0); }
 export function strokePower(s,t,base,heavy=false) {
   const hard=t.type===2||t.type===3;
-  return base*(hard&&s.woodland?.edge?1.35:1)*(heavy&&(hard||t.windthrow)?1.65:1);
+  return cappedPower(t,base*(hard&&s.woodland?.edge?1.35:1)*(heavy&&(hard||t.windthrow)?1.65:1),heavy);
 }
 export function recoveryAge(deadline,now,duration) {
   return Math.max(0,Math.min(1,1-(deadline-now)/duration));

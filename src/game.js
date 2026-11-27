@@ -1,3 +1,8 @@
+import {awardWork,logCut,skillProgress,ensureOrder} from './woodcutting.js';
+import {skillsPage} from './woodcutting-ui.js';
+import {facesWork,looseAim,openAim,sweepEdge,waterContact,nudgeSection} from './world/axe-contact.js';
+import {Endurance} from './effort.js';
+import {PATCH_FILES} from './exploration.js';
 import {plantTrunk,fallingTrunk,placeSection,sectionBody} from './world/woodland-physics.js';
 import {campObjective,chooseBearing} from './camp-guidance.js';
 import {woodcraft} from './world/woodcraft.js';
@@ -56,12 +61,25 @@ export class Lumberjack {
   this.state=saved.state;this.saveStatus=saved.status;this.input.sensitivity=.0022*this.state.sensitivity;this.audio=new ForestAudio();this.started=false;this.paused=false;this.held=false;this.swing=null;this.target=null;this.chips=[];this.falling=[];this.time=0;this.uiClock=0;
   this.woodPaint=paint(shared,WOOD);this.cutPaint=paint(shared,CUT);this.steelPaint=paint(shared,STEEL);
   this.chipGeometry=new THREE.BoxGeometry(.035,.025,.13);
-  this.looseTimber=new Set();
+  this.looseTimber=new Set();ensureOrder(this.state);this.player.endurance=new Endurance(this.state.stamina);
   this.makeAxe();
   this.playTime=0;
   this.chopAnimation=new ChopAnimation(figure.man,animator,this.axe);
   this.unloadAnimation=new UnloadAnimation({scene,shared,figure,animator,home,axe:this.axe,axePaint:this.axePaint,paint});
-  forest.trees.forEach((t,i)=>{t.id=i;t.hp=TREES[t.type].health;if(this.state.down[i]){t.down=true;t.regrow=this.state.down[i];forest.poseTree(t,0,0,1,true);if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}this.makeStump(t);this.makeLogs(t,Math.sin(t.seed),Math.cos(t.seed));}});
+  forest.trees.forEach((t,i)=>{
+    t.id=i;t.hp=TREES[t.type].health;
+    if(this.state.down[i]){
+      t.down=true;t.regrow=this.state.down[i];forest.poseTree(t,0,0,1,true);
+      if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}
+      this.makeStump(t);this.makeLogs(t,Math.sin(t.seed),Math.cos(t.seed));
+    }else{
+      const cut=this.state.woodcutting.cuts[i];
+      if(cut&&cut.hp<t.hp){
+        t.hp=cut.hp;
+        forest.carveTree(t,cut,cut.nx,cut.nz,1-t.hp/TREES[t.type].health);
+      }
+    }
+  });
   if(Object.keys(this.state.down).length)shade.refresh();
   this.weatherFX=createWeather(shared,home,heightAt);scene.add(this.weatherFX.group);
   const craft=woodcraft(shared);
@@ -72,6 +90,7 @@ export class Lumberjack {
  }
  save(){
   if(this.resetting||this.externalSaveChange)return;
+  if(this.player?.endurance)this.state.stamina=this.player.endurance.value;
   const ok=writeSave(this.storage,this.state);this.saveStatus=ok?'saved':'unavailable';
   this.updateSaveNote();
   if(!ok&&!this.saveWarned){this.toast('Progress cannot be saved in this browser.');this.saveWarned=true;}
@@ -112,8 +131,14 @@ export class Lumberjack {
   $('cart-project').onclick=e=>this.networkAction(e);
   $('field-action').onclick=()=>{if(this.started&&!this.paused)this.useFieldKey();};
   $('change-outfit').onclick=()=>{$('settings').addEventListener('close',()=>window.dispatchEvent(new CustomEvent('loggin:outfitter',{detail:this})),{once:true});$('settings').close();};
-  $('bench-tabs').onclick=e=>{const selected=e.target.closest('[data-bench]');if(!selected)return;
-    for(const tab of $('bench-tabs').querySelectorAll('button')){const active=tab===selected;tab.setAttribute('aria-pressed',String(active));$(tab.dataset.bench).hidden=!active;}};
+  this.showBenchSection=section=>{
+    $('upgrade-title').textContent=section==='skills-page'?'Field book':'Upgrades';
+    for(const tab of $('bench-tabs').querySelectorAll('button')){
+      const active=tab.dataset.bench===section;tab.setAttribute('aria-pressed',String(active));$(tab.dataset.bench).hidden=!active;
+    }
+  };
+  $('bench-tabs').onclick=e=>{const tab=e.target.closest('[data-bench]');if(tab)this.showBenchSection(tab.dataset.bench);};
+  $('skill-hud').onclick=()=>this.openSkills();
   $('woodland-notes').onclick=e=>{
     const mark=e.target.closest('[data-bearing]');if(!mark)return;
     const id=mark.dataset.bearing,destination=id==='auto'?null:id==='home'?id:Number(id);
@@ -133,8 +158,9 @@ export class Lumberjack {
    const success=kind==='fire'?contributeFire(this.state):kind==='sawmill'?contributeMill(this.state):kind==='mill'?beginMilling(this.state):contributePlanks(this.state,kind);
    if(success){this.renderHud();this.renderUpgrades();this.save();this.shade.refresh();this.audio.unload(this.home.dropoff);}
   };
+  $('touch-jump').onclick=()=>{if(this.started&&!this.paused)this.input.pressed.add('Jump');};
   $('resume-mouse').onclick=()=>this.input.capture();
-  $('upgrade-open').onclick=()=>this.open('upgrades');$('settings-open').onclick=()=>this.open('settings');
+  $('upgrade-open').onclick=()=>{this.showBenchSection('upgrade-list');this.open('upgrades');};$('settings-open').onclick=()=>this.open('settings');
   for(const d of document.querySelectorAll('dialog')){
     d.querySelector('.close').onclick=()=>this.closeToForest(d);
     // Native Escape and transitions to another dialog leave the cursor available.
@@ -148,6 +174,12 @@ export class Lumberjack {
   $('upgrade-list').onclick=e=>{const b=e.target.closest('[data-buy]');if(!b)return;if(purchase(this.state,b.dataset.buy)){this.audio.upgrade();this.save();this.renderHud();this.renderUpgrades();this.toast(b.dataset.buy==='axe'?AXES[this.state.axe].name+' equipped.':b.dataset.buy==='speed'?'Swing speed upgraded.':'Wood yield upgraded.');}};
   addEventListener('keydown',e=>{
     if(!this.started){if(e.code==='Enter'&&!$('intro').hidden){e.preventDefault();start();}return;}
+    if(e.code==='KeyK'&&!e.repeat&&this.started&&!this.editingClothes&&!this.externalSaveChange){
+      e.preventDefault();
+      if($('upgrades').open&&!$('skills-page').hidden)this.closeToForest($('upgrades'));
+      else this.openSkills();
+      return;
+    }
     if(e.code==='KeyU'&&!e.repeat&&!this.editingClothes&&!this.externalSaveChange){
       if($('upgrades').open){e.preventDefault();this.closeToForest($('upgrades'));}
       else if(!this.paused){e.preventDefault();this.open('upgrades');}
@@ -190,7 +222,7 @@ export class Lumberjack {
   if(this.leaves)this.leaves.mesh.geometry.instanceCount=low?900:2400;
  }
  renderOutpost(){
-  const i=this.placeIndex;$('outpost-title').textContent=PLACES[i].name;$('outpost-story').textContent=PLACES[i].story;
+  const i=this.placeIndex;$('outpost-badge').src='./pennant/'+PATCH_FILES[i]+'.webp';$('outpost-title').textContent=PLACES[i].name;$('outpost-story').textContent=PLACES[i].story;
   replaceRows($('outpost-project'),outpostPage(this.state,i,this.placeTab||'home'),'data-outpost');
  }
  networkAction(e){
@@ -262,8 +294,25 @@ export class Lumberjack {
   else {const n=depositWood(this.state);if(!n)return;noteFreight(this.state,local.item.i,n);this.audio.stack(this.player.feet,n);this.toast(n+' logs stacked · Available at every home');}
   this.field.syncSupplies();this.renderHud();this.save();
  }
+ openSkills(){
+  if(!this.started||this.sleeping||(this.paused&&!$('upgrades').open))return;
+  this.showBenchSection('skills-page');if(!$('upgrades').open)this.open('upgrades');
+ }
+ updateSkill(result){
+  const p=skillProgress(this.state.woodcutting.xp);
+  if(this.displayedXP!==this.state.woodcutting.xp){
+    this.displayedXP=this.state.woodcutting.xp;$('skill-level').textContent='Lv '+p.level;
+    $('skill-meter').value=p.fraction*100;$('skill-hud').title=p.left?nice(p.left)+' XP to level '+(p.level+1):'Master woodcutter';
+  }
+  if(!result)return;
+  const tag=$('xp-drop'),levelUp=result.level>result.old;
+  tag.textContent=levelUp?'Woodcutting level '+result.level:result.bonus?'Order filled · +'+nice(result.xp+result.bonus)+' XP':'+'+result.xp+' Woodcutting XP';
+  tag.classList.toggle('level-up',levelUp||!!result.bonus);tag.hidden=false;clearTimeout(this.xpTimer);
+  this.xpTimer=setTimeout(()=>{tag.hidden=true;},levelUp||result.bonus?4600:1450);
+  if(levelUp){this.toast('Woodcutting level '+p.level+' · Open Skills with K');this.audio.upgrade();}
+ }
  renderSettings(){ $('sensitivity').value=this.state.sensitivity;$('sensitivity-value').textContent=this.state.sensitivity.toFixed(2)+'×';$('sound').textContent=this.state.sound?'On':'Off';$('sound').setAttribute('aria-pressed',String(this.state.sound));$('quality').textContent=this.state.low?'Low':'High';$('lifetime').textContent=`${nice(this.state.felled)} trees felled · ${nice(this.state.total)} wood gathered`; }
- renderHud(){ this.tools.equip(this.state.axe);this.figure.pack.setWood(this.state.carried);this.home.setWood(this.state.wood);this.home.setProject(this.state.shed||0);this.home.setCamp?.(this.state);this.syncCampColliders();$('wood').textContent=nice(this.state.carried)+' / '+bagCapacity(this.state);const objective=campObjective(this.state);$('project-status').textContent=objective.title;$('project-status').title=objective.detail; $('stored-wood').textContent=nice(this.state.wood);$('axe-name').textContent=AXES[this.state.axe].name;if($('ledger').open)this.renderLedger();if($('upgrades').open)this.renderStockBalance(); }
+ renderHud(){ this.updateSkill();this.tools.equip(this.state.axe);this.figure.pack.setWood(this.state.carried);this.figure.pack.setPatches?.(this.state.places);this.home.setWood(this.state.wood);this.home.setProject(this.state.shed||0);this.home.setCamp?.(this.state);this.syncCampColliders();$('wood').textContent=nice(this.state.carried)+' / '+bagCapacity(this.state);const objective=campObjective(this.state);$('project-status').textContent=objective.title;$('project-status').title=objective.detail; $('stored-wood').textContent=nice(this.state.wood);$('axe-name').textContent=AXES[this.state.axe].name;if($('ledger').open)this.renderLedger();if($('upgrades').open)this.renderStockBalance(); }
  renderStockBalance(){
   const s=this.state;$('panel-wood').textContent=nice(s.wood)+' timber';
   $('stock-breakdown').textContent=nice(s.wood-s.hardwood)+' ordinary · '+nice(s.hardwood)+' hardwood · '+nice(s.planks)+' planks';
@@ -272,7 +321,7 @@ export class Lumberjack {
  renderUpgrades(){
   const s=this.state,next=AXES[s.axe+1];this.renderStockBalance();
   const rows=[
-    ['axe',next?.name||AXES[s.axe].name,next?`${chopCount(TREES[0].health,AXES[s.axe].power)} → ${chopCount(TREES[0].health,next.power)} per beech`:'Maximum axe strength.',`AXE ${s.axe+1} / 5`],
+    ['axe',next?.name||AXES[s.axe].name,next?`${chopCount(TREES[0].health,strokePower(s,{type:0},AXES[s.axe].power))} → ${chopCount(TREES[0].health,strokePower(s,{type:0},next.power))} per beech`:'Maximum axe strength.',`AXE ${s.axe+1} / 5`],
     ['speed','Swing speed',s.speed<4?`${Math.round(60/swingDuration(s))} → ${Math.round(60/swingDuration({...s,speed:s.speed+1}))} swings a minute`:'Maximum swing speed.',`SPEED ${s.speed} / 4`],
     ['yield','Wood yield',s.yield<4?`+${Math.round(s.yield*30)}% → +${Math.round((s.yield+1)*30)}% wood per tree`:'Maximum wood yield.',`YIELD ${s.yield} / 4`]
   ];
@@ -289,9 +338,9 @@ export class Lumberjack {
   const pin=(id,label)=>`<button class="journal-button bearing-choice" data-bearing="${id??'auto'}" aria-pressed="${s.destination===id}">${label}</button>`;
   $('woodland-notes').innerHTML='<section class="journal-row"><h3>Compass bearing</h3><p>With timber in your bag, follow the nearest open drop. Mark a home to keep it in sight.</p>'+pin(null,'Automatic')+pin('home','My shack')+'</section>'+PLACES.map((place,i)=>{
     const p=s.places[i],body=p.found?(restored(p)?['Apple kitchen · Lunch each morning','East-bank expedition rack','Axes and cart fittings'][i]:'Repair the home with 24 logs and 8 planks'):['Look west for three apple trees.','Follow the river north to the landing.','Find the ridge beyond the orchard.'][i];
-    return '<section class="journal-row"><h3>'+(p.found?place.name:['Orchard','River stop','Logging lodge'][i])+'</h3><p>'+body+'</p>'+(p.found?'<p>'+p.trail+' / 40 trail logs</p>'+pin(i,s.destination===i?'Marked on compass':'Mark on compass'):'')+'</section>';
+    return '<section class="journal-row patch-row">'+(p.found?'<img src="./pennant/'+PATCH_FILES[i]+'.webp" alt="Earned discovery patch">':'<span class="unknown" aria-hidden="true"></span>')+'<div><h3>'+(p.found?place.name:['Orchard','River stop','Logging lodge'][i])+'</h3><p>'+body+'</p>'+(p.found?'<p>'+p.trail+' / 40 trail logs</p>'+pin(i,s.destination===i?'Marked on compass':'Mark on compass'):'')+'</div></section>';
   }).join('')+'<section class="journal-row"><h3>Field notes</h3><p>'+w.reserved.length+' reserved trees · '+w.finds.length+' / 3 discoveries</p>'+w.finds.map(k=>'<p>'+FINDS[k].name+' · '+FINDS[k].reward+'</p>').join('')+(w.cart.built?'<p>'+haulStatus(s)+'</p>':'')+'</section>';
-  this.renderCamp();this.updateSaveNote();
+  ensureOrder(s);$('skills-page').innerHTML=skillsPage(s);this.renderCamp();this.updateSaveNote();
  }
  syncCampColliders(){
   if(!this.physics||!this.RAPIER)return;
@@ -314,9 +363,11 @@ export class Lumberjack {
   const s=this.state,near=homeDistance(this.home,this.player.feet)<=14,working=!!s.millJob;
   const key=[s.fire,s.shed,s.sawmill,s.planks,s.porch,s.lodge,s.wood,s.hardwood,near,working,Math.ceil(s.millJob?.remaining||0)].join(':');if(key===this.campUiKey)return;this.campUiKey=key;
   const button=(kind,text,enabled)=>`<button class="buy" data-camp="${kind}" ${enabled&&near?'':'disabled'}>${text}</button>`;
-  const buildings=`<p>${near?'Build with supplies stored at camp.':'Return to camp to build and cut planks.'}</p>`+
+  const shed=s.shed||0;
+  const shedCard=`<section class="project-card sewn"><img src="./pennant/camp.webp" alt=""><span class="project-kicker">Camp project</span><h3>The woodshed</h3><strong>${shed} / 40</strong><p>${shed===40?'Built · Room for 64 timber.':(40-shed)+' more '+(shed===39?'log':'logs')+' to finish the roof.'}</p><progress aria-label="Woodshed progress" max="40" value="${shed}"></progress></section>`;
+  const buildings=shedCard+`<p>${near?'Build with supplies stored at camp.':'Return to camp to build and cut planks.'}</p>`+
    `<div class="project-row"><h3>Campfire</h3><progress max="12" value="${s.fire||0}"></progress><p>${s.fire||0} / 12 ordinary logs · A stone hearth, stacked logs, then a roaring fire.</p>${s.fire>=12?'<p>Lit · A warm welcome, day and night.</p>':button('fire','Add up to 4 logs',s.wood-s.hardwood>0)}</div>`+
-   (s.shed<40?'<p>First, deliver 40 timber to finish your woodshed.</p>':`<div class="project-row"><h3>Sawmill</h3><progress max="40" value="${s.sawmill}"></progress><p>${s.sawmill} / 40 hardwood · Foundations → frame → cutting bed → roof.</p>${s.sawmill<40?button('sawmill','Build · up to 8 hardwood',s.hardwood>0):`<p>${s.planks} planks stacked · ${Math.max(0,s.wood-s.hardwood)} ordinary logs available.</p>`+button('mill',working?`Sawing… ${Math.ceil(s.millJob.remaining)}s`:'Saw 8 logs → 2 planks',!working&&s.wood-s.hardwood>=8)}</div>`+
+   (s.shed<40?'':`<div class="project-row"><h3>Sawmill</h3><progress max="40" value="${s.sawmill}"></progress><p>${s.sawmill} / 40 hardwood · Foundations → frame → cutting bed → roof.</p>${s.sawmill<40?button('sawmill','Build · up to 8 hardwood',s.hardwood>0):`<p>${s.planks} planks stacked · ${Math.max(0,s.wood-s.hardwood)} ordinary logs available.</p>`+button('mill',working?`Sawing… ${Math.ceil(s.millJob.remaining)}s`:'Saw 8 logs → 2 planks',!working&&s.wood-s.hardwood>=8)}</div>`+
    (s.sawmill<40?'':Object.entries(PROJECTS).map(([kind,p])=>`<div class="project-row"><h3>${p.name}</h3><progress max="${p.cost}" value="${s[kind]}"></progress><p>${s[kind]} / ${p.cost} planks · ${kind==='porch'?'A sheltered place to work. Milling speeds up to 2 seconds.':'A larger home and 32 more bag capacity.'}</p>${s[kind]>=p.cost?'<p>Complete</p>':kind==='lodge'&&s.porch<12?'<p>Finish the porch first.</p>':button(kind,'Build · up to 4 planks',s.planks>0)}</div>`).join('')));
   replaceRows($('camp-projects'),buildings,'data-camp');
  }
@@ -351,13 +402,17 @@ export class Lumberjack {
  }
  before(dt,inp){
   this.time+=dt;
+  inp.playing=this.started&&!this.paused&&!this.sleeping&&!(typeof document!=='undefined'&&document.hidden)&&(!!this.seat||this.touch||this.input.active||inp.device==='pad');
+  inp.resting=!!this.seated;inp.packLoad=this.state?Math.min(1,this.state.carried/bagCapacity(this.state)):0;
+  inp.blockJump=!inp.playing||!!this.seat||!!this.cart?.towing||!!this.delivery||!!this.swing;
+  const toolOnly=inp.sprint&&(inp.swingPressed||this.held||this.input.mouse?.left);
   if(this.exploration){
     inp.trailBoost=this.onTrail=this.exploration.onTrail(this.player.feet,this.state)||this.field?.onSteps(this.player.feet);
     inp.provisioned=packedLunch(this.state);
     const i=this.exploration.nearest(this.player.feet),active=this.started&&!this.paused&&!this.sleeping;
     this.indoorPlace=i>=0&&this.exploration.sites[i].contains(this.player.feet)?i:-1;
-    if(active&&i>=0&&!this.state.places[i].found){this.state.places[i].found=true;this.campUiKey=null;this.renderHud();this.toast('Discovered '+PLACES[i].name);this.save();}
-    if(active&&i>=0&&!this.field?.fieldAction(this.player.feet,this.state)&&(inp.interactPressed||(this.held&&!this.outpostHeld))){this.placeIndex=i;this.placeTab='home';this.open('outpost');}
+    if(active&&i>=0&&!this.state.places[i].found){this.state.places[i].found=true;this.campUiKey=null;this.renderHud();this.toast(PLACES[i].name+' · New bag patch');this.save();}
+    if(active&&!toolOnly&&!this.swing&&i>=0&&!this.field?.fieldAction(this.player.feet,this.state)&&(inp.interactPressed||(this.held&&!this.outpostHeld))){this.placeIndex=i;this.placeTab='home';this.open('outpost');}
     this.outpostHeld=this.held;
   }
 
@@ -370,7 +425,6 @@ export class Lumberjack {
   }
   const inactive=!this.started||this.paused||this.sleeping||(!this.touch&&!this.input.active&&inp.device!=='pad');
   if(inactive){inp.move={x:0,y:0};inp.look={x:0,y:0};inp.zoom=0;inp.sprint=false;inp.strafe=false;inp.jump=false;this.held=false;this.swing=null;this.lockedTree=null;}
-  inp.jump=false;
   this.insideShack=!!this.home?.contains?.(this.player.feet,this.state);
   if(this.insideShack||this.indoorPlace>=0){
    this.swing=null;this.lockedTree=null;if(this.delivery)this.cancelDelivery();inp.walk=true;inp.sprint=false;
@@ -385,13 +439,13 @@ export class Lumberjack {
     this.follow.look(inp.look,dt);inp.look={x:0,y:0};return;
   }
   const local=this.field?.fieldAction(this.player.feet,this.state);
-  if(local&&!inactive&&(inp.interactPressed||(this.held&&!this.fieldHeld))){
+  if(local&&!toolOnly&&!this.swing&&!inactive&&(inp.interactPressed||(this.held&&!this.fieldHeld))){
     this.fieldHeld=true;this.swing=null;this.interactLocal(local);return;
   }
-  this.fieldHeld=this.held;if(local){this.swing=null;this.follow.look(inp.look,dt);inp.look={x:0,y:0};return;}
-  if(this.home?.nearBench?.(this.player.feet,this.state)&&!inactive&&(inp.interactPressed||(this.held&&!this.benchActionHeld))){this.sitOnBench();inp.move={x:0,y:0};inp.jump=false;return;}
+  this.fieldHeld=this.held;
+  if(this.home?.nearBench?.(this.player.feet,this.state)&&!toolOnly&&!this.swing&&!inactive&&(inp.interactPressed||(this.held&&!this.benchActionHeld))){this.sitOnBench();inp.move={x:0,y:0};inp.jump=false;return;}
   this.benchActionHeld=this.held;
-  if(this.fireTakesFocus()&&this.state.fire<12){
+  if(this.fireTakesFocus()&&this.state.fire<12&&!this.swing&&!toolOnly){
    this.swing=null;this.lockedTree=null;this.follow.look(inp.look,dt);inp.look={x:0,y:0};
    const pressed=inp.interactPressed||(this.held&&!this.fireActionHeld);this.fireActionHeld=this.held;
    if(!inactive&&pressed){if(contributeFire(this.state)){this.renderHud();this.save();this.audio.unload(this.home.fire.position);this.toast(this.state.fire>=12?'Campfire lit · Make yourself at home.':`Campfire · ${this.state.fire} / 12 logs`);}else this.toast('Bring ordinary logs home and empty your bag at the wood rack first.');}return;
@@ -422,26 +476,43 @@ export class Lumberjack {
     }
   }
   // A committed stroke follows through while the feet remain free. Reach is checked at impact.
-  const held=this.held||padHeld||this.input.keys.has('KeyE')||this.input.keys.has('Space')||(this.input.active&&this.input.mouse.left);
+  const held=this.held||padHeld||this.input.keys.has('KeyE')||(this.input.active&&this.input.mouse.left);
+  const freeSwing=!!(inp.swingPressed||this.held||padHeld||(this.input.active&&this.input.mouse.left));
+  const loose=freeSwing&&!this.swing&&!this.lockedTree?looseAim(this.looseTimber||[],this.player.feet,this.follow.yaw,this.follow.pitch||0):null;
+  const aimed=this.target&&(this.lockedTree||facesWork(this.target,this.player.feet,this.follow.yaw,this.follow.pitch));
+  const looseFirst=loose&&((this.follow.pitch||0)>.30||!aimed||Math.hypot(loose.x-this.player.feet.x,loose.z-this.player.feet.z)<near.distance);
+  const inReach=this.target&&near.distance<=(this.target.windthrow?.94:CHOP_REACH);
+  const primary=freeSwing||this.queuedStroke?.primary;
+  const aimAtTree=inReach&&(!primary||aimed);
   const unloading=this.home&&atWoodRack(this.home,this.player.feet);
-  if(unloading){this.swing=null;if(!inactive&&(inp.interactPressed||held)&&!moving&&this.player.grounded)this.unload();return;}
-  if(inp.chopPressed&&!inactive&&!this.swing&&this.target)this.queuedStroke={tree:this.target,until:this.time+.45};
+  if(unloading&&!toolOnly&&(!freeSwing||this.state.carried)){this.swing=null;if(!inactive&&(inp.interactPressed||held)&&!moving&&this.player.grounded)this.unload();return;}
+  if(inp.chopPressed&&!inactive&&!this.swing&&aimAtTree&&!looseFirst)this.queuedStroke={tree:this.target,primary:freeSwing,until:this.time+.45};
   if(this.queuedStroke&&(inactive||this.time>this.queuedStroke.until||this.target!==this.queuedStroke.tree))this.queuedStroke=null;
-  if(!inactive&&(held||this.queuedStroke)&&!this.swing&&(!moving||this.lockedTree)&&this.target&&this.workAllowed(this.target)&&this.workFits(this.target)&&near.distance<=(this.target.windthrow?.94:CHOP_REACH)&&this.player.grounded&&(this.player.speed<.4||this.lockedTree)){
+  if(!inactive&&!looseFirst&&!inp.jump&&(held||this.queuedStroke)&&!this.swing&&aimAtTree&&(primary||(this.workAllowed(this.target)&&this.workFits(this.target)))&&this.player.grounded){
     const t=this.target,yaw=Math.atan2(t.x-this.player.feet.x,t.z-this.player.feet.z);
     inp.facingYaw=yaw;
     const off=Math.atan2(Math.sin(yaw-this.player.yaw),Math.cos(yaw-this.player.yaw));
     // Turn toward the trunk before lifting the tool, rather than snapping the whole body.
-    if(Math.abs(off)<.2){
-     const heavy=!!inp.sprint&&(t.windthrow||isHardwood(t.type)),variant=heavy?0:t.windthrow?2:chooseSwing(this.lastSwingVariant,t);this.lastSwingVariant=variant;
+    if(Math.abs(off)<.44){
+     const heavy=!!inp.sprint,variant=chooseSwing(this.lastSwingVariant,t);this.lastSwingVariant=variant;
      this.queuedStroke=null;
      this.swing={t,variant,heavy,finishing:t.hp<=strokePower(this.state,t,AXES[this.state.axe].power,heavy),age:0,duration:swingDuration(this.state)*(heavy?1.28:1),hit:false,contact:this.workContact(t,false)};
     }
   }
+  if(freeSwing&&!inactive&&!inp.jump&&!this.swing){
+    const feet=this.player.feet,yaw=this.follow.yaw,pitch=this.follow.pitch||0;
+    const t=loose||openAim(feet,yaw,pitch);
+    const aligning=this.player.grounded&&!looseFirst&&aimAtTree;
+    if(!aligning){
+      const variant=chooseSwing(this.lastSwingVariant,t);this.lastSwingVariant=variant;this.queuedStroke=null;
+      this.swing={t,free:true,yaw,pitch,heavy:!!inp.sprint,variant,age:0,duration:swingDuration(this.state)*(inp.sprint?1.15:.92),hit:false,contact:t.point.clone()};
+    }
+  }
   if(this.swing){
-    const s=this.swing;inp.walk=true;inp.sprint=false;s.age+=dt;s.poseProgress=Math.min(1,s.age/s.duration);
-    inp.facingYaw=Math.atan2(s.t.x-this.player.feet.x,s.t.z-this.player.feet.z);
-    if(s.age>=s.duration*IMPACT_AT&&!s.hit){s.hit=true;s.poseProgress=IMPACT_AT;s.missed=s.t.down||Math.hypot(s.t.x-this.player.feet.x,s.t.z-this.player.feet.z)-s.t.r>CHOP_REACH+.12;if(!s.missed)this.hit(s.t);}
+    const s=this.swing;inp.blockJump=true;inp.walk=true;inp.sprint=false;s.age+=dt;s.poseProgress=Math.min(1,s.age/s.duration);
+    inp.facingYaw=s.free?s.yaw:Math.atan2(s.t.x-this.player.feet.x,s.t.z-this.player.feet.z);
+    if(s.age>=s.duration*.33&&!s.swished){s.swished=true;this.audio?.brushSound?.('air',this.player.feet,s.heavy?.46:.32);}
+    if(s.age>=s.duration*IMPACT_AT&&!s.hit){s.hit=true;s.poseProgress=IMPACT_AT;this.strikeWorld(s);}
     if(s.age>=s.duration)this.swing=null;
   }
  }
@@ -450,11 +521,126 @@ export class Lumberjack {
   this.seat=this.home.bench;this.seat.orbit=0;this.seat.tilt=0;this.seated=true;this.seatWeight=0;this.seatActionHeld=this.held;this.swing=null;this.lockedTree=null;this.cancelDelivery();this.follow.rest={...this.seat.camera};this.syncCapture();
  }
  standFromBench(){this.seated=false;this.follow.rest=null;this.input.clear();this.held=false;}
+ swingPoint(s){
+  const feet=this.player.feet;
+  if(!s.free){
+    const p=this.workContact(s.t,true);
+    if(s.t.windthrow)return p;
+    const bias=[.025,.105,-.075,.035,-.115][s.variant]||0;
+    p.y+=bias-THREE.MathUtils.clamp(this.follow.pitch||0,-.3,.7)*.34;
+    if(s.t.collider){
+      const bark=s.t.collider.projectPoint({x:feet.x,y:p.y,z:feet.z},false).point;
+      if(Math.hypot(bark.x-feet.x,bark.z-feet.z)<=CHOP_REACH+.035)return bark;
+    }
+    return p;
+  }
+  if(s.t.kind==='air')return openAim(feet,s.yaw,s.pitch).point;
+  const p=s.t.point.clone(),dx=p.x-feet.x,dz=p.z-feet.z,d=Math.hypot(dx,dz);
+  if(d>CHOP_REACH){p.x=feet.x+dx/d*CHOP_REACH;p.z=feet.z+dz/d*CHOP_REACH;}
+  return p;
+ }
+ strikeWorld(s,pathHit=null,pathStart=null){
+  const feet=this.player.feet,t=s.t,goal=new THREE.Vector3().copy(this.swingPoint(s));
+  if(!this.physics){s.missed=t.down||Math.hypot(t.x-feet.x,t.z-feet.z)-t.r>CHOP_REACH+.12;if(!s.free&&!s.missed)this.hit(t);return;}
+  const yaw=s.free?s.yaw:Math.atan2(goal.x-feet.x,goal.z-feet.z);
+  const shoulder=new THREE.Vector3(feet.x+.16*Math.cos(yaw),feet.y+1.49,feet.z-.16*Math.sin(yaw));
+  const start=pathStart||(s.lastEdge?.distanceTo(goal)>.095?s.lastEdge:shoulder);
+  const hit=pathHit||sweepEdge(this.physics,this.RAPIER,this.player.collider,start,goal,yaw);
+  const end=hit?.point||goal,water=waterContact(start,end,this.heightAt);
+  const spray=this.forest.strikeBrush?.(start,water||end);
+  if(spray){this.leafKick?.scatter(spray.x,spray.y,spray.z,{x:Math.sin(yaw)*4,z:Math.cos(yaw)*4},8);this.audio.brushSound('leaves',spray,.65);}
+  if(water){
+    s.contact=water;s.material='water';this.splash(water);this.audio.brushSound('water',water,.84);return;
+  }
+  if(!hit){s.missed=true;s.material=spray?'leaves':'air';return;}
+  const handle=hit.collider.handle,p=hit.point;
+  s.contact=p;
+  const standing=this.forest.trees.find(tr=>tr.collider?.handle===handle);
+  const falling=this.falling?.find(f=>f.t.fallBody?.collider(0).handle===handle);
+  const windthrow=this.field?.windthrows().find(tr=>tr.body?.handle===handle);
+  if(standing||windthrow||falling){
+    const tree=standing||windthrow||falling.t;this.impactUntil=this.time+.14;s.material='bark';
+    if(this.workAllowed(tree)&&this.workFits(tree)&&!tree.down){this.hit(tree);return;}
+    this.audio.hit(tree.type,this.state.axe,p,false,s.heavy);
+    if(!tree.down)tree.shake=this.time;
+    this.edgeChips(p,yaw,3);return;
+  }
+  for(const tree of this.looseTimber){
+    if(tree.stumpCollider?.handle===handle){
+      s.material='stump';this.audio.stack(p,7);this.edgeChips(p,yaw,5);this.impactUntil=this.time+.14;return;
+    }
+    const part=tree.sections?.find(log=>log.body.collider(0).handle===handle);
+    if(!part)continue;
+    s.material='section';this.impactUntil=this.time+.14;this.audio.hit(tree.type,this.state.axe,p,false,s.heavy);
+    this.edgeChips(p,yaw,s.heavy?9:6);nudgeSection(part,p,yaw,s.heavy,this.state.axe);
+    part.hits+=s.heavy||this.state.axe>=2?2:1;
+    const work=logCut(this.state,tree,part);
+    if(part.hits>=3&&part.length>1.1)this.splitSection(tree,part,p,yaw);
+    else this.scoreSection(part,p);
+    if(work){this.updateSkill(work);this.save();}
+    return;
+  }
+  const cartMaterial=this.cart?.strike?.(hit.collider,p,s.heavy);
+  if(cartMaterial){s.material=cartMaterial;if(cartMaterial==='iron')this.audio.brushSound('iron',p,1);else this.audio.stack(p,6);return;}
+  const soil=hit.normal.y>.45&&Math.abs(this.heightAt(p.x,p.z)-p.y)<.20;
+  s.material=soil?'ground':'wood';
+  if(soil){this.leafKick?.scatter(p.x,p.y+.035,p.z,{x:Math.sin(yaw)*2,z:Math.cos(yaw)*2},7);this.audio.brushSound('ground',p,.8);}
+  else{this.audio.stack(p,5);this.edgeChips(p,yaw,3);}
+ }
+ edgeChips(p,yaw,count){
+  for(let i=0;i<count;i++){
+    const mesh=new THREE.Mesh(this.chipGeometry,this.cutPaint);mesh.position.copy(p);mesh.rotation.set(i*.8,i*1.7,i*.5);
+    mesh.scale.setScalar(.35+Math.random()*.8);this.scene.add(mesh);
+    const side=(Math.random()-.5)*2;
+    this.chips.push({mesh,life:.36+Math.random()*.46,v:new THREE.Vector3(-Math.sin(yaw)+Math.cos(yaw)*side,.7+Math.random()*1.9,-Math.cos(yaw)-Math.sin(yaw)*side)});
+  }
+ }
+ splash(p){
+  const ring=new THREE.Mesh(new THREE.RingGeometry(.83,1,28),new THREE.MeshBasicMaterial({color:0xc5e2d4,transparent:true,opacity:.72,side:THREE.DoubleSide,depthWrite:false}));
+  ring.rotation.x=-Math.PI/2;ring.position.copy(p);ring.position.y+=.025;ring.scale.setScalar(.045);
+  this.scene.add(ring);(this.ripples??=[]).push({ring,age:0});
+ }
+ scoreSection(part,p){
+  const mesh=part.mesh;if(mesh.children.length>=4)return;
+  const local=mesh.worldToLocal(p.clone()),mark=new THREE.Mesh(new THREE.TorusGeometry(part.radius*.985,.012,4,14,2.1),this.cutPaint);
+  mark.rotation.order='YXZ';mark.rotation.x=Math.PI/2;mark.rotation.y=Math.atan2(local.x,local.z)+.45;
+  mark.position.y=THREE.MathUtils.clamp(local.y,-part.length*.44,part.length*.44);mesh.add(mark);
+ }
+ splitSection(tree,part,p,yaw){
+  const centre=new THREE.Vector3().copy(part.body.translation()),q=new THREE.Quaternion().copy(part.body.rotation());
+  const axis=UP.clone().applyQuaternion(q),half=part.length/2;
+  const cut=THREE.MathUtils.clamp(p.clone().sub(centre).dot(axis),-half*.31,half*.31);
+  const velocity=part.body.linvel(),spin=part.body.angvel(),index=tree.sections.indexOf(part),pieces=[];
+  for(const [start,end] of [[-half,cut],[cut,half]]){
+    const length=end-start-.014,r=part.radius;
+    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(r*.96,r,length,9),[this.woodPaint,this.cutPaint,this.cutPaint]);
+    mesh.position.copy(centre).addScaledVector(axis,(start+end)/2);mesh.quaternion.copy(q);tree.logs.add(mesh);
+    const body=sectionBody(this.physics,this.RAPIER,mesh,r,length,0,0,false),side=start<cut?-1:1;
+    body.setLinvel({x:velocity.x+axis.x*side*.22,y:velocity.y+.10,z:velocity.z+axis.z*side*.22},true);body.setAngvel(spin,true);
+    pieces.push({body,mesh,radius:r,length,hits:0});
+  }
+  this.physics.removeRigidBody(part.body);tree.logs.remove(part.mesh);part.mesh.traverse(o=>o.geometry?.dispose());
+  tree.sections.splice(index,1,...pieces);
+  this.scene.remove(tree.logPaint.mesh);tree.logPaint.mesh.geometry.dispose();tree.logPaint.mesh.material.dispose();
+  tree.logs.updateMatrixWorld(true);
+  tree.logPaint=pinDabs(this.shared,[WOOD],tree.sections.map(({mesh,length})=>({mesh,count:Math.round(length*43),style:()=>({pal:0,size:[.05,.15],dir:UP})})));
+  this.scene.add(tree.logPaint.mesh);tree.logPaint.update();this.audio.sample('trunk-crack',{gain:.38,rate:1.32,position:p});
+ }
  pose(dt=1/60){
-  if(this.swing)this.swing.contact=this.workContact(this.swing.t,true);
-  this.chopAnimation.update(dt,this.swing,this.state.axe);this.axePaint.update();this.unloadAnimation.update(dt,this.delivery,this.state);this.seatWeight=THREE.MathUtils.clamp((this.seatWeight||0)+(this.seated?dt/.65:-dt/.5),0,1);
+  if(this.swing&&!this.swing.hit)this.swing.contact=this.swingPoint(this.swing);
+  this.chopAnimation.update(dt,this.swing,this.state.axe);
+  const s=this.swing,edge=this.chopAnimation.metrics.blade;
+  if(s&&!s.hit&&edge){
+    if(s.lastEdge&&s.poseProgress>=.36&&this.physics){
+      const yaw=s.free?s.yaw:this.player.yaw;
+      const contact=sweepEdge(this.physics,this.RAPIER,this.player.collider,s.lastEdge,edge,yaw,.003);
+      if(contact){s.hit=true;s.age=s.duration*IMPACT_AT;s.poseProgress=IMPACT_AT;this.strikeWorld(s,contact,s.lastEdge);}
+    }
+    s.lastEdge=edge.clone();
+  }
+  this.axePaint.update();this.unloadAnimation.update(dt,this.delivery,this.state);this.seatWeight=THREE.MathUtils.clamp((this.seatWeight||0)+(this.seated?dt/.65:-dt/.5),0,1);
   if(this.seat)seatedPose(this.figure.man,this.animator,this.unloadAnimation,this.seat,this.seatWeight*this.seatWeight*(3-2*this.seatWeight));
-  this.cart?.pose();this.axe.visible=!this.insideShack&&!this.seat&&!this.cart?.towing;this.axePaint.mesh.visible=this.axe.visible;
+  this.cart?.pose();this.axe.visible=!this.insideShack&&!(this.indoorPlace>=0)&&!this.seat&&!this.cart?.towing;this.axePaint.mesh.visible=this.axe.visible;
   this.figure.pack.group.visible=!this.seat;this.figure.pack.paint.mesh.visible=!this.seat;
   if(this.seat&&!this.seated&&this.seatWeight===0){this.seat=null;this.syncCapture();}
  }
@@ -467,11 +653,17 @@ export class Lumberjack {
   t.logs=new THREE.Group();const parts=[];t.sections=[];
   for(let i=0;i<3;i++){
     const r=Math.max(.09,t.r*(.75-i*.07)),length=1.4+i*.22;
-    const m=new THREE.Mesh(new THREE.CylinderGeometry(r*.88,r,length,9),[this.woodPaint,this.cutPaint,this.cutPaint]);
     const x=t.x+dx*(1.2+i*1.5)+dz*(i-1)*.3,z=t.z+dz*(1.2+i*1.5)-dx*(i-1)*.3;
-    placeSection(m,x,z,dx,dz,length,r,this.heightAt,live);
-    t.sections.push({mesh:m,body:sectionBody(this.physics,this.RAPIER,m,r,length,dx,dz,live)});
-    t.logs.add(m);parts.push({mesh:m,count:70,style:()=>({pal:0,size:[.06,.18],dir:UP})});
+    const saved=this.state.woodcutting.splits[t.id];
+    const divided=saved?.until===t.regrow&&!!(saved.mask&(1<<i));
+    const size=divided?(length-.028)/2:length;
+    for(const offset of divided?[-length*.25,length*.25]:[0]){
+      const mesh=new THREE.Mesh(new THREE.CylinderGeometry(r*.88,r,size,9),[this.woodPaint,this.cutPaint,this.cutPaint]);
+      placeSection(mesh,x+dx*offset,z+dz*offset,dx,dz,size,r,this.heightAt,live);
+      const body=sectionBody(this.physics,this.RAPIER,mesh,r,size,dx,dz,live);
+      t.sections.push({mesh,body,radius:r,length:size,hits:!divided&&saved?.until===t.regrow?(saved.scores?.[i]||0):0,sourceIndex:divided?null:i});
+      t.logs.add(mesh);parts.push({mesh,count:divided?35:70,style:()=>({pal:0,size:[.06,.18],dir:UP})});
+    }
   }
   this.looseTimber.add(t);this.scene.add(t.logs);t.logs.updateMatrixWorld(true);
   t.logPaint=pinDabs(this.shared,[WOOD],parts);t.logPaint.update();this.scene.add(t.logPaint.mesh);
@@ -492,9 +684,9 @@ export class Lumberjack {
   if(t.fallBody){this.physics.removeRigidBody(t.fallBody);t.fallBody=null;}
   if(t.stumpCollider){this.physics.removeCollider(t.stumpCollider,true);t.stumpCollider=null;}
   if(t.sections){for(const {body} of t.sections)this.physics.removeRigidBody(body);this.looseTimber.delete(t);t.sections=null;}
-  this.field?.clearGrowth(t);this.forest.resetCut(t);
+  delete this.state.woodcutting.splits[t.id];this.field?.clearGrowth(t);this.forest.resetCut(t);
   for(const m of [t.stump,t.notch,t.logs,t.logPaint?.mesh])if(m){this.scene.remove(m);m.traverse(o=>o.geometry?.dispose());}
-  t.stump=t.notch=t.logs=t.logPaint=null;
+  t.logPaint?.mesh.material.dispose();t.stump=t.notch=t.logs=t.logPaint=null;
  }
  markCut(t,x,y,z,dx,dz){
   const damage=1-t.hp/TREES[t.type].health;
@@ -502,10 +694,18 @@ export class Lumberjack {
  }
  hit(t){
   if(!this.workAllowed(t)||!this.workFits(t)||t.down||Math.hypot(this.player.feet.x-t.x,this.player.feet.z-t.z)-t.r>CHOP_REACH+.12)return;
-  t.hp=Math.max(0,t.hp-strokePower(this.state,t,AXES[this.state.axe].power,this.swing?.heavy));this.audio.hit(t.type,this.state.axe,t,t.hp<=0);t.shake=this.time;this.impactUntil=this.time+.14;
+  const before=t.hp,power=strokePower(this.state,t,AXES[this.state.axe].power,this.swing?.heavy);
+  t.hp=before<=power+.0001?0:before-power;this.audio.hit(t.type,this.state.axe,this.swing?.contact??t,t.hp<=0,this.swing?.heavy);t.shake=this.time;this.impactUntil=this.time+.14;
   const dx=t.x-this.player.feet.x,dz=t.z-this.player.feet.z,len=Math.hypot(dx,dz)||1;
   const {x,y,z}=this.swing?.contact??chopContact(t,this.player.feet,this.player.visualY??this.player.feet.y);
+  const book=this.state.woodcutting,previous=book.cuts[t.id];
+  const precise=!!previous&&Math.abs(previous.y-y)<.17&&previous.nx*(-dx/len)+previous.nz*(-dz/len)>.90;
+  if(t.hp>0)book.cuts[t.id]={hp:t.hp,x,y,z,nx:-dx/len,nz:-dz/len};else delete book.cuts[t.id];
+  const experience=awardWork(this.state,{type:t.type,windthrow:!!t.windthrow,maximum:t.maxHp||TREES[t.type].health,
+    before,after:t.hp,precise,figured:figuredTree(t)});
+  this.updateSkill(experience);
   if(!t.windthrow)this.markCut(t,x,y,z,dx/len,dz/len);
+  if(t.hp>0)this.save();
   const finishing=t.hp<=0,count=finishing?14:7+(this.swing?.variant??0);
   const scatter=this.swing?.variant===1?.7:.35;
   for(let i=0;i<count;i++){
@@ -536,7 +736,7 @@ export class Lumberjack {
  }
  updateDaylight(dt){
   if(this.sleeping){this.sleepAge+=dt;$('sleep-fade').style.opacity=sleepFade(this.sleepAge);
-   if(this.sleepAge>=.7&&!this.sleepApplied){this.sleepApplied=true;sleepUntilMorning(this.state);this.save();$('sleep-message').textContent=`Morning · Day ${this.state.day}`;}
+   if(this.sleepAge>=.7&&!this.sleepApplied){this.sleepApplied=true;sleepUntilMorning(this.state);this.player.endurance?.replenish();this.save();$('sleep-message').textContent=`Morning · Day ${this.state.day}`;}
    if(this.sleepAge>=2){this.sleeping=false;this.paused=false;this.input.lockable=!this.touch;this.input.clear();$('sleep-fade').hidden=true;$('sleep-message').textContent='Resting at camp…';this.syncCapture();this.toast('A fresh morning in the woods.');}
   }else if(this.started&&!this.paused&&!document.hidden){advanceClock(this.state,dt);this.clockSave=(this.clockSave||0)+dt;if(this.clockSave>=30){this.clockSave=0;this.save();}}
   const light=daylightAt(this.state.hour),u=this.shared;
@@ -579,6 +779,12 @@ export class Lumberjack {
   this.home.fire?.update(this.time,this.camera,1-this.shared.uDaylight.value);
   if(this.started&&this.home.fire)this.audio.updateFire(this.home.fire.position,this.state.fire>=12&&!document.hidden,this.insideShack);
   for(let i=this.chips.length-1;i>=0;i--){const c=this.chips[i];c.life-=dt;c.v.y-=9*dt;c.mesh.position.addScaledVector(c.v,dt);c.mesh.rotation.x+=dt*6;if(c.life<.2)c.mesh.scale.multiplyScalar(Math.max(0,1-dt*8));if(c.life<=0){this.scene.remove(c.mesh);this.chips.splice(i,1);}}
+  for(const event of this.player.events.splice(0)){
+    if(event.kind!=='land'||event.impact<.1||!this.started)continue;
+    this.audio.brushSound('ground',this.player.feet,.25+.5*event.impact);
+    if(!this.insideShack&&this.indoorPlace<0)this.leafKick?.scatter(this.player.feet.x,this.player.feet.y+.05,this.player.feet.z,this.player.vel,Math.round(4+event.impact*6));
+  }
+  for(let i=(this.ripples?.length||0)-1;i>=0;i--){const r=this.ripples[i];r.age+=dt;r.ring.scale.setScalar(.045+r.age*.83);r.ring.material.opacity=Math.max(0,.7-r.age);if(r.age>=.7){this.scene.remove(r.ring);r.ring.geometry.dispose();r.ring.material.dispose();this.ripples.splice(i,1);}}
   this.updateTimber();
   for(let i=this.falling.length-1;i>=0;i--){
     const f=this.falling[i];if(f.t.routeCleared){this.audio.updateFall(f.sound,1);this.falling.splice(i,1);continue;}f.age+=dt;const pose=treeFallPose(f.plan,f.age);
@@ -626,7 +832,13 @@ export class Lumberjack {
   document.body.classList.toggle('rambling',this.started&&!this.paused&&this.playTime>32&&homeDistance(this.home,this.player.feet)>16&&this.state.carried<bagCapacity(this.state));
   const heading=headings[((Math.round(this.follow.yaw/(Math.PI/4))%8)+8)%8];
   const clock='Day '+this.state.day+' · '+clockLabel(this.state)+(this.dayPhase&&this.dayPhase!=='Day'?' · '+this.dayPhase:'')+(packedLunch(this.state)?' · Orchard lunch':'')+' · '+(this.weather?.label||'Clear')+' · '+heading;
-  if(this.clockText!==clock){this.clockText=clock;$('camp-clock').textContent=clock;}
+  if(this.clockText!==clock){
+    this.clockText=clock;$('clock-time').textContent='Day '+this.state.day+' / '+clockLabel(this.state);
+    $('clock-sky').textContent=[this.weather?.label||'Clear',heading,this.dayPhase!=='Day'?this.dayPhase:null,packedLunch(this.state)?'Orchard lunch':null].filter(Boolean).join(' · ');
+    $('clock-symbol').textContent=this.dayPhase==='Night'?'☾':this.weather?.rain>.45?'☂':'☀';
+  }
+  const effort=Math.round(this.player.endurance?.value??100);
+  if(this.hudEffort!==effort){this.hudEffort=effort;$('stamina').value=effort;$('stamina').textContent=effort+'%';$('stamina-tag').dataset.low=String(effort<24);}
   if(this.home)this.updateBearing();
   const fieldLabel=this.fieldKeyLabel();$('field-action').hidden=!this.started||this.paused||!fieldLabel||this.insideShack||!!this.seat;$('field-label').textContent=fieldLabel||'';
   $('aim-crosshair').hidden=!this.started||this.paused||!!this.lockedTree||this.insideShack||!!this.seat;
@@ -649,18 +861,26 @@ export class Lumberjack {
   }
   if(this.fireTakesFocus()&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=this.state.fire>=12;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.state.fire>=12?'Campfire burning':'Build campfire';$('context').textContent=this.state.fire>=12?'A warm place to linger':`${this.state.fire||0} / 12 ordinary logs · Uses wood stored at camp`;return;}
   if(this.home?.nearDoor?.(this.player.feet)&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=true;$('chop-key').textContent='WASD';$('action-text').textContent='Walk inside';$('context').textContent='The door opens as you approach';return;}
-  $('chop').disabled=false;$('chop-key').textContent=this.touch?'E':this.input.active?'LMB':'E';
-  const t=this.target,visible=this.started&&!this.paused&&t&&!t.down;$('target').hidden=!visible;
+  $('chop').disabled=false;$('chop-key').textContent=this.touch?'Tap':'LMB';
+  const t=this.target,aimed=t&&(this.lockedTree||facesWork(t,this.player.feet,this.follow.yaw,this.follow.pitch));
+  const timber=!this.lockedTree&&this.started&&!this.paused?looseAim(this.looseTimber||[],this.player.feet,this.follow.yaw,this.follow.pitch):null;
+  if(timber&&(!aimed||this.follow.pitch>.30||Math.hypot(timber.x-this.player.feet.x,timber.z-this.player.feet.z)<this.distance)){
+    $('target').hidden=true;$('action').hidden=false;$('chop-key').textContent=this.touch?'Tap':'LMB';
+    $('action-text').textContent=timber.kind==='stump'?'Strike stump':timber.part.length>1.1?'Hew fallen log':'Nudge log';
+    $('context').textContent=timber.kind==='stump'?'Old end grain':timber.part.length<=1.1?'Strike an end to turn it':timber.part.hits?'Cut started · Strike the notch again':'Strike to cut · Shift for a heavier blow';
+    return;
+  }
+  const visible=this.started&&!this.paused&&aimed&&!t.down;$('target').hidden=!visible;
   $('target').classList.toggle('locked',!!this.lockedTree);
   $('target').classList.toggle('impact',this.time<(this.impactUntil||0));
   if(!this.started)return;
-  if(!visible){$('action').hidden=!this.touch;$('action-text').textContent=this.touch?'Chop':'Hold to chop';$('context').textContent='';return;}
-  $('action').hidden=this.paused||(this.distance>CHOP_REACH&&!this.touch);
+  if(!visible){$('action').hidden=this.paused;$('chop').disabled=false;$('action-text').textContent='Swing axe';$('context').textContent='';return;}
+  $('action').hidden=this.paused;
   const spec=TREES[t.type],near=this.distance<=(t.windthrow?.94:CHOP_REACH),p=new THREE.Vector3(t.x,t.y+2,t.z).project(this.camera);
   $('target').hidden=p.z>1||p.z<0||Math.abs(p.x)>1||Math.abs(p.y)>1;
   $('target').style.left=`${THREE.MathUtils.clamp((p.x*.5+.5)*innerWidth,70,innerWidth-70)}px`;$('target').style.top=`${THREE.MathUtils.clamp((-p.y*.5+.5)*innerHeight,130,innerHeight-120)}px`;
   $('tree-name').textContent=(t.windthrow?'Fallen trunk':figuredTree(t)?(t.type===3?'Curly maple':'Figured oak'):spec.name)+(this.lockedTree?' · Locked':'');$('tree-health').style.width=`${t.hp/(t.maxHp||spec.health)*100}%`;
   $('tree-meta').textContent=near?`${chopCount(t.hp,strokePower(this.state,t,AXES[this.state.axe].power))} · ${this.workReward(t)} wood`:`${Math.ceil(this.distance)} m away`;
-  const locked=!canHarvest(this.state,t.type),full=!this.workFits(t),reserved=this.state.woodland.reserved.includes(t.id);if(reserved){$('chop').disabled=true;$('action-text').textContent='Reserved tree';$('context').textContent='A keeper for this clearing';return;}$('chop').disabled=locked||full;$('action-text').textContent=locked?'Hardwood locked':full?'Return to camp':this.touch?'Chop':near?'Hold to chop':'Walk closer';$('context').textContent=locked?'Build the woodshed and equip the felling axe':full?'This tree’s full yield will not fit. Empty your bag first.':t.windthrow?'Cut along the chalk ring · Hold Shift for a heavy stroke':isHardwood(t.type)?(figuredTree(t)?'Figured grain · Extra hardwood · ':'Hardwood · ')+'Shift + chop for a heavy stroke':'';
+  const locked=!canHarvest(this.state,t.type),full=!this.workFits(t),reserved=this.state.woodland.reserved.includes(t.id);if(reserved){$('chop').disabled=false;$('action-text').textContent='Reserved tree';$('context').textContent='A keeper for this clearing';return;}$('chop').disabled=false;$('action-text').textContent=locked?'Hardwood locked':full?'Return to camp':near?(t.windthrow?'Buck fallen trunk':'Chop tree'):'Swing axe';$('context').textContent=locked?'Build the woodshed and equip the felling axe':full?'This tree’s full yield will not fit. Empty your bag first.':t.windthrow?'Cut along the chalk ring · Hold Shift for a heavy stroke':isHardwood(t.type)?(figuredTree(t)?'Figured grain · Extra hardwood · ':'Hardwood · ')+'Shift + chop for a heavy stroke':'';
  }
 }

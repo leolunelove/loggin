@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {WINDTHROW_HEALTH} from '../woodcutting.js';
 import {riverCenter} from './river.js';
 import {FINDS} from '../woodland.js';
 import {restored,segmentDistance} from '../exploration.js';
@@ -138,7 +139,7 @@ export function createFieldwork(game,craft) {
       pole(g,'bark',[0,r,-.55],[0,r,.55],r);pole(g,'cut',[0,r,-.562],[0,r,-.55],r*.96);pole(g,'cut',[0,r,.55],[0,r,.562],r*.96);
       if(n===2)pole(g,'dark',[0,r,-.12],[.38,r+.31,.17],.072);
       const ring=new THREE.Mesh(new THREE.TorusGeometry(r+.002,.012,4,12),mats.chalk);ring.position.set(0,r,-.20);g.add(ring);join(g);
-      current.push({g,x,z,y:g.position.y,r,type:0,tier:0,windthrow:true,job:i,section:n,hp:3,maxHp:3,id:'w'+i+'-'+n});
+      current.push({g,x,z,y:g.position.y,r,type:0,tier:0,windthrow:true,job:i,section:n,hp:game.state.woodcutting.cuts['w'+i+'-'+n]?.hp||WINDTHROW_HEALTH,maxHp:WINDTHROW_HEALTH,id:'w'+i+'-'+n});
     }jobs.push(current);
   }
   const chimney=sites[2].clone().add(new THREE.Vector3(-2.6,net.sites[2].spec.h+1.86,-1.6));

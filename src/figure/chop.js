@@ -53,7 +53,11 @@ export class ChopAnimation {
   const {man,animator,axe}=this,body=man.object,b=man.bones,scale=1+tier*.04;
   const variant=SWING_VARIANTS[swing?.variant]||SWING_VARIANTS[0];
   const p=swing?(swing.poseProgress??swing.age/swing.duration):0,pose=swing?swingPose(p,swing.variant,swing.finishing):null;
-  if(pose&&swing.t.windthrow){const crouch=smooth(p/.35)*(1-smooth((p-.59)/.41));pose.sink+=.27*crouch;pose.lean+=.46*crouch;}
+  if(pose){
+   const low=THREE.MathUtils.clamp((body.position.y+1.05-swing.contact.y)/.78,0,1);
+   const crouch=smooth(p/.35)*(1-smooth((p-.59)/.41))*low;
+   pose.sink+=.34*crouch;pose.lean+=.49*crouch;
+  }
   if(swing)this.release=0;else this.release=Math.min(1,this.release+dt/.14);
   const releaseWeight=1-smooth(this.release),lean=pose?.lean??(this.last?.lean||0)*releaseWeight,twist=pose?.twist??(this.last?.twist||0)*releaseWeight;
   const bodyQ=body.getWorldQuaternion(new THREE.Quaternion()),forward=new THREE.Vector3(0,0,1).applyQuaternion(bodyQ),right=new THREE.Vector3(-1,0,0).applyQuaternion(bodyQ);
@@ -74,14 +78,17 @@ export class ChopAnimation {
   const carryQ=handQ.clone().multiply(this.carryOffset),carryPosition=palm.clone().addScaledVector(new THREE.Vector3(0,LOWER_GRIP,0).applyQuaternion(carryQ),-scale);
   let position=carryPosition.clone(),rotation=carryQ.clone(),leftWeight=0,slide=.08;
   if(swing){
-   const aim=new THREE.Vector3(swing.t.x-body.position.x,0,swing.t.z-body.position.z).normalize();
+   const aim=swing.free?new THREE.Vector3(Math.sin(swing.yaw),0,Math.cos(swing.yaw)):new THREE.Vector3(swing.t.x-body.position.x,0,swing.t.z-body.position.z).normalize();
    rotation=axeRotation(aim,pose.angle,pose.roll);
    rotation.slerpQuaternions(carryQ,rotation.clone(),smooth(p/.16));
    const contact=new THREE.Vector3(swing.contact.x,swing.contact.y,swing.contact.z);
    const contactPose=swingPose(IMPACT_AT,swing.variant,swing.finishing),contactQ=axeRotation(aim,contactPose.angle,contactPose.roll);
    const contactPalm=contact.clone().sub(AXE_BLADE.clone().add(new THREE.Vector3(0,-LOWER_GRIP,0)).applyQuaternion(contactQ).multiplyScalar(scale));
    const local=(x,y,z)=>new THREE.Vector3(x,y,z).applyMatrix4(body.matrixWorld);
-   const keys=[[0,palm],[.16,local(...variant.ready)],[.34,local(...variant.load)],[.5,contactPalm],[.55,contactPalm],[.73,contactPalm.clone().addScaledVector(aim,-variant.pull*(swing.finishing?1.22:1)).addScaledVector(UP,.035)],[1,palm]];
+   const soft=swing.missed||swing.material==='water',through=contactPalm.clone();
+   if(soft)through.addScaledVector(right,variant.name==='Backhand'?-.16:.16).addScaledVector(UP,-.13);
+   const recoil=through.clone().addScaledVector(aim,-variant.pull*(swing.finishing?1.22:1)).addScaledVector(UP,soft?-.04:.035);
+   const keys=[[0,palm],[.16,local(...variant.ready)],[.34,local(...variant.load)],[.5,contactPalm],[.55,through],[.73,recoil],[1,palm]];
    let a=keys[0],c=keys[1];for(let i=1;i<keys.length;i++){c=keys[i];if(p<=c[0])break;a=c;}
    let k=smooth((p-a[0])/(c[0]-a[0]||1));if(a[0]===.34)k=((p-.34)/.16)**2;
    // Match the walking carry orientation exactly at the end of recovery.

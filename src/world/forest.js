@@ -479,5 +479,5 @@ export function createForest(shared) {
       tiles.sync(a,b,['aPos']);
     }
   });
-  return { updateDistance,clearBrush:brush.clear,touchBrush:brush.update,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
+  return { updateDistance,clearBrush:brush.clear,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
 }

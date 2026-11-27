@@ -50,5 +50,20 @@ export function brushContacts(plants, pose) {
       pose(p,p.bendX,p.bendZ,false);
     }
   }
-  return {clear,update};
+  function strike(from,to){
+    const dx=to.x-from.x,dy=to.y-from.y,dz=to.z-from.z,length=dx*dx+dz*dz;
+    let first=null,tFirst=Infinity;
+    query(to.x,to.z,3,p=>{
+      const t=length?Math.max(0,Math.min(1,((p.x-from.x)*dx+(p.z-from.z)*dz)/length)):0;
+      const x=from.x+t*dx,y=from.y+t*dy,z=from.z+t*dz;
+      if(t>=tFirst||y<p.y+.12||y>p.y+p.height+.12||Math.hypot(x-p.x,z-p.z)>p.radius*.86+.065)return;
+      first={plant:p,x,y,z};tFirst=t;
+    });
+    if(first){
+      const p=first.plant,s=Math.max(.12,Math.hypot(dx,dz));
+      p.velocityX+=dx/s*3.4;p.velocityZ+=dz/s*3.4;p.targetX=p.targetZ=0;awake.add(p);
+    }
+    return first;
+  }
+  return {clear,update,strike};
 }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { pinDabs } from '../oilpaint/pins.js';
+import {PATCH_FILES} from '../exploration.js';
 const UP=new THREE.Vector3(0,1,0),ACROSS=new THREE.Vector3(1,0,0);
 const LEATHER=[[.6,.38,.2],[.32,.19,.12],[.13,.1,.1]];
 const BARK=[[.65,.44,.24],[.35,.24,.16],[.16,.13,.13]];
@@ -56,9 +57,26 @@ export function createWoodPack(shared,man,{paint,canvasPalette}){
  // Attach in the bind pose so both straps and bag stay on the torso during walks and axe swings.
  man.bones.spine_03.attach(group);man.object.updateMatrixWorld(true);
  const painted=pinDabs(shared,palettes,parts,{surface:true});
+ const patches=[];
+ function setPatches(places){
+   for(const [i,slug] of PATCH_FILES.entries()){
+     const found=!!places?.[i]?.found;
+     if(found&&!patches[i]){
+       const texture=new THREE.TextureLoader().load('./pennant/'+slug+'.webp');
+       texture.colorSpace=THREE.SRGBColorSpace;
+       const mat=new THREE.MeshBasicMaterial({map:texture,alphaTest:.49,polygonOffset:true,polygonOffsetFactor:-2});
+       const patch=new THREE.Mesh(new THREE.PlaneGeometry(.143,.143),mat);
+       const side=i-1;patch.name=slug+' discovery patch';patch.rotation.y=Math.PI-side*.46;
+       patch.position.set(side*.139,side?.353:.414,side?-.179:-.211);
+       patch.onBeforeRender=()=>{mat.color.setScalar(.49+.51*(shared.uDaylight?.value??1));};
+       group.add(patch);patches[i]=patch;
+     }
+     if(patches[i])patches[i].visible=found;
+   }
+ }
  let count=0,initialized=false;
  return {
-  group,paint:painted,logs,
+  group,paint:painted,logs,setPatches,disposePatches(){for(const p of patches)if(p)p.material.map.dispose();},
   setCanvas(palette){ painted.setPalette(0,palette); for(const [i,key] of ['uL','uM','uS'].entries())materials[0].uniforms[key].value.setRGB(...palette[i]);materials[0].uniforms.uOwn.value.setRGB(...palette[0]); for(const [i,key] of ['uL2','uM2','uS2'].entries())materials[0].uniforms[key].value.setRGB(...palette[i]);materials[0].uniforms.uOwn2.value.setRGB(...palette[0]); },
   setWood(wood){
    count=visibleWoodCount(wood);

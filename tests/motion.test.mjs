@@ -95,22 +95,22 @@ test('real character grips remain on the tool and the blade reaches the cut at c
  const man=await character(),animator=new Animator(man),axe=new THREE.Group(),chop=new ChopAnimation(man,animator,axe);
  function idle(){animator.update(1/60,{speed:0,moveAngle:0,grounded:true});animator.relaxHands(0);man.object.updateMatrixWorld(true);}
  idle();chop.update(1/60,null,0);
- for(const distance of [.9,1.25,CHOP_REACH])for(const tier of [0,4])for(const yaw of [0,2.6])for(const variant of [0,1,2])for(const finishing of [false,true]){
+ for(const distance of [.9,1.25,CHOP_REACH])for(const tier of [0,4])for(const yaw of [0,2.6])for(const variant of [0,1,2,3,4])for(const finishing of [false,true]){
   const tree={x:Math.sin(yaw)*(distance+.2),y:0,z:Math.cos(yaw)*(distance+.2),r:.2},contact=chopContact(tree,{x:0,y:0,z:0});
   man.object.rotation.y=yaw;idle();chop.update(1/60,{t:tree,contact,age:.5,duration:1,poseProgress:.5,variant,finishing},tier);
   const blade=AXE_BLADE.clone().applyMatrix4(axe.matrixWorld);assert.ok(blade.distanceTo(new THREE.Vector3(contact.x,contact.y,contact.z))<1e-6);
   assert.ok(chop.metrics.r<.03,`right hand ${distance}m tier${tier} variant${variant}: ${chop.metrics.r}`);assert.ok(chop.metrics.l<.03,`left hand ${distance}m tier${tier} variant${variant}: ${chop.metrics.l}`);
  }
  // Both arm segments keep their true length through the windup and strike.
- for(const variant of [0,1,2])for(const p of [.16,.34,.45,.5,.73]){idle();const tree={x:0,y:0,z:1.45,r:.2};man.object.rotation.y=0;man.object.updateMatrixWorld(true);const feet=['l','r'].map(s=>man.bones['foot_'+s].getWorldPosition(new THREE.Vector3()));const lengths=['r','l'].map(s=>[man.bones['upperarm_'+s].getWorldPosition(new THREE.Vector3()).distanceTo(man.bones['lowerarm_'+s].getWorldPosition(new THREE.Vector3())),man.bones['lowerarm_'+s].getWorldPosition(new THREE.Vector3()).distanceTo(man.bones['hand_'+s].getWorldPosition(new THREE.Vector3()))]);chop.update(1/60,{t:tree,contact:chopContact(tree,{x:0,y:0,z:0}),age:p,duration:1,variant},0);assert.ok(chop.metrics.r<.03,`right pose ${p} variant ${variant}: ${chop.metrics.r}`);assert.ok(chop.metrics.l<.03,`left pose ${p} variant ${variant}: ${chop.metrics.l}`);for(const [i,s]of ['l','r'].entries())assert.ok(man.bones['foot_'+s].getWorldPosition(new THREE.Vector3()).distanceTo(feet[i])<1e-5,'weight shifts keep planted feet in place');for(const [i,s]of ['r','l'].entries()){const upper=man.bones['upperarm_'+s].getWorldPosition(new THREE.Vector3()),lower=man.bones['lowerarm_'+s].getWorldPosition(new THREE.Vector3()),hand=man.bones['hand_'+s].getWorldPosition(new THREE.Vector3());assert.ok(Math.abs(upper.distanceTo(lower)-lengths[i][0])<1e-6);assert.ok(Math.abs(lower.distanceTo(hand)-lengths[i][1])<1e-6);}}
+ for(const variant of [0,1,2,3,4])for(const p of [.16,.34,.45,.5,.73]){idle();const tree={x:0,y:0,z:1.45,r:.2};man.object.rotation.y=0;man.object.updateMatrixWorld(true);const feet=['l','r'].map(s=>man.bones['foot_'+s].getWorldPosition(new THREE.Vector3()));const lengths=['r','l'].map(s=>[man.bones['upperarm_'+s].getWorldPosition(new THREE.Vector3()).distanceTo(man.bones['lowerarm_'+s].getWorldPosition(new THREE.Vector3())),man.bones['lowerarm_'+s].getWorldPosition(new THREE.Vector3()).distanceTo(man.bones['hand_'+s].getWorldPosition(new THREE.Vector3()))]);chop.update(1/60,{t:tree,contact:chopContact(tree,{x:0,y:0,z:0}),age:p,duration:1,variant},0);assert.ok(chop.metrics.r<.03,`right pose ${p} variant ${variant}: ${chop.metrics.r}`);assert.ok(chop.metrics.l<.03,`left pose ${p} variant ${variant}: ${chop.metrics.l}`);for(const [i,s]of ['l','r'].entries())assert.ok(man.bones['foot_'+s].getWorldPosition(new THREE.Vector3()).distanceTo(feet[i])<1e-5,'weight shifts keep planted feet in place');for(const [i,s]of ['r','l'].entries()){const upper=man.bones['upperarm_'+s].getWorldPosition(new THREE.Vector3()),lower=man.bones['lowerarm_'+s].getWorldPosition(new THREE.Vector3()),hand=man.bones['hand_'+s].getWorldPosition(new THREE.Vector3());assert.ok(Math.abs(upper.distanceTo(lower)-lengths[i][0])<1e-6);assert.ok(Math.abs(lower.distanceTo(hand)-lengths[i][1])<1e-6);}}
  idle();const tree={x:0,y:0,z:1.45,r:.2};chop.update(1/60,{t:tree,contact:chopContact(tree,{x:0,y:0,z:0}),age:.34,duration:1},0);const before=axe.position.clone();idle();chop.update(1/120,null,0);assert.ok(axe.position.distanceTo(before)<.12,'cancelling blends out instead of teleporting the tool');
 });
 
 
-test('swing choice avoids adjacent repeats and all three forms share the same contact timing',()=>{
+test('swing choice avoids adjacent repeats and all five forms share the same contact timing',()=>{
  let previous=-1;const used=new Set();
  for(let i=0;i<50;i++){const variant=chooseSwing(previous,{r:.3,type:1},()=>((i*37)%97)/97);assert.notEqual(variant,previous);used.add(variant);previous=variant;}
- assert.equal(used.size,3);
- const poses=SWING_VARIANTS.map((v,i)=>swingPose(.34,i));assert.equal(new Set(poses.map(p=>p.angle)).size,3);
- for(let i=0;i<3;i++){assert.equal(swingPose(.5,i).angle,swingPose(.54,i).angle);assert.equal(swingPose(0,i).angle,swingPose(1,i).angle);assert.ok(swingPose(.5,i,true).lean>swingPose(.5,i,false).lean);}
+ assert.equal(used.size,5);
+ const poses=SWING_VARIANTS.map((v,i)=>swingPose(.34,i));assert.equal(new Set(poses.map(p=>p.angle)).size,5);
+ for(let i=0;i<SWING_VARIANTS.length;i++){assert.equal(swingPose(.5,i).angle,swingPose(.54,i).angle);assert.equal(swingPose(0,i).angle,swingPose(1,i).angle);assert.ok(swingPose(.5,i,true).lean>swingPose(.5,i,false).lean);}
 });

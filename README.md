@@ -6,21 +6,31 @@ A small third-person lumberjack game in an autumn forest painted in oils. Chop t
 
 ## The loop
 
-1. Hold left-click beside a tree. Overhead, diagonal and compact chops bite progressively into the trunk.
+1. Hold left-click beside a tree. Five two-handed strokes bite at different heights. Look down to cut a fallen log, knock its end to roll it, or swing freely through the undergrowth.
 2. Felled wood goes into your canvas bag. On your first trip, follow the compass to the shack rack and tap E or left-click to start stacking. Later, the bearing picks the nearest restored home, open rack or parked cart with room for the whole bag. Mark a discovered home under **U → Woodland** to keep that bearing across saves.
 3. At the outdoor rack, press E or left-click once. Your character stows the axe, lifts bundles from the bag and stacks them at camp. Wood transfers when each bundle lands. Moving cancels and keeps unplaced logs in the bag.
 4. Press U to spend stored wood on axes, swing speed or yield. New axes have distinct heads, handles and fittings.
 5. Return to the woods. Birch, beech, maple and oak offer different rewards; trees regrow after 90 seconds.
 
-The bag holds 24 timber until the woodshed is built. Delivering 40 ordinary timber completes the woodshed in visible stages and expands capacity to 64. Yield upgrades then add 16 capacity each, so larger harvests still fit. A tree can only be chopped when its full yield fits; existing oversized saves retain all carried wood.
+The bag holds 24 timber until the woodshed is built. Delivering 40 ordinary timber completes the woodshed in visible stages and expands capacity to 64. Yield upgrades then add 16 capacity each, so larger harvests still fit. A tree can be harvested when its full yield fits; existing oversized saves retain all carried wood.
 
 Oak and maple are hardwood: build the woodshed and equip the felling axe to harvest them. Hardwood shares bag capacity and is tracked when unloaded; advanced axes require 8 hardwood alongside their timber price. Woodshed progress counts cumulative ordinary timber deliveries without consuming your spendable stockpile.
 
-No hunger, stamina, accounts, server or external runtime services. Progress and preferences stay in this browser. Existing Woodsmoke saves migrate into an isolated camp save so older open builds cannot overwrite new progression; moving to another hostname starts a separate browser save.
+Jumping and sprinting draw from the stamina bar above the bag. A full load takes more effort and shortens the jump. Walking, standing and resting by the fire restore stamina. Progress and preferences stay in this browser. Existing Woodsmoke saves migrate into an isolated camp save so older open builds cannot overwrite new progression; moving to another hostname starts a separate browser save.
 
 Closing the workbench with its close button or U returns control to the forest. Escape releases the mouse. Tap for one stroke or hold for a run of swings. Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Lock onto an aimed tree with right-click or Q, then press again to release. Felling, range and menus also release the lock.
 
+Felling a tree pays its wood into your bag once. Loose sections roll when nudged and part at the cut after three ordinary starter-axe hits. A heavy stroke or a stronger axe cuts faster. Bark, brush, soil, water and the handcart each respond to the blade.
+
 **Settings → What’s new · Changelog** contains illustrated field notes with screenshots of the game.
+
+## Woodcutting
+
+Press **K** or open **Upgrades → Skills** for your level, XP to the next level, species records and current order. Birch, beech, maple and old oak award 42, 68, 125 and 190 XP per tree before bonuses. A useful blow earns part of the total. Felling the tree pays the rest. Splitting one of its three original lengths earns 18 XP once per length. The notch and earned XP survive a reload.
+
+Level 2 starts at 92 XP, level 10 at 1,382, level 50 at 42,041 and level 99 at 890,291. Camp orders open at 5, precision bonuses at 10, hardwood orders at 20 and figured-grain bonuses at 35. Levels 50 and 75 bring larger orders and better bonuses. Established camps receive 26 XP for each previously recorded tree.
+
+Even the Forester’s axe takes three cuts to fell a birch and at least six heavy cuts for an old oak. The opening hand axe takes five landed cuts on birch. Empty swings and knocks on stumps leave your XP where it is.
 
 ## Walk into your shack
 
@@ -54,7 +64,7 @@ Detailed tree crowns fade into painted silhouettes between 68 and 106 metres. Ra
 
 ## Your lumberjack and world
 
-Choose a work shirt, quilted vest or split mill apron and pair it with a field brim, watch cap or rail cap. Five sets of colour swatches cover shirt, hat, bag, skin and hair. Turn the preview to see the fit from behind or choose **Close-up** to inspect the cap, face and stitching. It uses the same painted character, equipment, idle animation and bag load as the forest. Revisit **Settings → Visit the outfitter** to change clothes where you stand.
+The Camp Pennant title opens your camp, outfitter and settings. Discover Orchard Rest, Riverwatch and Pine Hollow to sew their individual badges onto your bag. Choose a work shirt, quilted vest or split mill apron and pair it with a field brim, watch cap or rail cap. Five sets of colour swatches cover shirt, hat, bag, skin and hair. Turn the preview to see the fit from behind or choose **Close-up** to inspect the cap, face and stitching. It uses the same painted character, equipment, idle animation and bag load as the forest. Revisit **Settings → Visit the outfitter** to change clothes where you stand.
 
 New camps roll a random seed for terrain, tree layout and a winding, shallow river. A clear camp footprint and nearby starter trees keep the first deliveries approachable. The entry sequence reveals ground, water, tree batches and camp from an overview. Reloading a save rebuilds the same world; it does not reroll progress. Legacy seed-zero saves preserve their tree ordering.
 
@@ -66,14 +76,17 @@ New camps roll a random seed for terrain, tree layout and a winding, shallow riv
 | --- | --- |
 | Mouse | Look freely |
 | WASD / arrows | Move and strafe |
-| Shift + forward | Run |
-| Hold left mouse / E / Space | Chop nearby trees |
+| Shift + forward | Sprint |
+| Space | Jump |
+| Left mouse | Swing the axe while moving. Hold to repeat. |
+| E | Work a nearby tree or use the camp interaction |
 | E / left mouse at rack | Start unloading |
 | Right-click / Q | Toggle tree lock; strafe while keeping the tree in view |
 | R | Manage the nearby handcart, or reserve/release an eligible tree near a home |
-| Shift + chop | Heavy stroke on hardwood or a fallen trunk |
+| Shift + left mouse | Heavier stroke, effective on hardwood and fallen logs |
 | Mouse wheel | Zoom |
 | U | Upgrades |
+| K | Woodcutting field book |
 | Esc | Release cursor / close menu |
 
 Enter/Resume captures the mouse when supported. Embedded browsers use button-free mouse movement if pointer lock is denied. The recapture click never chops. Touch controls and gamepad inputs are implemented; physical-device feel needs separate verification.

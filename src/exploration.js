@@ -1,3 +1,4 @@
+export const PATCH_FILES=['orchard','river','hollow'];
 export const PLACES=[{name:'Orchard Rest',story:'Someone planted apples here, then left before the harvest.',kind:'garden'},{name:'Riverwatch',story:'A ferryman once kept a light burning for late travellers.',kind:'river'},{name:'Pine Hollow',story:'The old timber crew left their cart and a place at the table.',kind:'logging'}];
 export const freshPlaces=()=>PLACES.map(()=>({found:false,wood:0,planks:0,trail:0}));
 export const restored=p=>p.wood>=24&&p.planks>=8;

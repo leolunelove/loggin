@@ -53,8 +53,10 @@ test('looking away keeps a committed stroke but menus cancel it',()=>{
  g.before(.3,frame());assert.equal(g.hits.length,1);
  const paused=rig();paused.input.mouse.left=true;paused.before(.2,frame());paused.paused=true;paused.before(.3,frame());assert.equal(paused.hits.length,0);assert.equal(paused.swing,null);
 });
-test('keyboard chop remains held when one of two chop keys is released',()=>{
-  const g=rig();g.input.keys.add('KeyE');g.input.keys.add('Space');g.input.keys.delete('KeyE');g.before(.02,frame());assert.ok(g.swing);
+test('Space only requests a jump, while E still starts a tree stroke',()=>{
+  const g=rig();g.input.keys.add('Space');const hop={...frame(),jump:true};g.before(.02,hop);
+  assert.equal(g.swing,null);assert.equal(hop.jump,true);
+  g.input.keys.delete('Space');g.input.keys.add('KeyE');g.before(.02,frame());assert.ok(g.swing);
 });
 test('axe pause is part of its cadence and returns continuously to rest',()=>{
   assert.equal(IMPACT_AT,.5);assert.equal(swingPose(.5).angle,swingPose(.54).angle);assert.ok(swingPose(.54).sink>swingPose(.5).sink,'the body absorbs impact while the tool holds contact');

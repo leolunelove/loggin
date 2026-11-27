@@ -72,10 +72,26 @@ export class ForestAudio {
     if(!voice||voice.done||!this.context)return;voice.done=true;
     const t=this.context.currentTime;voice.level.gain.cancelScheduledValues(t);voice.level.gain.setValueAtTime(voice.level.gain.value,t);voice.level.gain.linearRampToValueAtTime(0,t+fade);voice.source.stop(t+fade+.005);
   }
-  hit(type=0,tier=0,position=null,finishing=false){
+  hit(type=0,tier=0,position=null,finishing=false,heavy=false){
     let take=Math.floor(this.random()*3);if(take>=this.lastHit)take++;take%=4;this.lastHit=take;
-    const rate=[.98,1.045,.9,1][type]*(.98+this.random()*.04)*(1-tier*.012);
-    this.sample(`axe-${take+1}`,{gain:finishing?.98:.88,rate,position});
+    const rate=[.98,1.045,.9,1][type]*(.98+this.random()*.04)*(1-tier*.012)*(heavy?.91:1);
+    this.sample(`axe-${take+1}`,{gain:finishing?.98:heavy?.94:.88,rate,position});
+  }
+  brushSound(kind,position,intensity=1){
+    const c=this.context;if(!c||!this.on)return;
+    const profiles={air:[.14,1300,240,.11],leaves:[.19,3700,1050,.22],ground:[.085,670,105,.38],water:[.16,2300,470,.26],iron:[.12,5600,2100,.35]};
+    const [duration,high,low,level]=profiles[kind];
+    if(!this.strokeNoise){
+      this.strokeNoise=c.createBuffer(1,Math.ceil(c.sampleRate*.38),c.sampleRate);
+      const data=this.strokeNoise.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=this.random()*2-1;
+    }
+    const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain(),pan=c.createStereoPanner(),now=c.currentTime;
+    source.buffer=this.strokeNoise;filter.type=kind==='air'||kind==='iron'?'bandpass':'lowpass';if(kind==='iron')filter.Q.value=13;filter.frequency.setValueAtTime(high,now);filter.frequency.exponentialRampToValueAtTime(low,now+duration);
+    gain.gain.setValueAtTime(.0001,now);gain.gain.linearRampToValueAtTime(level*intensity,now+(kind==='air'?.04:.006));gain.gain.exponentialRampToValueAtTime(.0001,now+duration);
+    const dx=position.x-this.listener.x,dz=position.z-this.listener.z;
+    pan.pan.value=clamp((-dx*Math.cos(this.listener.yaw)+dz*Math.sin(this.listener.yaw))*.32,-1,1);
+    source.connect(filter).connect(gain).connect(pan).connect(this.master);
+    source.start(now,this.random()*.06,duration);source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();pan.disconnect();};
   }
   beginFall(tree){
     const weight=clamp(.78+tree.r*.28,.8,1.2);

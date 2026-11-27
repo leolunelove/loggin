@@ -95,9 +95,10 @@ export class Input {
       walk: this.walkToggle !== (k.has('AltLeft') || k.has('AltRight')),
       sprint: k.has('ShiftLeft') || k.has('ShiftRight'),
       strafe: this.active || k.has('KeyF'),
-      jump: this.pressed.has('Space'),
+      jump: this.pressed.has('Space') || this.pressed.has('Jump'),
       interactPressed:this.pressed.has('KeyE')||this.pressed.has('Interact'),
-      chopPressed:this.pressed.has('Space')||this.pressed.has('KeyE')||this.pressed.has('Interact'),
+      chopPressed:this.pressed.has('KeyE')||this.pressed.has('Interact'),
+      swingPressed:this.pressed.has('Interact'),
       fieldPressed:this.pressed.has('KeyR'),
       aimPressed: this.pressed.has('Aim') || this.pressed.has('KeyQ'),
       look: { x: this.mouse.x * this.sensitivity + this.touchLook.x, y: this.mouse.y * this.sensitivity + this.touchLook.y },
@@ -130,6 +131,8 @@ export class Input {
       if (btn(12)) s.zoom -= 4 * dt;
       if (btn(13)) s.zoom += 4 * dt;
       this.pad.a = btn(0); this.pad.l3 = btn(10);
+      if (btn(2) && !this.pad.swing) s.swingPressed = true;
+      this.pad.swing = btn(2);
       if (rx || ry || pl > 0.01 || btn(0) || btn(2) || btn(7)) s.device = 'pad';
     }
     return s;

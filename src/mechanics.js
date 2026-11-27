@@ -10,10 +10,13 @@ export const SWING_VARIANTS=Object.freeze([
   {name:'Overhead',ready:[-.11,1.31,.29],load:[-.23,1.62,.18],angle:-1.05,roll:0,contactRoll:0,twist:.2,pull:.17},
   {name:'Diagonal',ready:[-.14,1.3,.28],load:[-.29,1.56,.23],angle:-.83,roll:.32,contactRoll:.1,twist:.27,pull:.19},
   {name:'Compact',ready:[-.09,1.28,.31],load:[-.15,1.45,.38],angle:-.15,roll:-.13,contactRoll:-.055,twist:.12,pull:.14},
+  {name:'Backhand',ready:[.08,1.30,.26],load:[.26,1.52,.28],angle:-.62,roll:-.42,contactRoll:-.19,twist:-.22,pull:.22},
+  {name:'Low hew',ready:[-.14,1.23,.25],load:[-.33,1.46,.15],angle:-.94,roll:.48,contactRoll:.21,twist:.29,pull:.24},
 ]);
 export function chooseSwing(previous,tree,random=Math.random){
   // A weighted choice avoids both adjacent repeats and a rigid three-stroke loop.
-  const weights=[1,tree.r>.4?1.6:1,tree.type===1?1.6:.85];
+  const low=tree.windthrow||tree.kind==='section'||tree.kind==='stump';
+  const weights=[low?1.5:1,tree.r>.4?1.6:1,tree.type===1?1.6:.85,low?.55:1.05,low?2.7:.55];
   const total=weights.reduce((sum,w,i)=>sum+(i===previous?0:w),0);
   let pick=Math.max(0,Math.min(.999999,random()))*total;
   for(let i=0;i<weights.length;i++)if(i!==previous){pick-=weights[i];if(pick<0)return i;}
@@ -49,7 +52,7 @@ export function pickTree(trees, feet, yaw, eye=feet) {
   const fx=Math.sin(yaw),fz=Math.cos(yaw);
   let tree=null,distance=16,score=Infinity;
   for(const t of trees){
-    if(t.down||t.tier!==0)continue;
+    if(t.down||(t.tier!==0&&!t.collider))continue;
     const dx=t.x-feet.x,dz=t.z-feet.z,centre=Math.hypot(dx,dz),d=Math.max(0,centre-t.r);
     if(d>16)continue;
     const vx=t.x-eye.x,vz=t.z-eye.z,viewDistance=Math.hypot(vx,vz);
@@ -65,7 +68,7 @@ export const LOCK_REACH=18;
 export function pickAimTree(trees,feet,yaw,eye=feet){
  const fx=Math.sin(yaw),fz=Math.cos(yaw);let tree=null,score=Infinity;
  for(const t of trees){
-  if(t.down||t.tier!==0)continue;
+  if(t.down||(t.tier!==0&&!t.collider))continue;
   const d=Math.max(0,Math.hypot(t.x-feet.x,t.z-feet.z)-t.r);if(d>LOCK_REACH)continue;
   const dx=t.x-eye.x,dz=t.z-eye.z,n=Math.hypot(dx,dz)||1,facing=(dx*fx+dz*fz)/n;
   if(facing<.94)continue;
@@ -78,7 +81,7 @@ export function movingChopContact(tree,feet,rootY=feet.y||0){
  if(d>CHOP_REACH){p.x=feet.x+dx/d*CHOP_REACH;p.z=feet.z+dz/d*CHOP_REACH;}
  return p;
 }
-export const chopCount = (health,power) => { const n=Math.ceil(health/power);return `${n} ${n===1?'chop':'chops'}`; };
+export const chopCount = (health,power) => { const n=Math.max(0,Math.ceil(health/power-1e-6));return `${n} ${n===1?'chop':'chops'}`; };
 
 
 // Set the landing angle from the ground under the trunk, instead of an arbitrary near-horizontal stop.

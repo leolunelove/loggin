@@ -20,7 +20,7 @@ export async function createLobbyPreview(element,getAppearance,camp) {
   const {man}=figure,animator=new Animator(man),axes=createAxes(shared,paint);
   const carry=new ChopAnimation(man,animator,axes.group);
   scene.add(man.object,figure.dabs,axes.group,axes.paint.mesh);
-  figure.pack.setWood(camp.carried);axes.equip(camp.axe);
+  figure.pack.setWood(camp.carried);figure.pack.setPatches(camp.places);axes.equip(camp.axe);
   const bark=paint(shared,[[.54,.40,.27],[.34,.24,.18],[.22,.16,.13]]);
   const end=paint(shared,[[.84,.67,.42],[.59,.43,.26],[.33,.27,.18]]);
   const block=new THREE.Mesh(new THREE.CylinderGeometry(.77,.85,.19,28),[bark,end,bark]);block.position.y=-.10;scene.add(block);
@@ -76,7 +76,7 @@ export async function createLobbyPreview(element,getAppearance,camp) {
     element.removeEventListener('keydown',key);if(next.onclick===forward)next.onclick=null;if(previous.onclick===back)previous.onclick=null;
     const geometry=new Set(),materials=new Set();scene.traverse(o=>{if(o.geometry)geometry.add(o.geometry);if(o.material)for(const m of [].concat(o.material))materials.add(m);});
     if(framing.onclick===toggleFrame)framing.onclick=null;
-    geometry.forEach(g=>{if(!man.geometry.has(g))g.dispose();});materials.forEach(m=>{if(!man.materials.has(m))m.dispose();});
+    geometry.forEach(g=>{if(!man.geometry.has(g))g.dispose();});materials.forEach(m=>{if(!man.materials.has(m))m.dispose();});figure.pack.disposePatches();
     man.meshes.forEach(m=>m.skeleton.dispose());landscape.dispose();shade.dispose();frame.dispose();
     for(const key of ['tHeight','tLand','tNoise','tBrush'])shared[key].value.dispose();
     renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};

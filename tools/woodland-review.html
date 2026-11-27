@@ -1,14 +1,23 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Loggin’ woodland playtest</title>
 <style>body{margin:0;background:#292e25;color:#eee0c2;font:13px system-ui}header{padding:7px;display:flex;gap:5px;align-items:center;flex-wrap:wrap}button{background:#e6d7b8;color:#272c25;border:0;padding:6px 9px}output{font:12px monospace}iframe{display:block;border:0;width:100%;height:calc(100vh - 80px)}</style>
-<header><button data-place="0">Orchard</button><button data-place="1">Riverwatch</button><button data-place="2">Pine Hollow</button><button id="supplies">Supply restored homes</button><button id="sign">Camp fingerpost</button><button id="cart">Visit cart</button><button id="round">Follow hauler</button><button id="walk">Walk forward</button><button id="enter">Cross threshold</button><button id="leave">Leave room</button><button id="brush">Brush a sapling</button><button id="birch">Fell starter birch</button><button id="room-still">Save room still</button><button id="action">Interact</button><button id="field">Field action</button><button id="clue">Next find</button><button id="trunk">Visit windthrow</button><button id="chop">Hold axe</button><button id="keeper">Visit keeper</button><button id="rack">Visit east rack</button><button id="bridge">Cross bridge</button><button id="toss">Pack logs</button><button id="dusk">Evening</button><button id="rain">Show rain</button><button id="still">Save cart still</button><output>Loading the wood…</output></header>
+<header><button data-place="0">Orchard</button><button data-place="1">Riverwatch</button><button data-place="2">Pine Hollow</button><button id="supplies">Supply restored homes</button><button id="sign">Camp fingerpost</button><button id="cart">Visit cart</button><button id="round">Follow hauler</button><button id="walk">Walk forward</button><button id="enter">Cross threshold</button><button id="leave">Leave room</button><button id="brush">Brush a sapling</button><button id="birch">Fell starter birch</button><button id="hew">Hew a loose log</button><button id="stump">Strike stump</button><button id="log-frame">Frame a log strike</button><button id="log-still">Save log still</button><button id="clear-swing">Swing in clearing</button><button id="hop">Test jump</button><button id="oak-test">Work a veteran oak</button><button id="order-test">Finish a camp order</button><button id="room-still">Save room still</button><button id="action">Interact</button><button id="field">Field action</button><button id="clue">Next find</button><button id="trunk">Visit windthrow</button><button id="chop">Hold axe</button><button id="keeper">Visit keeper</button><button id="rack">Visit east rack</button><button id="bridge">Cross bridge</button><button id="toss">Pack logs</button><button id="dusk">Evening</button><button id="rain">Show rain</button><button id="still">Save cart still</button><output>Loading the wood…</output></header>
 <iframe title="Playable forest" src="/?capture&amp;nopad&amp;woodlandReview"></iframe>
 <script type="module">
+import {xpAt,ensureOrder,orderInfo} from '/src/woodcutting.js';
 const frame=document.querySelector('iframe'),out=document.querySelector('output');let lab,g,place=0,observation='';
 const $=id=>document.getElementById(id),neutral=()=>({move:{x:0,y:0},look:{x:0,y:0},zoom:0,walk:false,device:'pad'});
 const poll=setInterval(()=>{lab=frame.contentWindow.lab;if(!lab?.ready)return;clearInterval(poll);g=lab.game;g.started=true;lab.input.override=neutral;
  for(const id of ['intro','mouse-capture'])frame.contentDocument.getElementById(id).hidden=true;
  for(const id of ['hud','controls','action'])frame.contentDocument.getElementById(id).hidden=false;
  lab.step(1/60,2);report();},100);
+function swingOnce(heavy=false){
+ lab.step(1/60,12,false);
+ lab.input.override=()=>({...neutral(),swingPressed:true,chopPressed:true,sprint:heavy});
+ lab.step(1/60,1,false);lab.input.override=neutral;
+ const stroke=g.swing;
+ lab.step(1/60,46,false);
+ return stroke;
+}
 function report(){const c=g.state.woodland.cart,p=lab.player.feet;out.textContent='Day '+g.state.day+' · Bag '+g.state.carried+' · Shared '+g.state.wood+' · Cart '+c.load+' / '+(c.hired?'hired':'no crew')+' · Route '+c.progress.toFixed(2)+' · '+(g.onTrail?'trail':'woods')+' · '+(g.target?.windthrow?'windthrow':'standing')+' · x '+p.x.toFixed(1)+' z '+p.z.toFixed(1)+' · '+(g.follow.interior?'room camera':'outdoor camera')+' · '+(g.indoorPlace>=0?['Orchard interior','Riverwatch interior','Pine Hollow interior'][g.indoorPlace]:'outside')+(g.exploration.nearest(p)>=0?' · door Δ '+(p.z-g.exploration.sites[g.exploration.nearest(p)].dropoff.z+1).toFixed(2)+' m · floor Δ '+(p.y-g.exploration.sites[g.exploration.nearest(p)].group.position.y).toFixed(2)+' m':'')+(observation?' · '+observation:'');}
 function visit(x,z,fx,fz){lab.view(null);lab.teleport(x,z,fx,fz);lab.step(.025,2);g.updatePrompt();report();}
 function shot(eye,look){lab.view(eye,look);lab.step(.025,1);}
@@ -39,10 +48,92 @@ $('brush').onclick=()=>{
  lab.input.override=neutral;lab.step(1/60,150,false);observation='Peak bend '+peak.toFixed(2)+' m, settled '+Math.hypot(p.bendX,p.bendZ).toFixed(2)+' m';report();
 };
 $('birch').onclick=()=>{
- const t=g.forest.trees.find(t=>t.tutorial)||g.forest.trees.find(t=>!t.down&&t.type===1&&t.tier===0);
+ const t=g.forest.trees.find(t=>t.tutorial&&!t.down)||g.forest.trees.find(t=>!t.down&&t.type===1&&t.tier===0);
  if(!t||t.down){observation='Starter tree already down';report();return;}
- visit(t.x,t.z+t.r+1.20,t.x,t.z);g.held=true;lab.step(1/60,240,false);g.held=false;lab.step(1/60,150,false);
+ lab.follow.pitch=.05;visit(t.x,t.z+t.r+1.12,t.x,t.z);g.held=true;for(let i=0;i<14&&!t.down;i++)lab.step(1/60,45,false);g.held=false;lab.step(1/60,150,false);
  observation=(t.sections?.length||0)+' physical log sections';report();
+};
+$('hew').onclick=()=>{
+ const tree=[...g.looseTimber].reverse().find(t=>t.sections.some(p=>p.length>1.1));
+ if(!tree){observation='Fell a tree first';report();return;}
+ const part=tree.sections.reduce((best,p)=>p.length>best.length?p:best);
+ const before=tree.sections.length,bag=g.state.carried,result=[],centre=new lab.THREE.Vector3().copy(part.body.translation());
+ for(let i=0;i<3&&tree.sections.includes(part);i++){
+   const p=part.body.translation(),axis=new lab.THREE.Vector3(0,1,0).applyQuaternion(part.body.rotation());
+   const side=new lab.THREE.Vector2(axis.z,-axis.x).normalize();
+   const dir=(p.x-tree.x)*side.x+(p.z-tree.z)*side.y>=0?1:-1;
+   lab.follow.pitch=.63;visit(p.x+side.x*.93*dir,p.z+side.y*.93*dir,p.x,p.z);
+   const s=swingOnce();result.push(s?.material||'no stroke');lab.step(1/60,45,false);
+ }
+ const moved=tree.sections.includes(part)?centre.distanceTo(part.body.translation()):centre.distanceTo(tree.sections.at(-1).body.translation());
+ observation=result.join(', ')+' · sections '+before+' → '+tree.sections.length+' · timber moved '+moved.toFixed(2)+' m · bag '+bag+' → '+g.state.carried;report();
+};
+$('log-frame').onclick=()=>{
+ const home=g.home.group.position;
+ const away=t=>Math.hypot(t.x-home.x,t.z-home.z);
+ let tree=[...g.looseTimber].reverse().find(t=>away(t)>23&&t.sections.some(p=>p.length>1.1));
+ if(!tree){
+   tree=g.forest.trees.find(t=>!t.down&&t.type===1&&t.tier===0&&away(t)>25&&away(t)<43&&!g.state.woodland.reserved.includes(t.id)&&g.forest.trees.every(other=>other===t||Math.hypot(other.x-t.x,other.z-t.z)>3));
+   if(!tree||!g.workFits(tree)){observation='Gather supplies or empty the test bag, then frame the stroke';report();return;}
+   lab.follow.pitch=.1;visit(tree.x,tree.z+tree.r+1.03,tree.x,tree.z);
+   g.held=true;for(let i=0;i<12&&!tree.down;i++)lab.step(1/60,45,false);g.held=false;lab.step(1/60,165,false);
+ }
+ if(!tree.sections?.length){observation='Standing tree is still up';report();return;}
+ const part=tree.sections.reduce((a,b)=>a.length>b.length?a:b),p=part.body.translation();
+ const axis=new lab.THREE.Vector3(0,1,0).applyQuaternion(part.body.rotation());
+ const side=new lab.THREE.Vector2(axis.z,-axis.x).normalize();
+ const dir=(p.x-tree.x)*side.x+(p.z-tree.z)*side.y>=0?1:-1;
+ const sx=side.x*dir,sz=side.y*dir;
+ lab.follow.pitch=.62;visit(p.x+sx*.90,p.z+sz*.90,p.x,p.z);lab.step(1/60,15,false);
+ const h=lab.heightAt(p.x,p.z),eye=[p.x-axis.x*2.72-sx*2.28,h+1.65,p.z-axis.z*2.72-sz*2.28];
+ lab.view(eye,[p.x+sx*.38,h+.73,p.z+sz*.38]);g.state.hour=15.25;
+ g.weatherOverride={rain:0,mist:0,overcast:.10,label:'Clear'};
+ lab.input.override=()=>({...neutral(),chopPressed:true,swingPressed:true});lab.step(1/60,1,false);lab.input.override=neutral;
+ const s=g.swing;for(let i=0;i<42&&s&&!s.hit;i++)lab.step(1/60,1,false);
+ lab.step(1/60,1,false);observation='Side view · '+(s?.material||'stroke')+' · '+(s?.variant??'');report();
+};
+$('log-still').onclick=()=>{
+ lab.step(1/120,1);lab.renderer.domElement.toBlob(blob=>{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='loggin-axe-contact.webp';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);},'image/webp',.90);
+};
+$('stump').onclick=()=>{
+ const t=[...g.looseTimber].reverse().find(t=>t.stump);
+ if(!t){observation='Fell a tree first';report();return;}
+ lab.follow.pitch=.6;visit(t.x,t.z+t.r+1,t.x,t.z);const s=swingOnce();observation='Blade met '+(s?.material||('no contact · '+(s?.t?.kind||g.target?.id||'free')+' · '+(lab.player.grounded?'grounded':'airborne')));report();
+};
+$('clear-swing').onclick=()=>{
+ const x=0,z=78;lab.follow.pitch=-.15;visit(x,z,x+1,z);
+ const air=swingOnce();lab.step(1/60,40,false);lab.follow.pitch=.92;
+ const soil=swingOnce();observation='Open swing '+(air?.material||'none')+' · downward swing '+(soil?.material||'none');report();
+};
+$('hop').onclick=()=>{
+ const p=lab.player;visit(0,78,0,65);lab.step(1/60,12,false);
+ const base=p.feet.y,before=p.endurance.value;lab.input.override=()=>({...neutral(),jump:true});lab.step(1/60,1,false);lab.input.override=neutral;
+ let peak=p.feet.y,min=p.endurance.value;
+ for(let i=0;i<11;i++){lab.step(1/60,5,false);peak=Math.max(peak,p.feet.y);min=Math.min(min,p.endurance.value);}
+ observation='Jump '+(peak-base).toFixed(2)+' m · stamina '+Math.round(before)+' → '+Math.round(min)+' · '+(p.grounded?'landed':'airborne');report();
+};
+function workTree(t,heavy){
+ g.lockedTree=null;g.swing=null;lab.follow.pitch=.08;visit(t.x,t.z+t.r+1.03,t.x,t.z);lab.step(1/60,12,false);
+ const start=g.state.woodcutting.strokes;g.held=true;
+ lab.input.override=()=>({...neutral(),sprint:heavy});
+ for(let i=0;i<40&&!t.down;i++)lab.step(1/60,16,false);
+ lab.input.override=neutral;g.held=false;lab.step(1/60,85,false);
+ return g.state.woodcutting.strokes-start;
+}
+$('oak-test').onclick=()=>{
+ Object.assign(g.state,{shed:40,axe:4,speed:4,yield:4,carried:0,carriedHardwood:0});g.state.woodland.edge=true;g.renderHud();
+ const t=g.forest.trees.find(t=>t.type===2&&!t.down&&t.tier===0&&!g.state.woodland.reserved.includes(t.id)&&!g.state.woodcutting.cuts[t.id]&&Math.hypot(t.x-g.home.group.position.x,t.z-g.home.group.position.z)>18);
+ if(!t){observation='No fresh oak here';report();return;}
+ const before=g.state.woodcutting.xp,n=workTree(t,true);
+ observation='Forester’s axe · '+n+' heavy cuts · '+(t.down?'oak felled':'still standing')+' · +'+(g.state.woodcutting.xp-before)+' XP';report();
+};
+$('order-test').onclick=()=>{
+ const s=g.state,b=s.woodcutting;b.xp=xpAt(5);b.orders=0;b.order=null;ensureOrder(s);
+ b.order.done=orderInfo(b.order).goal-1;s.carried=s.carriedHardwood=0;
+ const t=g.forest.trees.find(t=>t.type===1&&!t.down&&t.tier===0&&!g.state.woodland.reserved.includes(t.id));
+ if(!t)return;
+ const start=b.xp;workTree(t,false);g.updatePrompt();
+ observation=b.orders+' orders completed · +'+(b.xp-start)+' XP · next job '+orderInfo(b.order).title;report();
 };
 $('room-still').onclick=()=>{lab.step(1/60,1);lab.renderer.domElement.toBlob(blob=>{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='woodland-room.webp';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);},'image/webp',.90);};
 $('walk').onclick=()=>{lab.input.override=()=>({...neutral(),move:{x:0,y:1}});lab.step(.05,22);lab.input.override=neutral;lab.step(.04,3);report();};

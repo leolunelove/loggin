@@ -36,6 +36,32 @@ export function createHandcart(game,craft) {
   join(body);join(hardware);
   let worker=null,towing=false,initialized=false,axleTravel=0;const workerFoot=new THREE.Vector3();const loadLevels=load.map(()=>0);
   const lengths=routes.map(r=>r.length),v=new THREE.Vector3(),left=new THREE.Vector3(),right=new THREE.Vector3();
+  let chassis=null,rock=0,rockVelocity=0;
+  const rims=new Set();
+  function syncChassis(){
+    const {physics,RAPIER:R}=game;
+    if(!physics)return;
+    if(!chassis){
+      chassis=physics.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(...axle.position.toArray()).setRotation(axle.quaternion));
+      const board=(x,y,z,hx,hy,hz)=>physics.createCollider(R.ColliderDesc.cuboid(hx,hy,hz).setTranslation(x,y,z),chassis);
+      board(0,.61,0,.48,.048,.74);
+      const wheelRotation=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.PI/2);
+      for(const side of [-1,1]){
+        board(side*.50,.79,0,.048,.17,.74);
+        const rim=physics.createCollider(R.ColliderDesc.cylinder(.048,.447).setRotation(wheelRotation).setTranslation(side*.61,.45,0),chassis);
+        rims.add(rim.handle);
+      }
+    }else{
+      chassis.setNextKinematicTranslation(axle.position);chassis.setNextKinematicRotation(axle.quaternion);
+    }
+  }
+  function strike(collider,point,heavy){
+    if(!chassis||collider.parent()?.handle!==chassis.handle)return null;
+    const local=body.worldToLocal(new THREE.Vector3().copy(point));
+    const fullness=game.state.woodland.cart.load/cartCapacity(game.state);
+    rockVelocity=(local.x>=0?-1:1)*(heavy?.93:.63)/(1+fullness);
+    return rims.has(collider.handle)?'iron':'wood';
+  }
   function createWorker(){
     const source=game.figure.man,object=clone(source.object),bones={};object.name='Trail hauler';
     object.position.set(0,0,0);object.rotation.set(0,0,0);
@@ -93,7 +119,11 @@ export function createHandcart(game,craft) {
   }
   function update(dt){
     const s=game.state,w=s.woodland,c=w.cart;
-    axle.visible=c.built;if(!c.built)return false;
+    axle.visible=c.built;
+    if(!c.built){
+      if(chassis){game.physics.removeRigidBody(chassis);chassis=null;rims.clear();}
+      return false;
+    }
     let changed=false,x,z,yaw;
     if(c.running||c.x===null){
       if(c.running)changed=advanceHaul(s,dt,lengths);
@@ -124,7 +154,9 @@ export function createHandcart(game,craft) {
     axle.rotation.z=THREE.MathUtils.clamp(Math.atan2(left.y-right.y,1.2),-.20,.20);
     const rise=game.heightAt(x+Math.sin(yaw),z+Math.cos(yaw))-h;axle.rotation.x=-Math.atan(rise);
     for(const wheel of wheels)wheel.rotation.x+=(travel-wheel.position.x*turn)/.45;
-    body.rotation.x=Math.sin(wheels[0].rotation.x*2)*Math.min(.012,speed*.005);hardware.visible=w.axle;
+    rockVelocity+=(-rock*88-rockVelocity*8)*dt;rock+=rockVelocity*dt;
+    body.rotation.z=rock;body.rotation.x=Math.sin(wheels[0].rotation.x*2)*Math.min(.012,speed*.005);hardware.visible=w.axle;
+    syncChassis();
     axleTravel+=Math.abs(travel)+.30*Math.abs(turn);
     const fullness=c.load/cartCapacity(s),spacing=(w.axle?3.2:2.55)-.48*fullness;
     if(axleTravel>=spacing){axleTravel%=spacing;if(dt>0)game.audio.cartRoll(axle.position,fullness);}
@@ -153,5 +185,5 @@ export function createHandcart(game,craft) {
     if(n.progress>.5)noteFreight(game.state,n.i,c.load);
     c.load=0;return true;
   }
-  return {group:crew,axle,update,near,hitch,dispatch,stow,emptyAtDepot,nearestRoute,pose:()=>{if(towing)grip(game.figure.man);},get towing(){return towing;},park(){towing=false;}};
+  return {group:crew,axle,update,near,strike,hitch,dispatch,stow,emptyAtDepot,nearestRoute,pose:()=>{if(towing)grip(game.figure.man);},get towing(){return towing;},park(){towing=false;}};
 }

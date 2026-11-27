@@ -5,6 +5,7 @@
 // put while they play.
 import * as THREE from 'three';
 import { rootAt } from './man.js';
+import { Endurance } from '../effort.js';
 
 const damp = (a, b, rate, dt) => b + (a - b) * Math.exp(-rate * dt);
 const angleWrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -51,6 +52,7 @@ export class Player {
     this.moveAngle = 0;
     this.strafe = false;
     this.events = [];
+    this.endurance=new Endurance();this.jumpBuffer=0;this.coyote=0;this.load=0;this.actualSpeed=0;
   }
 
   halfHeight() { return this.t.height / 2 - this.t.radius; }
@@ -94,7 +96,19 @@ export class Player {
   // --- each frame ---------------------------------------------------------------------------
   update(dt, input, camYaw) {
     const A = this.anim, R = this.R;
-    const want = this.intent(input, camYaw);
+    const active=input.playing!==false,load=clamp(input.packLoad||0,0,1);
+    if(this.load!==load){this.load=load;this.kcc.setCharacterMass(58+22*load);}
+    const walking=Math.hypot(input.move.x,input.move.y)>.1;
+    const sprint=!!input.sprint&&!input.walk&&walking&&(!input.strafe||input.move.y>.7)&&!input.cartSpeed;
+    if(active)this.endurance.update(dt,{sprinting:sprint&&this.grounded&&this.actualSpeed>1.65,moving:walking,load,lunch:input.provisioned,resting:input.resting});
+    if(this.endurance.exhausted)input={...input,sprint:false};
+    const want=this.intent(input,camYaw);
+    this.jumpBuffer=active&&!input.blockJump?(input.jump?.145:Math.max(0,this.jumpBuffer-dt)):0;
+    this.coyote=this.grounded?.105:Math.max(0,this.coyote-dt);
+    const planted=this.grounded||this.coyote>0;
+    if(this.jumpBuffer>0&&planted&&this.mode!=='jump'&&this.endurance.takeOff(load)){
+      this.jumpBuffer=0;this.coyote=0;return this.jump(dt,want);
+    }
     if(input.facingYaw!=null&&!input.strafe&&want.mag<.05){
       this.yaw=this.turnToward(this.yaw,input.facingYaw,6,dt);
     }
@@ -109,8 +123,6 @@ export class Player {
     let rootMotion = null;
 
     if (this.mode === 'move') {
-      // jump
-      if (input.jump && this.grounded) return this.jump(dt, want);
       const idle = this.speed < 0.15;
       // turn on the spot: free movement asked for far behind him, or aiming past his shoulder
       if (idle && this.grounded && !this.strafe) {
@@ -161,10 +173,15 @@ export class Player {
         const S = A.setup.speeds;
         const cap = input.sprint && fwd > 0.7 ? S.sprint : fwd >= 0 ? THREE.MathUtils.lerp(S.strafeJog, S.run * 0.82, fwd * fwd) * (1 - side * 0) : THREE.MathUtils.lerp(S.strafeJog, S.walk * 1.15, fwd * fwd);
         const target = Math.min(want.speed, cap*want.scale);
-        this.speed = approach(this.speed, target, (target > this.speed ? this.t.accel.run : this.t.decel) * dt);
-        if (want.mag > 0.05) this.moveAngle = ang;
-        this.moveDir = want.mag > 0.05 ? want.dir.clone() : this.moveDir ?? f.clone();
-        desired.copy(this.moveDir).multiplyScalar(this.speed);
+        const current=desired.set(this.vel.x,0,this.vel.z);
+        const delta=want.dir.clone().multiplyScalar(target).sub(current);
+        const change=(target>this.speed?this.t.accel.run:this.t.decel)*(1-.22*load)*dt;
+        if(delta.length()>change)delta.setLength(change);current.add(delta);
+        this.speed=current.length();
+        if(this.speed>.03){
+          this.moveDir=current.clone().normalize();
+          this.moveAngle=angleWrap(Math.atan2(current.x,current.z)-this.yaw);
+        }
       } else {
         const gait = want.speed > A.setup.speeds.run + 0.1 ? 'sprint' : want.speed > A.setup.speeds.walk + 0.1 ? 'run' : 'walk';
         if (want.mag > 0.05) this.yaw = this.turnToward(this.yaw, want.dirYaw, this.t.turn[gait], dt);
@@ -173,7 +190,7 @@ export class Player {
         // he carves ordinary turns at speed; only a near-reversal slows him (running circles used to
         // drop the run to a walk and back several times a second)
         const target = want.speed * (off < 1.0 ? 1 : clamp(1.45 - off / 2.2, 0.4, 1));
-        const rate = target > this.speed ? this.t.accel[gait] : this.t.decel;
+        const rate = (target > this.speed ? this.t.accel[gait] : this.t.decel)*(1-.22*load);
         this.speed = approach(this.speed, target, rate * dt);
         this.moveAngle = 0;
         desired.copy(this.facing()).multiplyScalar(this.speed);
@@ -238,7 +255,6 @@ export class Player {
       const moving = want.mag > 0.05;
       this.speed = approach(this.speed, moving ? want.speed : 0, (moving ? 6 : 10) * dt);
       if (moving && !this.strafe) this.yaw = this.turnToward(this.yaw, want.dirYaw, 6, dt);
-      if (input.jump && this.grounded) return this.jump(dt, want);
       const leave = moving ? st.u > st.from + 0.14 : st.done;
       if (leave) {
         this.mode = 'move';
@@ -252,7 +268,6 @@ export class Player {
 
   // one-shots that just play out (idle extras): step() hands them back
   idleShot(dt, input) {
-    if (input.jump && this.grounded) { this.mode = 'move'; return this.jump(dt, this.intent(input, 0)); }
     return this.step(dt, new THREE.Vector3(), true);
   }
 
@@ -285,11 +300,12 @@ export class Player {
 
   jump(dt, want) {
     const A = this.anim, t = this.t;
-    this.vel.copy(this.strafe && this.moveDir ? this.moveDir : this.facing()).multiplyScalar(this.speed);
-    this.vel.y = Math.sqrt(2 * t.gravity * t.jumpHeight);
+    // Carry actual horizontal momentum off the ground. The load shortens the arc.
+    this.vel.y=Math.sqrt(2*t.gravity*t.jumpHeight*(1-.28*this.load));
+    this.lastFallSpeed=0;
     this.grounded = false;
     this.mode = 'jump';
-    this.jumpedAt = performance.now();
+    this.launchGrace=.10;
     const info = A.info.Jump_Start;
     A.enter(A.oneShot('jumpStart', 'Jump_Start', { from: info.launch ?? 0.35, to: 1, rate: 1.25 }), 0.08);
     this.step(dt, new THREE.Vector3(this.vel.x, 0, this.vel.z), false, true);
@@ -300,6 +316,7 @@ export class Player {
     const fall = this.lastFallSpeed ?? 0;
     this.speed = Math.hypot(this.vel.x, this.vel.z);
     this.vel.y = 0;
+    this.events.push({kind:'land',impact:clamp((fall-2)/6,0,1)*(1+.2*this.load)});
     this.mode = 'land';
     const from = A.info.Jump_Land.contact ?? 0;
     // a short drop only dips; a long one plays the whole squash
@@ -352,10 +369,12 @@ export class Player {
     this.world.step();
     this.prevFeet.copy(this.feet);
     this.feet.set(p.x + mv.x, p.y + mv.y - this.halfHeight() - t.radius - 0.02, p.z + mv.z);
+    this.launchGrace=Math.max(0,(this.launchGrace||0)-dt);
+    if(this.grounded&&airborne&&this.vel.y>0&&this.launchGrace>0)this.grounded=false;
     if (!this.grounded) { this.airTime += dt; this.lastFallSpeed = -this.vel.y; } else if (!was || this.airTime) { this.airTime = 0; }
-    if (this.grounded && airborne && this.vel.y > 0 && performance.now() - (this.jumpedAt ?? 0) < 150) this.grounded = false;
     // actual horizontal speed, for the blend (walls slow him down)
-    const hs = Math.hypot(mv.x, mv.z) / Math.max(dt, 1e-4);
+    this.actualSpeed=Math.hypot(mv.x,mv.z)/Math.max(dt,1e-4);
+    if(!rootMotion&&dt>0){this.vel.x=mv.x/dt;this.vel.z=mv.z/dt;}
     const moved3 = Math.hypot(mv.x, mv.y, mv.z) / Math.max(dt, 1e-4);
     this.blocked = !rootMotion && this.mode === 'move' && this.grounded && moved3 < this.speed * 0.6 - 0.2 ? (this.blocked ?? 0) + 1 : 0;
     // against a wall he slows to what he really moves, so he doesn't run on the spot
