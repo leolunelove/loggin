@@ -133,7 +133,7 @@ export function createFieldwork(game,craft) {
     const current=[],dir={x:Math.sin(p.yaw),z:Math.cos(p.yaw)};
     for(let n=0;n<3;n++){
       const x=best.x+dir.x*(n-1)*1.10,z=best.z+dir.z*(n-1)*1.10,r=.28-n*.029,g=at(x,z);
-      net.clearAt(g.position,.80);g.rotation.y=p.yaw;
+      net.clearAt(g.position,.80);g.rotation.order='YXZ';g.rotation.y=p.yaw;
       const pitch=(heightAt(x+dir.x*.5,z+dir.z*.5)-heightAt(x-dir.x*.5,z-dir.z*.5));g.rotation.x=-Math.atan(pitch);
       pole(g,'bark',[0,r,-.55],[0,r,.55],r);pole(g,'cut',[0,r,-.562],[0,r,-.55],r*.96);pole(g,'cut',[0,r,.55],[0,r,.562],r*.96);
       if(n===2)pole(g,'dark',[0,r,-.12],[.38,r+.31,.17],.072);
@@ -154,7 +154,11 @@ export function createFieldwork(game,craft) {
     }
     syncSupplies();fieldRack.visible=restored(s.places[1]);dryRack.visible=w.projects.shelter===3;pennant.visible=w.finds.includes('tools');smoke.visible=restored(s.places[2]);
     jobs.forEach((list,i)=>list.forEach((t,n)=>{t.down=n!==w.sections[i];t.g.visible=n>=w.sections[i];
-      if(t.g.visible&&!t.body){const yaw=t.g.rotation.y;t.body=game.physics.createCollider(game.RAPIER.ColliderDesc.cuboid(t.r,.82*t.r,.54).setTranslation(t.x,t.y+t.r,t.z).setRotation({x:0,y:Math.sin(yaw/2),z:0,w:Math.cos(yaw/2)}));}
+      if(t.g.visible&&!t.body){
+        const centre=t.g.localToWorld(new THREE.Vector3(0,t.r,0));
+        const rotation=t.g.quaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));
+        t.body=game.physics.createCollider(game.RAPIER.ColliderDesc.cylinder(.55,t.r).setTranslation(centre.x,centre.y,centre.z).setRotation(rotation));
+      }
       if(!t.g.visible&&t.body){game.physics.removeCollider(t.body,true);t.body=null;}}));
     for(const t of [...kept.keys()])if(!w.reserved.includes(t.id)){const marker=kept.get(t);root.remove(marker);marker.traverse(o=>o.geometry?.dispose());kept.delete(t);}
     for(const id of w.reserved){const t=game.forest.trees[id];if(!t||kept.has(t)||t.routeCleared)continue;

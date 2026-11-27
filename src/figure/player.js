@@ -38,6 +38,8 @@ export class Player {
     this.kcc.setMaxSlopeClimbAngle(THREE.MathUtils.degToRad(tuning.maxSlopeDeg));
     this.kcc.setMinSlopeSlideAngle(THREE.MathUtils.degToRad(tuning.maxSlopeDeg + 6));
     this.kcc.setSlideEnabled(true);
+    this.kcc.setApplyImpulsesToDynamicBodies(true);
+    this.kcc.setCharacterMass(58);
     this.feet = new THREE.Vector3(spawn.x, spawn.y, spawn.z);
     this.prevFeet = this.feet.clone();
     this.visualY = spawn.y;
@@ -339,6 +341,7 @@ export class Player {
     if (!(this.grounded && !airborne)) this.vel.y -= (this.vel.y < 0 ? t.fallGravity : t.gravity) * dt;
     this.vel.y = Math.max(this.vel.y, -40);
     const d = { x: this.vel.x * dt, y: this.vel.y * dt, z: this.vel.z * dt };
+    this.world.timestep=Math.max(.0001,dt);
     this.kcc.computeColliderMovement(this.collider, d);
     const mv = this.kcc.computedMovement();
     const was = this.grounded;

@@ -6,6 +6,8 @@ import {riverDistance} from './river.js';
 // dabs. Trees close to the way are painted in full, those behind them with fewer, larger touches, and the furthest
 // are little more than a pole and a few blots, which is all the mist lets through.
 import * as THREE from 'three';
+import {brushContacts} from './brush-contact.js';
+import {trunkHull} from './woodland-physics.js';
 import { COMMON } from '../oilpaint/common.js';
 import { dabMaterial, dabGeometry, dabMesh } from '../oilpaint/dabs.js';
 import { heightAt, wayDist, clearingAt, noise, rng, CLEARING, START } from './land.js';
@@ -135,7 +137,9 @@ export function createForest(shared) {
       outP.lerpVectors(pts[i], pts[i + 1], k);
       return radii[i] + (radii[i + 1] - radii[i]) * k;
     };
-    if (full && wayDist(t.x, t.z) < 60) colliders.push({ x: t.x, z: t.z, y: t.y, r: t.r * 1.15 });
+    if (Math.abs(t.x)<95 && t.z>-176 && t.z<179 && wayDist(t.x,t.z)<81) {
+      t.hull=trunkHull(t,trunkAt,top);colliders.push(t);
+    }
 
     // --- crown: limbs, and the lobes of leaves they hold up ---
     const crown = new THREE.Vector3(t.x + t.lean[0] * top, t.y + t.h * (t.hero ? 0.66 : 0.8), t.z + t.lean[1] * top);
@@ -220,7 +224,7 @@ export function createForest(shared) {
     t.ranges.lobes.push(lobes.length / 4);
   }
 
-  const brushStart={leaf:leafDabs.length/10,bark:barkDabs.length/13};
+  const brushStart={leaf:leafDabs.length/10,bark:barkDabs.length/13},brushPlants=[];
   // --- the understorey: saplings and bushes that hold their leaves at eye height ---
   for (let i = 0; i < 620; i++) {
     const x = (rand() - 0.5) * 150, z = -125 + rand() * 235;
@@ -230,6 +234,7 @@ export function createForest(shared) {
     const y = heightAt(x, z), tall = 1.1 + rand() * rand() * 3.4;
     const family = rand() < 0.4 ? 3 : rand() < 0.6 ? 0 : rand() < 0.5 ? 1 : 2;
     const n = 3 + Math.floor(rand() * 4);
+    const plant={x,y,z,height:tall,radius:Math.min(1.8,.48+tall*.34),leaf:[leafDabs.length/10],bark:[barkDabs.length/13]};
     for (let k = 0; k < n; k++) {
       const lx = x + (rand() - 0.5) * tall * 0.9, ly = y + tall * (0.45 + rand() * 0.6), lz = z + (rand() - 0.5) * tall * 0.9, lr = 0.38 + rand() * 0.5;
       for (let j = 0; j < 12; j++) {
@@ -240,6 +245,7 @@ export function createForest(shared) {
       const dir = v.set(lx - x, ly - y, lz - z).normalize();
       barkDabs.push(x + dir.x * tall * 0.3, y + tall * 0.3, z + dir.z * tall * 0.3, dir.x, dir.y, dir.z, dir.z, 0, -dir.x, rand() * 1000, 0.05, MAPLE, tall * 0.75);
     }
+    plant.leaf.push(leafDabs.length/10);plant.bark.push(barkDabs.length/13);brushPlants.push(plant);
   }
 
   // --- the shapes that carry the underpainting ---
@@ -459,6 +465,19 @@ export function createForest(shared) {
     woodGeometry.attributes.aCut.needsUpdate=true;barkMesh.geometry.attributes.aVisible.needsUpdate=true;
     t.uncut=null;t.cut=null;poseTree(t,0,1,0);
   }
-  function clearBrush(x,z,radius){for(const [mesh,start]of [[leafMesh,brushStart.leaf],[barkMesh,brushStart.bark]]){const attr=mesh.geometry.attributes.aPos;let changed=false;for(let i=start;i<attr.count;i++)if(attr.getY(i)>-100&&Math.hypot(attr.getX(i)-x,attr.getZ(i)-z)<radius){attr.setY(i,-250);(mesh===leafMesh?leafTiles:barkTiles).sync(i,i+1);changed=true;}if(changed)attr.needsUpdate=true;}}
-  return { updateDistance,clearBrush,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
+  const brushLayers=[['leaf',leafMesh,leafTiles],['bark',barkMesh,barkTiles]].map(([kind,mesh,tiles])=>{
+    const attr=mesh.geometry.attributes.aPos,first=brushStart[kind];
+    return {kind,attr,first,rest:attr.array.slice(first*3),tiles};
+  });
+  const brush=brushContacts(brushPlants,(plant,dx,dz,hidden)=>{
+    for(const {kind,attr,first,rest,tiles} of brushLayers){
+      const [a,b]=plant[kind];
+      for(let i=a;i<b;i++){
+        const j=(i-first)*3,h=rest[j+1]-plant.y,flex=Math.min(1.25,Math.max(0,h/plant.height));
+        attr.setXYZ(i,rest[j]+dx*flex,hidden?-250:rest[j+1]-(dx*dx+dz*dz)*flex*.26,rest[j+2]+dz*flex);
+      }
+      tiles.sync(a,b,['aPos']);
+    }
+  });
+  return { updateDistance,clearBrush:brush.clear,touchBrush:brush.update,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
 }

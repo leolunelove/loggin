@@ -29,8 +29,16 @@ export function createKick(shared, count = 260) {
     minPx: [2.5, 3.5], maxPx: [30, 44], cells: [4, 2],
   }), 6);
   let next = 0, owed = 0;
+  function scatter(x,y,z,motion,count=4){
+    for(let j=0;j<count;j++){
+      const i=next,k=i*3;next=(next+1)%count;
+      pos[k]=x+(Math.random()-.5)*.58;pos[k+1]=y+Math.random()*.42;pos[k+2]=z+(Math.random()-.5)*.58;
+      vel[k]=motion.x*.22+(Math.random()-.5)*2.5;vel[k+1]=.4+Math.random()*1.35;vel[k+2]=motion.z*.22+(Math.random()-.5)*2.5;
+      data[i*4+1]=1;data[i*4+2]=1;
+    }
+  }
   return {
-    mesh,
+    mesh,scatter,
     /** feet: where he is; forward: unit (x, z) of his travel; speed m/s. */
     update(dt, feet, forward, speed, grounded, ground) {
       owed += grounded && speed > 2.4 ? dt * speed * 5.5 : 0;
@@ -57,7 +65,11 @@ export function createKick(shared, count = 260) {
         vel[k] += Math.sin(data[i * 4] + pos[k + 1] * 9) * dt * 2.0;
         pos[k] += vel[k] * dt; pos[k + 1] += vel[k + 1] * dt; pos[k + 2] += vel[k + 2] * dt;
         const g = ground(pos[k], pos[k + 2]) + 0.04;
-        if (pos[k + 1] <= g) { pos[k + 1] = g; vel[k] = vel[k + 2] = 0; data[i * 4 + 2] = 0; data[i * 4 + 1] -= dt * 1.6; } else data[i * 4 + 1] -= dt * 0.35;
+        if (pos[k+1]<=g) {
+          pos[k+1]=g;vel[k+1]=Math.abs(vel[k+1])>.68 ? -vel[k+1]*.19 : 0;
+          const friction=Math.exp(-9*dt);vel[k]*=friction;vel[k+2]*=friction;
+          data[i*4+2]*=friction;data[i*4+1]-=dt*.85;
+        } else data[i*4+1]-=dt*.35;
       }
       geometry.attributes.aPos.needsUpdate = true;
       geometry.attributes.aData.needsUpdate = true;

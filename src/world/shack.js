@@ -185,7 +185,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
   contains(feet,state){return insideShack(group.position,feet,state);},
   updateInterior(dt,feet,camera,state){
    const inside=insideShack(group.position,feet,state),nearDoor=atShackDoor(group.position,feet);
-   const reveal=inside||(nearDoor&&feet.z<site.z+2.25);
+   const reveal=inside||(nearDoor&&Math.abs(feet.x-site.x-DOOR.x)<(cutaway?.95:.77)&&feet.z<site.z+(cutaway?2.5:2.2));
    const dx=camera.position.x-site.x,dz=camera.position.z-site.z;
    const mask='roof,'+(inside?((dz>=0?'front,':'back,')+(dx>=0?'right':'left')):'');
    const changed=reveal!==cutaway||(reveal&&mask!==cutMask);cutaway=reveal;cutMask=mask;

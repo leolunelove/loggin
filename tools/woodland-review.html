@@ -1,19 +1,19 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Loggin’ woodland playtest</title>
 <style>body{margin:0;background:#292e25;color:#eee0c2;font:13px system-ui}header{padding:7px;display:flex;gap:5px;align-items:center;flex-wrap:wrap}button{background:#e6d7b8;color:#272c25;border:0;padding:6px 9px}output{font:12px monospace}iframe{display:block;border:0;width:100%;height:calc(100vh - 80px)}</style>
-<header><button data-place="0">Orchard</button><button data-place="1">Riverwatch</button><button data-place="2">Pine Hollow</button><button id="supplies">Supply restored homes</button><button id="sign">Camp fingerpost</button><button id="cart">Visit cart</button><button id="round">Follow hauler</button><button id="walk">Walk forward</button><button id="action">Interact</button><button id="field">Field action</button><button id="clue">Next find</button><button id="trunk">Visit windthrow</button><button id="chop">Hold axe</button><button id="keeper">Visit keeper</button><button id="rack">Visit east rack</button><button id="bridge">Cross bridge</button><button id="toss">Pack logs</button><button id="dusk">Evening</button><button id="rain">Show rain</button><button id="still">Save cart still</button><output>Loading the wood…</output></header>
+<header><button data-place="0">Orchard</button><button data-place="1">Riverwatch</button><button data-place="2">Pine Hollow</button><button id="supplies">Supply restored homes</button><button id="sign">Camp fingerpost</button><button id="cart">Visit cart</button><button id="round">Follow hauler</button><button id="walk">Walk forward</button><button id="enter">Cross threshold</button><button id="leave">Leave room</button><button id="brush">Brush a sapling</button><button id="birch">Fell starter birch</button><button id="room-still">Save room still</button><button id="action">Interact</button><button id="field">Field action</button><button id="clue">Next find</button><button id="trunk">Visit windthrow</button><button id="chop">Hold axe</button><button id="keeper">Visit keeper</button><button id="rack">Visit east rack</button><button id="bridge">Cross bridge</button><button id="toss">Pack logs</button><button id="dusk">Evening</button><button id="rain">Show rain</button><button id="still">Save cart still</button><output>Loading the wood…</output></header>
 <iframe title="Playable forest" src="/?capture&amp;nopad&amp;woodlandReview"></iframe>
 <script type="module">
-const frame=document.querySelector('iframe'),out=document.querySelector('output');let lab,g;
+const frame=document.querySelector('iframe'),out=document.querySelector('output');let lab,g,place=0,observation='';
 const $=id=>document.getElementById(id),neutral=()=>({move:{x:0,y:0},look:{x:0,y:0},zoom:0,walk:false,device:'pad'});
 const poll=setInterval(()=>{lab=frame.contentWindow.lab;if(!lab?.ready)return;clearInterval(poll);g=lab.game;g.started=true;lab.input.override=neutral;
  for(const id of ['intro','mouse-capture'])frame.contentDocument.getElementById(id).hidden=true;
  for(const id of ['hud','controls','action'])frame.contentDocument.getElementById(id).hidden=false;
  lab.step(1/60,2);report();},100);
-function report(){const c=g.state.woodland.cart,p=lab.player.feet;out.textContent='Day '+g.state.day+' · Bag '+g.state.carried+' · Shared '+g.state.wood+' · Cart '+c.load+' / '+(c.hired?'hired':'no crew')+' · Route '+c.progress.toFixed(2)+' · '+(g.onTrail?'trail':'woods')+' · '+(g.target?.windthrow?'windthrow':'standing')+' · x '+p.x.toFixed(1)+' z '+p.z.toFixed(1);}
+function report(){const c=g.state.woodland.cart,p=lab.player.feet;out.textContent='Day '+g.state.day+' · Bag '+g.state.carried+' · Shared '+g.state.wood+' · Cart '+c.load+' / '+(c.hired?'hired':'no crew')+' · Route '+c.progress.toFixed(2)+' · '+(g.onTrail?'trail':'woods')+' · '+(g.target?.windthrow?'windthrow':'standing')+' · x '+p.x.toFixed(1)+' z '+p.z.toFixed(1)+' · '+(g.follow.interior?'room camera':'outdoor camera')+' · '+(g.indoorPlace>=0?['Orchard interior','Riverwatch interior','Pine Hollow interior'][g.indoorPlace]:'outside')+(g.exploration.nearest(p)>=0?' · door Δ '+(p.z-g.exploration.sites[g.exploration.nearest(p)].dropoff.z+1).toFixed(2)+' m · floor Δ '+(p.y-g.exploration.sites[g.exploration.nearest(p)].group.position.y).toFixed(2)+' m':'')+(observation?' · '+observation:'');}
 function visit(x,z,fx,fz){lab.view(null);lab.teleport(x,z,fx,fz);lab.step(.025,2);g.updatePrompt();report();}
 function shot(eye,look){lab.view(eye,look);lab.step(.025,1);}
 function key(k){lab.input.override=()=>({...neutral(),[k]:true});lab.step(.025,1);lab.input.override=neutral;g.updatePrompt();report();}
-for(const b of document.querySelectorAll('[data-place]'))b.onclick=()=>{const h=g.exploration.sites[+b.dataset.place],p=h.dropoff;visit(p.x,p.z+1.1,p.x,p.z-1);};
+for(const b of document.querySelectorAll('[data-place]'))b.onclick=()=>{place=+b.dataset.place;observation='';const h=g.exploration.sites[place],p=h.dropoff;visit(p.x,p.z+5.25,p.x,p.z-1);};
 $('supplies').onclick=()=>{Object.assign(g.state,{wood:400,hardwood:60,planks:80,shed:40,sawmill:40,axe:2,carried:18,carriedHardwood:3});for(const p of g.state.places)Object.assign(p,{found:true,wood:24,planks:8,trail:40});g.exploration.sync(g.state);g.field.sync();g.renderHud();g.shade.refresh();g.save();report();};
 $('sign').onclick=()=>{
  const p=g.exploration.guide.position;g.state.hour=15.4;
@@ -25,6 +25,26 @@ $('cart').onclick=()=>{const p=g.cart.axle.position;visit(p.x+1.3,p.z+.45,p.x,p.
 $('round').onclick=()=>{const c=g.state.woodland.cart;for(let j=0;j<8;j++)g.cart.update(.4);const p=g.cart.axle.position,y=c.yaw,dx=Math.sin(y),dz=Math.cos(y);
  shot([p.x+dz*3.4+dx*2.7,p.y+1.85,p.z-dx*3.4+dz*2.7],[p.x+dx*.43,p.y+.90,p.z+dz*.43]);report();};
 $('action').onclick=()=>key('interactPressed');$('field').onclick=()=>key('fieldPressed');
+function advance(frames,move){
+ lab.input.override=()=>({...neutral(),walk:true,strafe:true,move});
+ lab.step(1/60,frames,false);lab.input.override=neutral;lab.step(1/60,42,false);g.updatePrompt();report();
+}
+$('enter').onclick=()=>advance(370,{x:0,y:1});$('leave').onclick=()=>advance(380,{x:0,y:-1});
+$('brush').onclick=()=>{
+ const p=g.forest.brushPlants.find(p=>!p.cleared&&p.z>40&&p.z<68&&p.x<7&&p.x>-22&&g.forest.trees.every(t=>t.down||Math.hypot(t.x-p.x,t.z-p.z)>t.r+2.6));
+ if(!p){observation='No clear sapling beside this approach';report();return;}
+ visit(p.x-.30,p.z+1.85,p.x-.30,p.z-1);
+ lab.input.override=()=>({...neutral(),walk:true,strafe:true,move:{x:0,y:1}});
+ let peak=0;for(let i=0;i<8;i++){lab.step(1/60,18,false);peak=Math.max(peak,Math.hypot(p.bendX,p.bendZ));}
+ lab.input.override=neutral;lab.step(1/60,150,false);observation='Peak bend '+peak.toFixed(2)+' m, settled '+Math.hypot(p.bendX,p.bendZ).toFixed(2)+' m';report();
+};
+$('birch').onclick=()=>{
+ const t=g.forest.trees.find(t=>t.tutorial)||g.forest.trees.find(t=>!t.down&&t.type===1&&t.tier===0);
+ if(!t||t.down){observation='Starter tree already down';report();return;}
+ visit(t.x,t.z+t.r+1.20,t.x,t.z);g.held=true;lab.step(1/60,240,false);g.held=false;lab.step(1/60,150,false);
+ observation=(t.sections?.length||0)+' physical log sections';report();
+};
+$('room-still').onclick=()=>{lab.step(1/60,1);lab.renderer.domElement.toBlob(blob=>{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='woodland-room.webp';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);},'image/webp',.90);};
 $('walk').onclick=()=>{lab.input.override=()=>({...neutral(),move:{x:0,y:1}});lab.step(.05,22);lab.input.override=neutral;lab.step(.04,3);report();};
 $('trunk').onclick=()=>{const t=g.field.windthrows()[0];if(!t){out.textContent='All five windthrows cleared.';return;}visit(t.x+.72,t.z+.16,t.x,t.z);};
 $('keeper').onclick=()=>{const t=g.forest.trees.find(t=>g.field.canReserve(t,g.state)&&t.type===1);if(!t){out.textContent='No eligible birch near a home.';return;}visit(t.x,t.z+t.r+.6,t.x,t.z);};

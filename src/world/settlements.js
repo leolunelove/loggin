@@ -2,20 +2,21 @@ import {createFingerpost} from './fingerpost.js';
 import {buildTrail} from './trail.js';
 import {pinDabs} from '../oilpaint/pins.js';
 import * as THREE from 'three';
-import {createOutpostHouse,HOUSE_TYPES} from './outpost-house.js';import {paint} from '../figure/figure.js';import {PLACES,restored,segmentDistance} from '../exploration.js';import {riverCenter} from './river.js';
+import {createOutpostHouse,HOUSE_TYPES,houseCollider} from './outpost-house.js';import {paint} from '../figure/figure.js';import {PLACES,restored,segmentDistance} from '../exploration.js';import {settlementSites} from './settlement-sites.js';
 // Reusable camp dressing: timber carts, wheel spokes, orchard trees, fences, barrels,
 // tool piles, washing lines, garden beds and wayfinding signs share painted palettes.
-export function createSettlements(game){
+export function createSettlements(game,craft){
  const {scene,shared,heightAt,home,physics,RAPIER,forest}=game,origin=home.group.position,groups=[],routes=[],sites=[];
  const district=new THREE.Group();scene.add(district);
  const palettes=[[[.64,.45,.26],[.35,.26,.18],[.15,.15,.12]],[[.66,.67,.52],[.36,.4,.33],[.18,.23,.2]],[[.75,.32,.16],[.4,.18,.12],[.18,.12,.09]]],mats=palettes.map(p=>paint(shared,p));
  function box(g,w,h,d,x,y,z,m=0){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mats[m]);o.position.set(x,y,z);g.add(o);return o;}
  function clearAt(p,r){forest.clearBrush?.(p.x,p.z,r+1);for(const t of forest.trees)if(!t.routeCleared&&Math.hypot(t.x-p.x,t.z-p.z)<r+t.r){t.routeCleared=true;t.down=true;delete game.state.down[t.id];if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}game.clearRemains(t);forest.poseTree(t,0,0,1,true);}}
- for(let i=0;i<3;i++){
-  const jitter=((game.state.seed>>>i*3)%9)-4,z=origin.z-[25,65,112][i]+jitter,x=i===1?riverCenter(z)-10:origin.x-30+jitter;
-  let site={x,z},best=Infinity;for(let a=-8;a<=8;a+=4)for(let b=-8;b<=8;b+=4){const px=Math.min(x+a,riverCenter(z+b)-8),pz=z+b,ys=[[-HOUSE_TYPES[i].w/2,-HOUSE_TYPES[i].d/2],[HOUSE_TYPES[i].w/2,-HOUSE_TYPES[i].d/2],[-HOUSE_TYPES[i].w/2,HOUSE_TYPES[i].d/2],[HOUSE_TYPES[i].w/2,HOUSE_TYPES[i].d/2]].map(([dx,dz])=>heightAt(px+dx,pz+dz)),range=Math.max(...ys)-Math.min(...ys);if(range<best){best=range;site={x:px,z:pz};}}
-  const house=createOutpostHouse(shared,site,heightAt,i);sites.push(house);district.add(house.group,house.paint.mesh);forest.shade.add(house.shadow);clearAt(site,Math.hypot(HOUSE_TYPES[i].w,HOUSE_TYPES[i].d)/2+2);
-  for(const c of house.colliders)physics.createCollider(RAPIER.ColliderDesc.cuboid(c.hx,c.hy,c.hz).setTranslation(c.x,c.y,c.z));
+ const plots=settlementSites(origin,game.state.seed,HOUSE_TYPES,heightAt);
+ for(const [i,site] of plots.entries()){
+  const spec=HOUSE_TYPES[i],deck=i===1?2.3:1.5;
+  shared.uCabinBounds?.value[i].set(site.x,site.z+deck/2,spec.w/2+.24,(spec.d+deck)/2+.28);
+  const house=createOutpostHouse(shared,site,heightAt,i,{craft});sites.push(house);district.add(house.group,house.paint.mesh);forest.shade.add(house.shadow);clearAt(site,Math.hypot(HOUSE_TYPES[i].w,HOUSE_TYPES[i].d)/2+2);
+  for(const c of house.colliders)physics.createCollider(houseCollider(RAPIER,c));
   const g=new THREE.Group();g.position.set(site.x,house.group.position.y,site.z);district.add(g);groups.push(g);
   // Every settlement gets a mailbox, water barrel and hand-built fence fragments.
   box(g,.12,1.3,.12,-2.6,.65,3);box(g,.55,.34,.3,-2.6,1.3,3,2);box(g,.5,.1,.34,-2.6,1.5,3);
@@ -34,5 +35,7 @@ export function createSettlements(game){
  const guide=createFingerpost(shared,origin,sites,heightAt,mats[0],mats[1]);district.add(guide);
  physics.createCollider(RAPIER.ColliderDesc.cuboid(.085,1.10,.085).setTranslation(guide.position.x,guide.position.y+1.10,guide.position.z));
  const parts=[];for(const group of [...groups,guide]){group.updateMatrixWorld(true);group.traverse(mesh=>{const pal=mats.indexOf(mesh.material);if(mesh.isMesh&&pal>=0)parts.push({mesh,count:mesh.geometry.type==='DodecahedronGeometry'?100:25,style:()=>({pal,size:[.05,.18],dir:new THREE.Vector3(0,1,0)})});});}const dressing=pinDabs(shared,palettes,parts);dressing.update();district.add(dressing.mesh);
- return {group:district,guide,sites,routes,groups,clearAt,nearest(feet){return sites.findIndex(h=>h.contains(feet,{lodge:0})||Math.hypot(feet.x-h.dropoff.x,feet.z-h.dropoff.z)<5);},onTrail(feet,state){return routes.some((r,i)=>state.places[i].trail===40&&r.points.some((p,k)=>k&&segmentDistance(feet,r.points[k-1],p)<.85));},sync(state){for(let i=0;i<3;i++){const p=state.places[i],h=sites[i],r=routes[i],built=restored(p);h.setCamp({...state,lodge:0,porch:0,sawmill:0,planks:0,wood:built?state.wood:0,fire:0});h.group.userData.rewards.visible=built;h.group.userData.rewards.traverse(m=>{if(m.isMesh)m.visible=built;});h.group.traverse(m=>{if(m.name==='camp-lantern-core')m.visible=built&&(state.hour<7||state.hour>18);});h.group.userData.repairs.forEach((m,k)=>m.visible=!built&&p.wood<(k+1)*6);r.build(p.trail,clearAt);}for(const g of groups)g.updateMatrixWorld(true);dressing.update();},update(dt,feet,camera,state){let room=null;for(let i=0;i<3;i++){shared.uCampLights.value[5+i]?.set(sites[i].group.position.x,sites[i].group.position.y+1.5,sites[i].group.position.z,restored(state.places[i])&&(state.hour<7||state.hour>18)?1.8:0);const r=sites[i].updateInterior(dt,feet,camera,{lodge:0});if(r.inside&&restored(state.places[i]))room=r;}return room;}};
+ return {group:district,guide,sites,routes,groups,clearAt,nearest(feet){return sites.findIndex(h=>h.contains(feet,{lodge:0})||Math.hypot(feet.x-h.dropoff.x,feet.z-h.dropoff.z)<5);},onTrail(feet,state){return routes.some((r,i)=>state.places[i].trail===40&&r.points.some((p,k)=>k&&segmentDistance(feet,r.points[k-1],p)<.85));},sync(state){for(let i=0;i<3;i++){const p=state.places[i],h=sites[i],r=routes[i],built=restored(p);h.setCamp({...state,lodge:0,porch:0,sawmill:0,planks:0,wood:built?state.wood:0,restored:built,hour:state.hour,fire:0});h.group.userData.rewards.visible=built;h.group.userData.rewards.traverse(m=>{if(m.isMesh)m.visible=built;});h.group.userData.repairs.forEach((m,k)=>m.visible=!built&&p.wood<(k+1)*6);r.build(p.trail,clearAt);}for(const g of groups)g.updateMatrixWorld(true);dressing.update();},update(dt,feet,camera,state){let room=null;for(let i=0;i<3;i++){const h=sites[i],r=h.updateInterior(dt,feet,camera),lamp=h.lampPosition,night=shared.uNight?.value??0,built=restored(state.places[i]);
+    h.light(built?night:0);const p=r.inside?h.group.position:lamp;
+    shared.uCampLights.value[5+i]?.set(p.x,r.inside?p.y+2.35:p.y,p.z,built?(r.inside?.73+night*1.2:night*2.2):0);if(r.camera||r.changed)room=r;}return room;}};
 }

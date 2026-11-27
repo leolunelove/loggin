@@ -105,7 +105,7 @@ test('the physical bridge, racks, remaining windthrow sections and trail surface
   const routes=sites.map(h=>buildTrail(home.position,h.group.position,spec,heightAt,new THREE.MeshBasicMaterial(),{}));
   const bodies=new Set(),collider=()=>({setTranslation(){return this;},setRotation(){return this;}});
   const g={scene,shared:{},state:fullCamp(),heightAt,forest:{trees:[]},home:{group:home},exploration:{sites,routes,clearAt(){}},
-    RAPIER:{ColliderDesc:{cuboid:collider}},physics:{createCollider(d){bodies.add(d);return d;},removeCollider(d){bodies.delete(d);}}};
+    RAPIER:{ColliderDesc:{cuboid:collider,cylinder:collider}},physics:{createCollider(d){bodies.add(d);return d;},removeCollider(d){bodies.delete(d);}}};
   const field=createFieldwork(g,woodcraft({}));field.sync();
   assert.equal(field.windthrows().length,5);assert.equal(bodies.size,15);
   const first=field.windthrows()[0];g.state.woodland.sections[0]=1;field.sync();

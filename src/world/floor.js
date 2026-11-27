@@ -24,6 +24,14 @@ int litterKind(float r, float v, float moss, float way) {
 vec3 litter(int k, float lit, float r) { return paint3(LIT_L[k], LIT_M[k], LIT_S[k], lit, r); }
 `;
 
+const buildings = /* glsl */ `
+uniform vec4 uCabinBounds[3];
+bool underCabin(vec2 p){
+  for(int i=0;i<3;i++){vec4 b=uCabinBounds[i];if(all(lessThan(abs(p-b.xy),b.zw)))return true;}
+  return false;
+}
+`;
+
 const carpet = /* glsl */ `
 void makeDab(inout Dab d) {
   vec2 cell; float sub;
@@ -34,7 +42,7 @@ void makeDab(inout Dab d) {
   float lod;
   d.alive = ringGrow(distance(xz, cameraPosition.xz), lod);
   if (d.alive <= 0.0) return;
-  if(riverGap(xz)<4.6){d.alive=0.0;return;}
+  if(underCabin(xz)||riverGap(xz)<4.6){d.alive=0.0;return;}
   vec3 P = vec3(xz.x, heightAt(xz), xz.y);
   vec3 Nn = normalAt(xz);
   vec4 m = texture(tLand, landUv(xz));
@@ -79,7 +87,7 @@ void makeDab(inout Dab d) {
   vec4 q = hash4(cell + 17.3, 51.0);
   vec4 f = hash4(cell + sub * 7.7 + 3.1, sub * 13.0 + 3.0);
   vec2 foot = (cell + r.xy) * uCell0;
-  if (abs(foot.x-uHome.x)<5.0 && abs(foot.y-uHome.y)<4.5) { d.alive=0.0; return; }
+  if (underCabin(foot)||(abs(foot.x-uHome.x)<5.0 && abs(foot.y-uHome.y)<4.5)) { d.alive=0.0; return; }
   float lod;
   d.alive = ringGrow(distance(foot, cameraPosition.xz), lod);
   if (d.alive <= 0.0) return;
@@ -122,8 +130,9 @@ void makeDab(inout Dab d) {
 
 export function createFloor(shared) {
   shared.uHome ??= { value: new Vector2(10000,10000) };
-  const carpetRings = groundRings(shared, { head: LITTER, body: carpet, per: 3, n: 192, cell0: 0.14, levels: 6, minPx: [5, 9], maxPx: [4000, 4000], cells: [0, 8] });
-  const growthRings = groundRings(shared, { head: LITTER, body: growth, per: 6, n: 96, cell0: 0.42, levels: 4, minPx: [2.5, 12], maxPx: [60, 420], cells: [0, 4] });
+  shared.uCabinBounds??={value:Array.from({length:3},()=>new THREE.Vector4(0,0,0,0))};
+  const carpetRings = groundRings(shared, { head: LITTER+buildings, body: carpet, per: 3, n: 192, cell0: 0.14, levels: 6, minPx: [5, 9], maxPx: [4000, 4000], cells: [0, 8] });
+  const growthRings = groundRings(shared, { head: LITTER+buildings, body: growth, per: 6, n: 96, cell0: 0.42, levels: 4, minPx: [2.5, 12], maxPx: [60, 420], cells: [0, 4] });
   const group = new THREE.Group();
   group.add(carpetRings.group, growthRings.group);
   return { group, follow(x, z) { carpetRings.follow(x, z); growthRings.follow(x, z); } };

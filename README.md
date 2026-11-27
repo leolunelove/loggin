@@ -2,7 +2,7 @@
 
 A small third-person lumberjack game in an autumn forest painted in oils. Chop trees, haul logs home, stack the camp woodpile, and work your way through five axes.
 
-[Play Loggin’](https://leolunelove.github.io/loggin/) · [Build and deployment](https://github.com/leolunelove/loggin/actions)
+[Play Loggin’](https://leolunelove.github.io/loggin/) · [Compare the three UI studies](https://leolunelove.github.io/loggin/style-studies/) · [Build and deployment](https://github.com/leolunelove/loggin/actions)
 
 ## The loop
 
@@ -24,7 +24,7 @@ Closing the workbench with its close button or U returns control to the forest. 
 
 ## Walk into your shack
 
-Approach the front doorway and the door swings open. Walk through with WASD; the camera rises and the roof and near walls cut away to reveal the room. Mouse look still controls the view and movement heading. The doorway and walls have real collision; there is no scene teleport.
+Approach any front doorway and the door swings open. Walk through with WASD as the roof opens and the camera eases overhead. Movement follows the room on screen. Cross the threshold on your way out and the view settles back behind your character.
 
 Supply shelves reflect stored logs, hardwood and planks. Purchased axes stay on the wall, building mementos mark completed projects, and a camp board displays your totals. Press E or left-click inside to open the camp ledger, then Open workbench for upgrades and building work. Logs are still unloaded at the outdoor rack.
 
@@ -47,6 +47,7 @@ A restored home's ledger has **Home**, **Trail & cart** and **Projects** pages. 
 - **Orchard Rest.** Take apples from the basket or the home ledger. A lunch lasts three camp hours and gives a 16% faster sprint. Find the blazed post to learn how to build three working trail lanterns.
 - **Riverwatch.** Build the footbridge in four spans and cross to a stacking rack beside the eastern grove. Loads left there go straight into shared stock and appear in the hauler’s collection queue. The old ferryman left a pennant for the landing.
 - **Pine Hollow.** Dress the axe edge for 8 hardwood and 4 planks, reinforce the cart to hold 288 logs, and lay timber steps to the charcoal kiln. Its old rafters teach you how to build a rain shelter and delivery rack along the trail.
+- **Move through the woods.** Saplings bend where you brush them and loose leaves skip across the ground. Standing trunks follow the shape and lean of the tree. Felled sections can roll downhill and settle against other timber. Stumps stay solid until the trees regrow.
 - **Tend the woods.** Cut windthrown trunks along their chalk rings, hold Shift for a stronger stroke on tough wood, and look for figured oak and curly maple. Near a home, press R to blaze a mature tree for protection. Felled clearings flower, grow saplings and fill in with young trees as they recover.
 
 Detailed tree crowns fade into painted silhouettes between 68 and 106 metres. Rain and morning mist draw in the horizon while roofs and chimney smoke remain visible as bearings.
@@ -129,7 +130,7 @@ Finishing the campfire also gives you a timber bench. Existing completed fires g
 Clear spells and rain drift through the day in seeded, three-hour game-time weather windows with gradual transitions. Roughly one morning in three brings mist between dawn and midmorning. Forecasts derive from the saved camp seed, day and hour, so menus and reloads cannot reroll them. Rain has wind-blown streaks, small ground splashes, a cooler overcast sky and thicker distance haze. Cabin, completed porch and sawmill roofs keep their covered areas dry. Stereo rain audio blends the outdoor wash into a closer wooden-roof patter under shelter, muffles the woods indoors and follows the Sound toggle. Fire and bench remain available in the rain.
 
 ### A woodland worth exploring
-Three seeded locations surround the starting camp: Orchard Rest, Riverwatch and Pine Hollow. Their plots select relatively level ground on the near side of the river. Look for the camp signpost and explore west, north and north-west. Approach a shack and press E to open its field ledger. Restore it with 24 stored ordinary logs and 8 planks; then contribute 40 more ordinary logs to connect it to your starting camp. Each trail contribution reveals more path and clears its corridor. Completed trails give 25% faster movement. Restored shacks accept bag deliveries into your shared camp stock and offer sleep after 18:00. Discovery and construction persist in your existing save. This is a finite first region, not endless generation. New props include apple trees, garden beds, fences, mailboxes, barrels, a washing line, supply crates, a timber cart and roadside markers.
+Three seeded locations surround the starting camp: Orchard Rest, Riverwatch and Pine Hollow. Every pair of homes is at least 78 metres apart. Orchard Rest occupies the western woods, Riverwatch follows the riverbank and Pine Hollow sits in the far uplands. Each plot accounts for the slope at its doorstep. Look for the camp signpost and explore west, north and north-west. Approach a shack and press E to open its field ledger. Restore it with 24 stored ordinary logs and 8 planks; then contribute 40 more ordinary logs to connect it to your starting camp. Each trail contribution reveals more path and clears its corridor. Completed trails give 25% faster movement. Restored shacks accept bag deliveries into your shared camp stock and offer sleep after 18:00. Discovery and construction persist in your existing save. This is a finite first region, not endless generation. New props include apple trees, garden beds, fences, mailboxes, barrels, a washing line, supply crates, a timber cart and roadside markers.
 
 ### Larger woodland homes
-Discovered sites now use three separate building designs: a 6.4 × 5.2 m orchard cottage with veranda, a 4.8 × 8.2 m riverside cabin with a sloping roof and deep deck, and an 8 × 6.6 m twin-gabled logging lodge with a stone chimney and four beds. Each has matching collision walls, a human-scale doorway, furniture and an interior camera sized for its floor plan. Rain shelter follows the new footprints. Existing restoration and trail progress carries over.
+Discovered sites now use three separate building designs: a 6.4 × 5.2 m orchard cottage with veranda, a 4.8 × 8.2 m riverside cabin with a sloping roof and deep deck, and an 8 × 6.6 m twin-gabled logging lodge with a stone chimney and four beds. Each has solid walls, a walkable porch and a view sized for its floor plan. Restoring the homes reveals a gingham-covered preserving table and jars at Orchard Rest, a chart, rope and drying oars at Riverwatch, and a plane, saw and iron stove at Pine Hollow. Rain shelter follows the new footprints. Existing restoration and trail progress carries over.

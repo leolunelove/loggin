@@ -4,7 +4,7 @@ import {riverCenter} from './river.js';
 import {segmentDistance} from '../exploration.js';
 
 export function buildTrail(origin,site,spec,heightAt,material,shared) {
-  const start=new THREE.Vector3(origin.x-7,0,origin.z+4.2),end=new THREE.Vector3(site.x,0,site.z+spec.d/2+3.5);
+  const start=new THREE.Vector3(origin.x-7,0,origin.z+4.2),end=new THREE.Vector3(site.x+(spec.name==='orchard-cottage'?-1.1:0),0,site.z+spec.d/2+3.5);
   const mid=start.clone().lerp(end,.55);mid.x=start.x+(end.x-start.x)*.28;
   const curve=new THREE.CatmullRomCurve3([start,new THREE.Vector3(start.x-.7,0,origin.z-5),mid,end],false,'centripetal');
   const points=curve.getSpacedPoints(Math.max(5,Math.ceil(curve.getLength()/1.35))).map(v=>({x:Math.min(v.x,riverCenter(v.z)-6.8),z:v.z}));

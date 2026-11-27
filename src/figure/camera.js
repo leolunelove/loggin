@@ -42,6 +42,12 @@ export class Follow {
     this.sink = 0; // when the ground lifts the eye, how far the look comes down with it to keep him in the picture (0..1)
   }
 
+  get movementYaw() {
+    if(!this.interior && !(this.exitBlend>0)) return this.yaw;
+    const direction=this.camera.getWorldDirection(new THREE.Vector3());
+    return Math.atan2(direction.x,direction.z);
+  }
+
   get yaw() { return this._yaw; }
   set yaw(value) { this._yaw = this.aimYaw = value; }
   get pitch() { return this._pitch; }
@@ -74,12 +80,16 @@ export class Follow {
       cam.position.lerp(eye,1-Math.exp(-2.2*dt));this.restFocus.lerp(focus,1-Math.exp(-2.2*dt));cam.lookAt(this.restFocus);this.restActive=true;return;
     }
     if(this.restActive){this.restActive=false;this.restFocus=null;this.restShot=null;this.restExit=1.4;}
-    const oldRotation=this.restExit>0?cam.quaternion.clone():null;
+    const oldRotation=this.restExit>0||this.exitBlend>0?cam.quaternion.clone():null;
 
     if(this.interior){
-      const c=this.interior.center,pitch=THREE.MathUtils.clamp(this.pitch+.65,.68,1.02),distance=this.interior.distance;
-      const centre=new THREE.Vector3(c.x,c.y,c.z),eye=centre.clone().add(new THREE.Vector3(-Math.sin(this.yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(this.yaw)*Math.cos(pitch)).multiplyScalar(distance));
-      cam.position.lerp(eye,1-Math.exp(-8*dt));cam.lookAt(centre);this.exitBlend=1;return;
+      const c=this.interior.center, distance=this.interior.distance;
+      const centre=new THREE.Vector3(c.x+(target.x-c.x)*.14,c.y,c.z+(target.z-c.z)*.14);
+      const eye=centre.clone().addScaledVector(new THREE.Vector3(.10,.84,.53).normalize(),distance);
+      const orientation=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye,centre,UP));
+      const blend=1-Math.exp(-5.3*dt);
+      cam.position.lerp(eye,blend);cam.quaternion.slerp(orientation,blend);
+      this.exitBlend=1.15;this.pivot.set(target.x,target.y+1.35,target.z);return;
     }
     const oldPosition=(this.exitBlend>0||oldRotation)?cam.position.clone():null;
     const goal = new THREE.Vector3(target.x, target.y + 1.35, target.z);
@@ -107,8 +117,11 @@ export class Follow {
     const floor = groundAt(cam.position.x, cam.position.z) + 0.45;
     let raised = 0;
     if (cam.position.y < floor) { raised = floor - cam.position.y; cam.position.y = floor; }
-    if(oldPosition){if(oldRotation){cam.position.lerp(oldPosition,Math.exp(-2.2*dt));this.exitBlend=0;}else{this.exitBlend=Math.max(0,this.exitBlend-dt*3);cam.position.lerp(oldPosition,this.exitBlend);}}
     cam.lookAt(from.x - back.x * 6, from.y - back.y * 6 + this.lift * k - raised * this.sink, from.z - back.z * 6);
-    if(oldRotation){this.restExit=Math.max(0,this.restExit-dt);cam.quaternion.slerp(oldRotation,Math.exp(-2.2*dt));}
+    if(oldRotation){
+      const keep=Math.exp(-(this.restExit>0?2.2:4.8)*dt);
+      cam.position.lerp(oldPosition,keep);cam.quaternion.slerp(oldRotation,keep);
+      this.exitBlend=Math.max(0,(this.exitBlend||0)-dt);this.restExit=Math.max(0,(this.restExit||0)-dt);
+    }
   }
 }

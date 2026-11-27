@@ -7,6 +7,11 @@ export function buildShackRoom({box,part}){
  box(.72,.12,1.18,0,[-1.3,.82,-.25],40);
  for(const x of [-1.57,-1.03])for(const z of [-.72,.22])box(.08,.76,.09,1,[x,.38,z],12);
  box(.3,.07,.26,4,[-1.3,.91,-.2],10);box(.05,.04,.38,6,[-1.3,.98,-.15],8);
+ // An enamel mug and a folded map make the working bench feel occupied.
+ part(new THREE.CylinderGeometry(.085,.072,.13,10),7,[-1.39,.948,.12],15);
+ const handle=part(new THREE.TorusGeometry(.047,.014,5,10),7,[-1.30,.952,.12],8);handle.rotation.y=.18;
+ const map=box(.32,.012,.23,4,[-1.36,.891,-.61],12);map.rotation.y=.17;
+ const fold=box(.013,.006,.22,1,[-1.36,.90,-.61],3);fold.rotation.y=.17;
  for(const z of [-.85,.5])box(.09,1.9,.1,1,[1.63,.95,z],20);
  for(const y of [.45,1,1.55])box(.65,.07,1.45,0,[1.38,y,-.17],28);
  for(let i=0;i<9;i++){

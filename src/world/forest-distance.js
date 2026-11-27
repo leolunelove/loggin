@@ -27,14 +27,20 @@ export function tileDabs(source){
     t.mesh=dabMesh(dabGeometry(t.count,data),source.material,source.renderOrder);
     t.mesh.geometry.boundingSphere=new THREE.Sphere(new THREE.Vector3(t.x,11,t.z),53);t.mesh.frustumCulled=true;
   }
-  function copy(i){const dest=tiles[owner[i]].mesh.geometry.attributes;
-    for(const n of names){const a=attrs[n],size=a.itemSize;
+  function copy(i,fields=names){const dest=tiles[owner[i]].mesh.geometry.attributes;
+    for(const n of fields){const a=attrs[n],size=a.itemSize;
       for(let k=0;k<size;k++)dest[n].array[local[i]*size+k]=a.array[i*size+k];}
   }
   for(let i=0;i<count;i++)copy(i);
-  function sync(start,end){
-    const changed=new Set();for(let i=start;i<end;i++){copy(i);changed.add(owner[i]);}
-    for(const j of changed)for(const n of names)tiles[j].mesh.geometry.attributes[n].needsUpdate=true;
+  function sync(start,end,fields=names){
+    const changed=new Map();
+    for(let i=start;i<end;i++){
+      copy(i,fields);const tile=owner[i],j=local[i],range=changed.get(tile);
+      if(range){range[0]=Math.min(range[0],j);range[1]=Math.max(range[1],j);}else changed.set(tile,[j,j]);
+    }
+    for(const [tile,[a,b]] of changed)for(const n of fields){
+      const attr=tiles[tile].mesh.geometry.attributes[n];attr.addUpdateRange(a*attr.itemSize,(b-a+1)*attr.itemSize);attr.needsUpdate=true;
+    }
   }
   return {tiles,sync};
 }

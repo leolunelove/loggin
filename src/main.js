@@ -14,6 +14,7 @@ import { createBrushSheet } from './oilpaint/brush.js';
 import { prepareLand, createLand, heightAt, wayDist, noise, way, START } from './world/land.js';
 import { createFloor } from './world/floor.js';
 import { createForest } from './world/forest.js';
+import {plantTrunk} from './world/woodland-physics.js';
 import { createSky } from './world/sky.js';
 import { createLeaves } from './world/leaves.js';
 import { createKick } from './world/kick.js';
@@ -105,11 +106,7 @@ const physics = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 {
   const f = land.heightField();
   physics.createCollider(RAPIER.ColliderDesc.heightfield(f.cells, f.cells, f.heights, { x: 2 * f.half, y: 1, z: 2 * f.half }));
-  for (const t of forest.colliders) {
-    const collider = physics.createCollider(RAPIER.ColliderDesc.cylinder(5, t.r).setTranslation(t.x, t.y + 4.5, t.z));
-    const tree = forest.trees.find(tree => tree.x === t.x && tree.z === t.z);
-    if (tree) tree.collider = collider;
-  }
+  for (const tree of forest.colliders) tree.collider=plantTrunk(physics,RAPIER,tree);
   for (const c of home.colliders) physics.createCollider(RAPIER.ColliderDesc.cuboid(c.hx,c.hy,c.hz).setTranslation(c.x,c.y,c.z));
 }
 lap('physics');
@@ -131,7 +128,7 @@ physics.step();
 lap('figure');
 
 const frame = createFrame(renderer, shared);
-game.frame = frame; game.leaves = leaves; game.applyQuality();
+game.frame = frame; game.leaves = leaves;game.leafKick=kick; game.applyQuality();
 fitFrame = () => frame.resize();
 frame.uniforms.uCanvas.value = q.has('canvas') ? +q.get('canvas') : 1;
 /** Low quality drops the sun in the mist and most of the falling leaves. */
@@ -169,7 +166,7 @@ function tick(dt,draw=true) {
   time += dt;
   const inp = input.read(dt);
   game.before(dt, inp);
-  player.update(dt, inp, follow.yaw);
+  player.update(dt, inp, follow.movementYaw);
   // the wood has no wall: far from the way he is turned gently back, and under the world he starts again
   if (player.feet.y < heightAt(player.feet.x, player.feet.z) - 6 || wayDist(player.feet.x, player.feet.z) > 78) respawn();
   const root = player.visualRoot(dt);
@@ -190,7 +187,13 @@ function tick(dt,draw=true) {
   man.object.updateMatrixWorld(true);
   game.pose(dt);
   figure.update(dt);
-  kick.update(dt, root, { x: Math.sin(player.yaw), z: Math.cos(player.yaw) }, player.speed, onGround, heightAt);
+  const sheltered=game.insideShack||game.indoorPlace>=0;
+  leaves.mesh.visible=!sheltered;
+  const step=Math.max(.0001,dt),vx=(player.feet.x-player.prevFeet.x)/step,vz=(player.feet.z-player.prevFeet.z)/step;
+  forest.touchBrush(dt,sheltered?null:root,{x:vx,z:vz},(p,v)=>{
+    kick.scatter(p.x,p.y+Math.min(1.55,p.height*.68),p.z,v,3+Math.floor(Math.min(4,Math.hypot(v.x,v.z))));
+  });
+  kick.update(dt,root,{x:Math.sin(player.yaw),z:Math.cos(player.yaw)},player.speed,onGround&&!sheltered,heightAt);
 
   follow.update(dt, root, inp.look, inp.zoom, (o, d, max) => player.castRay(o, d, max), heightAt);
   camera.updateMatrixWorld(true);
