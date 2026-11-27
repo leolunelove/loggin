@@ -36,26 +36,9 @@ export function facesWork(tree,feet,yaw,pitch=0){
 }
 export function openAim(feet,yaw,pitch=0){
   const down=THREE.MathUtils.clamp((pitch-.08)/.75,0,1);
-  const x=feet.x+Math.sin(yaw)*(1.12-.12*down),z=feet.z+Math.cos(yaw)*(1.12-.12*down);
-  const y=feet.y+THREE.MathUtils.clamp(1.16-pitch*1.45,-.055,1.57);
+  const distance=1.12-.34*down,x=feet.x+Math.sin(yaw)*distance,z=feet.z+Math.cos(yaw)*distance;
+  const y=feet.y+THREE.MathUtils.clamp(1.16-pitch*1.53,-.14,1.57);
   return {kind:'air',x,y,z,r:.16,type:0,point:new THREE.Vector3(x,y,z)};
-}
-// Sweep the leading edge and both corners from the last animated blade position.
-// Earliest contact wins, so a rack or stump can block a stroke aimed past it.
-export function sweepEdge(world,R,exclude,from,to,yaw,extension=.055){
-  const delta=new THREE.Vector3().subVectors(to,from),length=delta.length();
-  if(length<.0001)return null;
-  const dir=delta.divideScalar(length),normal=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-  let nearest=null;
-  for(const offset of [0,-.068,.068]){
-    const start=new THREE.Vector3().copy(from).addScaledVector(normal,offset);
-    const ray=new R.Ray(start,dir);
-    const hit=world.castRayAndGetNormal(ray,length+extension,true,undefined,undefined,exclude);
-    if(hit&&(!nearest||hit.timeOfImpact<nearest.time)){
-      nearest={collider:hit.collider,time:hit.timeOfImpact,normal:hit.normal,point:start.addScaledVector(dir,hit.timeOfImpact)};
-    }
-  }
-  return nearest;
 }
 export function waterContact(a,b,heightAt){
   if(!heightAt||riverDistance(b.x,b.z)>4.25)return null;
@@ -64,9 +47,10 @@ export function waterContact(a,b,heightAt){
   const t=THREE.MathUtils.clamp((a.y-y)/(a.y-b.y),0,1),p=new THREE.Vector3().lerpVectors(a,b,t);
   return riverDistance(p.x,p.z)<4.3?p:null;
 }
-export function nudgeSection(part,point,yaw,heavy,tier){
+export function nudgeSection(part,point,yaw,heavy,tier,velocity){
   const mass=part.body.mass(),strength=(heavy?1.1:.72)*(1+tier*.09);
   const impulse=THREE.MathUtils.clamp(mass*.56,5,38)*strength;
-  part.body.applyImpulseAtPoint({x:Math.sin(yaw)*impulse,y:impulse*.24,z:Math.cos(yaw)*impulse},point,true);
+  const direction=velocity?.lengthSq()>1e-6?velocity.clone().normalize():new THREE.Vector3(Math.sin(yaw),.24,Math.cos(yaw)).normalize();
+  part.body.applyImpulseAtPoint(direction.multiplyScalar(impulse),point,true);
   part.atRest=false;
 }

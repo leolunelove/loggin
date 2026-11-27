@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { rootAt } from './man.js';
 import { Endurance } from '../effort.js';
+import {PLAYER_GROUPS} from '../world/woodland-physics.js';
 
 const damp = (a, b, rate, dt) => b + (a - b) * Math.exp(-rate * dt);
 const angleWrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -31,7 +32,7 @@ export class Player {
     this.mode = 'move';
     const half = this.halfHeight();
     this.body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(spawn.x, spawn.y + tuning.radius + half + 0.02, spawn.z));
-    this.collider = world.createCollider(RAPIER.ColliderDesc.capsule(half, tuning.radius).setFriction(0), this.body);
+    this.collider = world.createCollider(RAPIER.ColliderDesc.capsule(half, tuning.radius).setFriction(0).setCollisionGroups(PLAYER_GROUPS), this.body);
     this.kcc = world.createCharacterController(0.02);
     this.kcc.setUp({ x: 0, y: 1, z: 0 });
     this.kcc.enableAutostep(tuning.stepHeight, 0.12, false);
@@ -61,7 +62,7 @@ export class Player {
   ground(x, z, fromY, maxDist = 1.6) {
     this.ray.origin = { x, y: fromY, z };
     this.ray.dir = { x: 0, y: -1, z: 0 };
-    const hit = this.world.castRayAndGetNormal(this.ray, maxDist, true, undefined, undefined, this.collider);
+    const hit = this.world.castRayAndGetNormal(this.ray, maxDist, true, undefined, PLAYER_GROUPS, this.collider);
     if (!hit) return null;
     return { y: fromY - hit.timeOfImpact, normal: new THREE.Vector3(hit.normal.x, hit.normal.y, hit.normal.z) };
   }
@@ -69,7 +70,7 @@ export class Player {
   castRay(origin, dir, max) {
     this.ray.origin = { x: origin.x, y: origin.y, z: origin.z };
     this.ray.dir = { x: dir.x, y: dir.y, z: dir.z };
-    const hit = this.world.castRay(this.ray, max, true, undefined, undefined, this.collider);
+    const hit = this.world.castRay(this.ray, max, true, undefined, PLAYER_GROUPS, this.collider);
     return hit ? hit.timeOfImpact : null;
   }
 
@@ -358,8 +359,9 @@ export class Player {
     if (!(this.grounded && !airborne)) this.vel.y -= (this.vel.y < 0 ? t.fallGravity : t.gravity) * dt;
     this.vel.y = Math.max(this.vel.y, -40);
     const d = { x: this.vel.x * dt, y: this.vel.y * dt, z: this.vel.z * dt };
+    this.heldAxe?.limitTravel(d);
     this.world.timestep=Math.max(.0001,dt);
-    this.kcc.computeColliderMovement(this.collider, d);
+    this.kcc.computeColliderMovement(this.collider, d, undefined, PLAYER_GROUPS);
     const mv = this.kcc.computedMovement();
     const was = this.grounded;
     this.grounded = this.kcc.computedGrounded();

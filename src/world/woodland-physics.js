@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 
 const up = new THREE.Vector3(0,1,0);
+export const PLAYER_GROUPS=(4<<16)|1;
+export const AXE_GROUPS=(2<<16)|9;
+export const BARK_GROUPS=(8<<16)|2;
+export const TRUNK_GROUPS=(1<<16)|0xfffd;
 
 // Four sections of the rendered bole retain the root flare, lean and taper.
 // Vertices are local so a second-generation tree can reuse the same shape.

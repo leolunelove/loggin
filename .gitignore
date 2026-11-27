@@ -6,6 +6,7 @@ shots/*
 !shots/autumn.jpg
 !shots/cabin.jpg
 *.mp4
+!public/changelog/held-axe.mp4
 *.log
 .env
 .test/

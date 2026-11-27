@@ -10,13 +10,13 @@ export const AXES = [
   { name: 'Splitting axe', power: 4.1, cost: 130 },
   { name: "Forester’s axe", power: 4.8, cost: 320 },
 ];
-export const freshState = () => ({ version: 1, woodcutting:readSkill(), stamina:100, destination:null, places:freshPlaces(), woodland:readWoodland(), day:1, hour:9, fire:0, wood: 0, carried: 0, seed:0, appearance:defaultAppearance(), sawmill:0, planks:0, porch:0, lodge:0, millJob:null, shed: 0, hardwood: 0, carriedHardwood: 0, total: 0, felled: 0, axe: 0, speed: 0, yield: 0, sound: true, low: false, sensitivity: 1, down: {} });
+export const freshState = () => ({ version: 1, woodcutting:readSkill(), stamina:100, destination:null, places:freshPlaces(), woodland:readWoodland(), day:1, hour:9, fire:0, wood: 0, carried: 0, seed:0, appearance:defaultAppearance(), sawmill:0, planks:0, porch:0, lodge:0, millJob:null, shed: 0, hardwood: 0, carriedHardwood: 0, total: 0, felled: 0, axe: 0, axeStowed:false, speed: 0, yield: 0, sound: true, low: false, sensitivity: 1, down: {} });
 export function sanitize(data) {
   const s = freshState();
   // Existing balances remain stored at the shack. New harvests travel in the bag.
   for (const k of ['wood','carried','total','felled','hardwood','carriedHardwood','planks']) s[k] = Math.max(0, Math.min(1e12, Math.floor(Number(data?.[k]) || 0)));
   for (const [k,max] of [['axe',4],['speed',4],['yield',4]]) s[k] = Math.max(0, Math.min(max, Math.floor(Number(data?.[k]) || 0)));
-  for (const k of ['sound','low']) if (typeof data?.[k] === 'boolean') s[k] = data[k];
+  for (const k of ['sound','low','axeStowed']) if (typeof data?.[k] === 'boolean') s[k] = data[k];
   if(Number.isFinite(data?.stamina))s.stamina=Math.max(0,Math.min(100,data.stamina));
   s.sensitivity = Math.max(.5, Math.min(2, Number(data?.sensitivity) || 1));
   for (const [k,v] of Object.entries(data?.down || {})) if (/^\d{1,5}$/.test(k) && Number.isFinite(v) && v > Date.now()) s.down[k] = Math.min(v, Date.now()+90000);

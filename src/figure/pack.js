@@ -35,6 +35,13 @@ export function createWoodPack(shared,man,{paint,canvasPalette}){
  const profile=[[0,0],[.2,0],[.26,.04],[.29,.17],[.285,.42],[.3,.56]].map(([r,y])=>new THREE.Vector2(r,y));
  const sack=part(new THREE.LatheGeometry(profile,18),0,[0,0,0],340);sack.scale.set(.95,1,.68);
  const rim=part(new THREE.TorusGeometry(.3,.017,5,20),1,[0,.56,0],70);rim.rotation.x=Math.PI/2;rim.scale.y=.68;
+ const axeLoop=new THREE.Group();axeLoop.name='Axe loops';axeLoop.position.set(-.306,.20,-.055);
+ axeLoop.rotation.set(-.065,Math.PI*.51,-.045,'YXZ');group.add(axeLoop);
+ for(const y of [.13,.36]){
+  const strap=part(new THREE.TorusGeometry(.042,.008,5,12),1,[-.306,y,-.054],8,()=>({pal:1,size:[.005,.012],dir:UP}));
+  strap.rotation.x=Math.PI/2;strap.scale.y=.84;
+  part(new THREE.BoxGeometry(.064,.033,.018),1,[-.277,y,-.058],5);
+ }
  // A small back pocket and two narrow wooden stays make the silhouette read as a working pack.
  const pocket=part(new THREE.SphereGeometry(1,12,8),0,[0,.2,-.175],80);pocket.scale.set(.19,.13,.055);
  part(new THREE.BoxGeometry(.037,.2,.012),1,[0,.24,-.233],20);
@@ -76,7 +83,7 @@ export function createWoodPack(shared,man,{paint,canvasPalette}){
  }
  let count=0,initialized=false;
  return {
-  group,paint:painted,logs,setPatches,disposePatches(){for(const p of patches)if(p)p.material.map.dispose();},
+  group,axeLoop,paint:painted,logs,setPatches,disposePatches(){for(const p of patches)if(p)p.material.map.dispose();},
   setCanvas(palette){ painted.setPalette(0,palette); for(const [i,key] of ['uL','uM','uS'].entries())materials[0].uniforms[key].value.setRGB(...palette[i]);materials[0].uniforms.uOwn.value.setRGB(...palette[0]); for(const [i,key] of ['uL2','uM2','uS2'].entries())materials[0].uniforms[key].value.setRGB(...palette[i]);materials[0].uniforms.uOwn2.value.setRGB(...palette[0]); },
   setWood(wood){
    count=visibleWoodCount(wood);

@@ -6,8 +6,8 @@ const smooth=x=>{x=THREE.MathUtils.clamp(x,0,1);return x*x*(3-2*x);};
 const BARK=[[.65,.44,.24],[.35,.24,.16],[.16,.13,.13]],CUT=[[.99,.83,.53],[.73,.53,.3],[.38,.29,.21]];
 
 export class UnloadAnimation {
- constructor({scene,shared,figure,animator,home,axe,axePaint,paint}){
-  Object.assign(this,{figure,animator,home,axe,axePaint});this.weight=0;this.last=null;
+ constructor({scene,shared,figure,animator,home,paint}){
+  Object.assign(this,{figure,animator,home});this.weight=0;this.last=null;
   this.bundle=new THREE.Group();this.bundle.name='unloading-logs';const parts=[],materials=[paint(shared,BARK),paint(shared,CUT)];
   for(let i=0;i<3;i++){
    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(.057,.064,.63+i*.045,9),[materials[0],materials[1],materials[1]]);
@@ -26,7 +26,6 @@ export class UnloadAnimation {
    this.hide();this.figure.pack.setWood(state.carried);
    if(this.weight>0&&this.last){
     for(const side of ['r','l'])this.arm(side,this.last[side].clone().applyMatrix4(body.matrixWorld),this.weight);
-    if(this.last.axe){this.axe.position.lerp(this.last.axe.clone().applyMatrix4(body.matrixWorld),this.weight);this.axe.quaternion.slerp(wq.clone().multiply(this.last.axeQ),this.weight);this.axe.updateMatrixWorld(true);this.axePaint.update();}
    }
    return;
   }
@@ -43,11 +42,6 @@ export class UnloadAnimation {
   r.lerp(rightIdle,1-gather*release);l.lerp(leftIdle,1-lift*release);
   this.arm('r',r,gather*release);this.arm('l',l,lift*release);
   this.last={r:body.worldToLocal(r.clone()),l:body.worldToLocal(l.clone())};
-  // Stow the axe against the hip while both hands are occupied; bring it back on recovery.
-  const stow=smooth(p/.13)*(1-smooth((p-.86)/.14));
-  this.axe.position.lerp(local(-.38,.91,-.14),stow);
-  this.axe.quaternion.slerp(wq.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(.08,0,.12))),stow);this.axe.updateMatrixWorld(true);this.axePaint.update();
-  this.last.axe=body.worldToLocal(this.axe.position.clone());this.last.axeQ=wq.clone().invert().multiply(this.axe.quaternion);
   const visible=p>=.29&&p<.78;this.bundle.visible=visible;this.parts.forEach(part=>part.mesh.visible=visible);this.painted.mesh.visible=visible;
   this.figure.pack.setWood(Math.max(0,state.carried-(p>=.32&&p<.78?(delivery.parts[delivery.batch]||0):0)));
   if(visible){

@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {Follow} from '../src/figure/camera.js';
+import R from '../src/figure/rapier/rapier.mjs';
+import {PLAYER_GROUPS} from '../src/world/woodland-physics.js';
+import {HeldAxe,AxeOwner} from '../src/figure/held-axe.js';
+import {ChopAnimation} from '../src/figure/chop.js';
+import {Animator} from '../src/figure/animator.js';
+import {character} from './helpers/character.mjs';
+await R.init();
 import {Lumberjack} from '../src/game.js';
 import {CHOP_REACH,IMPACT_AT,swingPose,pickTree,chopCount,pickAimTree,movingChopContact} from '../src/mechanics.js';
 import {freshState,purchase,rewardFor,swingDuration,upgradeCost,sanitize} from '../src/economy.js';
@@ -12,6 +19,30 @@ function rig(){
   Object.assign(g,{time:0,camera:{position:{x:0,z:0}},started:true,paused:false,touch:false,held:false,swing:null,state:freshState(),forest:{trees:[tree(0,-1.5)]},input:{active:true,keys:new Set(),mouse:{left:false}},player:{feet:{x:0,z:0},grounded:true,speed:0,yaw:Math.PI,lastYaw:Math.PI},follow:{yaw:Math.PI,look(look){this.yaw-=look.x;}}});
   g.hits=[];g.hit=t=>g.hits.push(t);
   return g;
+}
+function attachedRig(form=0,rate=60){
+  const g=rig(),man=character(),animator=new Animator(man),axe=new THREE.Group();
+  const world=new R.World(new THREE.Vector3()),owner=world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased());
+  g.player.feet=new THREE.Vector3();g.player.collider=world.createCollider(R.ColliderDesc.capsule(.62,.28).setCollisionGroups(PLAYER_GROUPS),owner);
+  const t=g.forest.trees[0];t.y=0;t.collider=world.createCollider(R.ColliderDesc.cylinder(1.55,t.r).setTranslation(t.x,1.45,t.z));
+  const pack={group:new THREE.Group(),axeLoop:new THREE.Group(),paint:{mesh:new THREE.Group()}};
+  pack.group.position.set(0,.86,-.29);man.object.add(pack.group);man.object.updateMatrixWorld(true);
+  man.bones.spine_03.attach(pack.group);pack.group.add(pack.axeLoop);pack.axeLoop.position.set(-.306,.20,-.055);pack.axeLoop.rotation.y=Math.PI*.51;
+  Object.assign(g,{physics:world,RAPIER:R,axe,axePaint:{mesh:new THREE.Group(),update(){}},figure:{man,pack},animator,stowWeight:0,indoorPlace:-1,
+    heldAxe:new HeldAxe(world,R,g.player.collider),axeOwner:new AxeOwner(R),chopAnimation:new ChopAnimation(man,animator,axe),
+    unloadAnimation:{update(){}},heightAt:()=>0,looseTimber:new Set(),audio:{brushSound(){},axeTouch(){}},save(){}});
+  g.step=(seconds,inp)=>{
+    const n=Math.ceil(seconds*rate),dt=seconds/n;
+    for(let i=0;i<n;i++){
+      const input=i?{...inp,chopPressed:false,swingPressed:false,aimPressed:false}:inp;
+      g.before(dt,input);if(g.swing){g.swing.variant=form;g.observedSwing=g.swing;}owner.setTranslation(g.player.feet.clone().add(new THREE.Vector3(0,.9,0)),true);
+      world.timestep=dt;world.step();
+      man.object.position.copy(g.player.feet);man.object.rotation.y=g.player.yaw;
+      animator.update(dt,{speed:0,moveAngle:0,grounded:true});animator.relaxHands(0);man.object.updateMatrixWorld(true);
+      g.pose(dt);
+    }
+  };
+  g.step(.12,frame());return g;
 }
 const frame=(x=0,look=0)=>({move:{x,y:0},look:{x:look,y:0},device:'keyboard'});
 const storage=()=>{const map=new Map();return {getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,String(v)),map};};
@@ -27,31 +58,63 @@ test('a nearby trunk wins over a distant central one',()=>{
   assert.equal(picked.tree,near);assert.ok(picked.distance<CHOP_REACH);
 });
 test('one click commits one impact, never an extra held swing',()=>{
-  const g=rig();g.input.mouse.left=true;g.before(.02,frame());g.input.mouse.left=false;
-  for(let i=0;i<55;i++)g.before(.02,frame());
+  const g=attachedRig();g.input.mouse.left=true;g.step(.02,frame());g.input.mouse.left=false;
+  for(let i=0;i<55;i++)g.step(.02,frame());
   assert.equal(g.hits.length,1);assert.equal(g.swing,null);
 });
 test('a tap between frames survives the turn to face a tree, then produces exactly one contact',()=>{
-  const g=rig();g.player.yaw=Math.PI-.5;
-  g.before(.02,{...frame(),chopPressed:true});assert.equal(g.swing,null);
+  const g=attachedRig();g.player.yaw=Math.PI-.5;
+  g.step(.02,{...frame(),chopPressed:true});assert.equal(g.swing,null);
   g.player.yaw=Math.PI;
-  for(let i=0;i<65;i++)g.before(.02,frame());
+  for(let i=0;i<65;i++)g.step(.02,frame());
   assert.equal(g.hits.length,1);assert.equal(g.swing,null);
 });
 test('movement during windup keeps the stroke and movement input alive',()=>{
- const g=rig();g.input.mouse.left=true;g.before(.15,frame());assert.ok(g.swing);g.input.mouse.left=false;
- const next=frame(1);g.before(.02,next);assert.ok(g.swing);assert.equal(next.move.x,1);assert.equal(next.sprint,false);
- for(let i=0;i<30;i++)g.before(.02,frame(1));assert.equal(g.hits.length,1);
+ const g=attachedRig();g.input.mouse.left=true;g.step(.15,frame());assert.ok(g.swing);g.input.mouse.left=false;
+ const next=frame(1);g.step(.02,next);assert.ok(g.swing);assert.equal(next.move.x,1);assert.equal(next.sprint,false);
+ for(let i=0;i<30;i++)g.step(.02,frame(1));assert.equal(g.hits.length,1);
 });
 test('moving out of reach produces one miss and completes recovery without hitting from afar',()=>{
- const g=rig();g.input.mouse.left=true;g.before(.15,frame());g.input.mouse.left=false;g.player.feet.x=8;
- g.before(.4,frame(1));assert.ok(g.swing);assert.equal(g.swing.missed,true);assert.equal(g.hits.length,0);
- for(let i=0;i<30;i++)g.before(.02,frame(1));assert.equal(g.swing,null);assert.equal(g.hits.length,0);
+ const g=attachedRig();g.input.mouse.left=true;g.step(.15,frame());g.input.mouse.left=false;g.player.feet.x=8;
+ g.step(.4,frame(1));assert.ok(g.swing);assert.equal(g.swing.missed,true);assert.equal(g.hits.length,0);
+ for(let i=0;i<30;i++)g.step(.02,frame(1));assert.equal(g.swing,null);assert.equal(g.hits.length,0);
 });
 test('looking away keeps a committed stroke but menus cancel it',()=>{
- const g=rig();g.input.mouse.left=true;g.before(.2,frame());g.input.mouse.left=false;g.follow.yaw=0;
- g.before(.3,frame());assert.equal(g.hits.length,1);
- const paused=rig();paused.input.mouse.left=true;paused.before(.2,frame());paused.paused=true;paused.before(.3,frame());assert.equal(paused.hits.length,0);assert.equal(paused.swing,null);
+ const g=attachedRig();g.input.mouse.left=true;g.step(.2,frame());g.input.mouse.left=false;g.follow.yaw=0;
+ g.step(.3,frame());assert.equal(g.hits.length,1);
+ const paused=attachedRig();paused.input.mouse.left=true;paused.step(.2,frame());paused.paused=true;paused.step(.3,frame());assert.equal(paused.hits.length,0);assert.equal(paused.swing,null);
+});
+test('each swing form lands one physical edge at the starter axe’s full reach',()=>{
+ for(const fps of [30,60,120])for(let form=0;form<5;form++){
+  const g=attachedRig(form,fps);
+  g.step(1/fps,{...frame(),swingPressed:true,chopPressed:true});g.step(1.09,frame());
+  assert.equal(g.hits.length,1,`${fps} Hz form ${form}: ${g.observedSwing?.material} travel ${g.observedSwing?.travel}`);
+  g.physics.free();
+ }
+});
+test('one tap draws the stowed axe and completes exactly one cut; old saves start with the axe in hand',()=>{
+ const g=attachedRig();g.toggleAxe();g.step(.56,frame());
+ assert.equal(g.state.axeStowed,true);assert.equal(sanitize(g.state).axeStowed,true);assert.equal(sanitize({}).axeStowed,false);
+ const loop=g.figure.pack.axeLoop.getWorldPosition(new THREE.Vector3());
+ assert.ok(loop.distanceTo(g.axe.position)<.012);
+ g.step(1/60,{...frame(),swingPressed:true,chopPressed:true});g.step(1.5,frame());
+ assert.equal(g.state.axeStowed,false);assert.equal(g.hits.length,1);assert.equal(g.swing,null);g.physics.free();
+});
+test('a blocked pack loop keeps the hand on the tool until the shaft can settle into it',()=>{
+ const g=attachedRig(),loop=g.figure.pack.axeLoop;
+ const socket=loop.getWorldPosition(new THREE.Vector3());
+ const block=g.physics.createCollider(R.ColliderDesc.cuboid(.12,.20,.12).setTranslation(socket.x,socket.y,socket.z));
+ g.physics.step();g.toggleAxe();g.step(.8,frame());
+ assert.ok(g.axe.position.distanceTo(loop.getWorldPosition(socket))>.04);
+ assert.equal(g.chopAnimation.metrics.docked,false);assert.ok(g.chopAnimation.metrics.rightWeight>.75);
+ g.physics.removeCollider(block,false);g.step(.8,frame());
+ assert.equal(g.chopAnimation.metrics.docked,true);assert.equal(g.chopAnimation.metrics.rightWeight,0);
+ g.physics.free();
+});
+test('a board between the axe and the intended tree takes the stroke and leaves the tree untouched',()=>{
+ const g=attachedRig(1,30),wall=g.physics.createCollider(R.ColliderDesc.cuboid(.85,1.2,.009).setTranslation(0,1.2,-.80));g.physics.step();
+ g.audio.stack=()=>{};g.edgeChips=()=>{};g.step(1/30,{...frame(),swingPressed:true,chopPressed:true});g.step(1.04,frame());
+ assert.equal(g.hits.length,0);assert.ok(['wood','poll','haft','glance'].includes(g.observedSwing.material));assert.ok(wall.isValid());g.physics.free();
 });
 test('Space only requests a jump, while E still starts a tree stroke',()=>{
   const g=rig();g.input.keys.add('Space');const hop={...frame(),jump:true};g.before(.02,hop);

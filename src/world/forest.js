@@ -128,7 +128,11 @@ export function createForest(shared) {
       pts.push(new THREE.Vector3(t.x + t.lean[0] * y * top + bend * t.lean[1] * 8, t.y - 0.3 + y * (top + 0.3), t.z + t.lean[1] * y * top - bend * t.lean[0] * 8));
       radii.push(t.r * (1 - 0.6 * y) * (1 + 0.5 * Math.exp(-(y * top) / (0.35 + t.r * 0.6))));
     }
-    tube(wood, pts, radii, full ? 18 : some ? 7 : 5, t.type, t.seed);
+    const sides=full?18:some?7:5;
+    tube(wood,pts,radii,sides,t.type,t.seed);
+    // Keep the reachable rings of the rendered bole, including the first ring above a raised axe.
+    const lastRing=pts.findIndex(p=>p.y>t.y+3.65);
+    t.toolRings={sides,count:lastRing<0?pts.length:lastRing+1};
     // the trunk's middle and radius at a height above its foot
     const trunkAt = (y, outP) => {
       let i = 0;
@@ -434,6 +438,19 @@ export function createForest(shared) {
     balls.instanceMatrix.needsUpdate = true;
     barkTiles.sync(...t.ranges.bark);leafTiles.sync(...t.ranges.leaf);far.set(t,!hidden&&scale>.84&&Math.abs(angle)<.07);
   }
+  function barkSurface(t){
+    const {sides,count}=t.toolRings,vertices=new Float32Array(count*sides*3),indices=new Uint32Array((count-1)*sides*6);
+    const pos=woodGeometry.attributes.position,start=t.ranges.wood[0];
+    for(let i=0;i<count*sides;i++){
+      vertices[i*3]=pos.getX(start+i)-t.x;vertices[i*3+1]=pos.getY(start+i)-t.y;vertices[i*3+2]=pos.getZ(start+i)-t.z;
+    }
+    let index=0;
+    for(let row=0;row<count-1;row++)for(let i=0;i<sides;i++){
+      const a=row*sides+i,b=row*sides+(i+1)%sides;
+      indices.set([a,b,a+sides,b,b+sides,a+sides],index);index+=6;
+    }
+    return {vertices,indices};
+  }
   function carveTree(t,contact,nx,nz,damage){
     poseTree(t,0,1,0);
     if(!t.uncut)t.uncut=t.original.map(o=>o.data.slice());
@@ -479,5 +496,5 @@ export function createForest(shared) {
       tiles.sync(a,b,['aPos']);
     }
   });
-  return { updateDistance,clearBrush:brush.clear,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
+  return { barkSurface,updateDistance,clearBrush:brush.clear,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
 }

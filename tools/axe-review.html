@@ -1,0 +1,127 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Loggin’ · Axe playtest</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#25302a;color:#f3e9d2;font:14px system-ui}header{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:6px 9px}button,select{font:inherit;padding:.25em .55em;background:#e6d6b4;color:#242d26;border:0;border-radius:2px}output{display:block;padding:3px 10px 6px;font:13px ui-monospace,monospace;min-height:25px}body{display:flex;flex-direction:column;height:100vh}iframe{width:100%;flex:1;border:0;min-height:0}</style>
+<header>
+<label>Axe <select id="tier"><option>Hand axe</option><option>Felling axe</option><option>Steel axe</option><option>Splitting axe</option><option>Forester’s axe</option></select></label>
+<label>Stroke <select id="form"><option>Natural</option><option>Overhead</option><option>Diagonal</option><option>Compact</option><option>Backhand</option><option>Low hew</option></select></label><label>Rate <select id="rate"><option>30</option><option selected>60</option><option>120</option></select></label>
+<button id="standing">Cut a standing tree</button><button id="wall">Cut beside the shack</button><button id="rail">Swing through a rail</button><button id="ground">Strike the ground</button><button id="carry">Turn into a post</button>
+<button id="free">Swing in open space</button><button id="stow">Stow on the pack</button><button id="draw">Draw into a cut</button><button id="close">Frame the axe</button><button id="wide">Frame the woodcutter</button><button id="advance">Advance one frame</button>
+</header><output aria-live="polite">Loading the forest…</output><iframe title="Playable forest" src="/?capture&amp;nopad&amp;woodlandReview"></iframe>
+<script type="module">
+const $=id=>document.getElementById(id),frame=document.querySelector('iframe'),out=document.querySelector('output');
+let lab,g,h,board,wood,metrics,lastLabel='',aim,focus,hitFrame,clearing;
+const neutral=()=>({move:{x:0,y:0},look:{x:0,y:0},zoom:0,walk:false,device:'pad'}),rate=()=>Number($('rate').value);
+const mm=n=>Math.round(n*1000),v=(x=0,y=0,z=0)=>new lab.THREE.Vector3(x,y,z);
+const ready=setInterval(()=>{
+  lab=frame.contentWindow.lab;if(!lab?.ready)return;clearInterval(ready);g=lab.game;h=g.heldAxe;
+  g.started=true;lab.input.override=neutral;
+  frame.contentDocument.getElementById('intro').hidden=true;frame.contentDocument.getElementById('mouse-capture').hidden=true;
+  g.state.carried=g.state.carriedHardwood=0;g.state.shed=40;g.state.axe=0;g.state.speed=0;g.renderHud();
+  g.state.hour=15;g.weatherOverride={rain:0,mist:0,overcast:.12,label:'Clear'};
+  const pose=g.pose.bind(g);g.pose=dt=>{
+    const start=performance.now(),s=g.swing,pBefore=s?.poseProgress,aimBefore=s?.contact?.y;pose(dt);
+    if(!metrics||!h.last)return;
+    const {r,l,contact}=g.chopAnimation.metrics,phase=g.swing?.poseProgress,elapsed=performance.now()-start;
+    metrics.ms.push(elapsed);if(g.chopAnimation.metrics.rightWeight>.995&&r>metrics.r){metrics.r=r;metrics.worst=(phase??0).toFixed(2)+' at '+lab.player.feet.toArray().map(n=>n.toFixed(2)).join(',');}
+    if(g.chopAnimation.metrics.leftWeight>.995)metrics.l=Math.max(metrics.l,l||0);
+    if(contact&&(!metrics.contacts.length||metrics.contacts.at(-1)!==contact.part.name))metrics.contacts.push(contact.part.name);
+    if(g.swing&&g.swing.material&&!metrics.material){metrics.material=g.swing.material;metrics.form=s.variant;metrics.phase=pBefore.toFixed(3);metrics.aim=aimBefore-lab.player.feet.y;metrics.hit=(s.contact?.y??0)-lab.player.feet.y;}
+    if(metrics.block?.isValid()){
+      for(const p of h.parts){
+        const at=p.local.clone().applyQuaternion(h.last.q).add(h.last.p);
+        const n=metrics.block.contactShape(p.shape,at,h.last.q,.015);
+        if(n)metrics.intrusion=Math.max(metrics.intrusion,-n.distance);
+      }
+    }
+    const body=h.deepest(h.last,g.axeOwner.guards(lab.figure.man,lab.figure.pack,lab.figure.hat));
+    if(body&&-body.distance>metrics.self){metrics.self=-body.distance;metrics.bodyPart=body.part.name+' / '+body.obstacle.name;}
+    if(phase>.33&&phase<.6){const edge=g.chopAnimation.metrics.blade;metrics.height=Math.min(metrics.height,edge.y-lab.heightAt(edge.x,edge.z));}
+  };
+  lab.step(1/60,2,false);out.textContent='Ready · isolated camp';
+},80);
+function clear(){
+  if(board){g.physics.removeCollider(board,false);board=null;g.scene.remove(wood);wood.geometry.dispose();wood.material.dispose();}
+  g.held=false;g.swing=null;g.drawStroke=null;g.queuedStroke=null;g.lockedTree=null;g.state.carried=g.state.carriedHardwood=0;
+  lab.input.override=neutral;lab.view(null);h.stow();metrics=null;hitFrame=null;
+}
+function meadow(){
+  if(clearing)return clearing;
+  const home=g.home.group.position,R=g.RAPIER,q={x:0,y:0,z:0,w:1};
+  for(let r=18;r<47;r+=2)for(let a=0;a<6.28;a+=.21){
+    const x=home.x+r*Math.cos(a),z=home.z+r*Math.sin(a),y=lab.heightAt(x,z);
+    if(Math.abs(y-lab.heightAt(x+2,z))+Math.abs(y-lab.heightAt(x,z+2))>.18)continue;
+    let busy=false;
+    g.physics.intersectionsWithShape({x,y:y+1.28,z},q,new R.Cylinder(.78,2.65),c=>{
+      if(c.handle!==lab.player.collider.handle&&c.parent()?.handle!==h.body.handle)busy=true;return !busy;
+    });
+    if(!busy){clearing={x,z};return clearing;}
+  }
+  return {x:0,z:78};
+}
+function visit(x,z,fx,fz,pitch=.05){
+  lab.teleport(x,z,fx,fz);lab.follow.pitch=pitch;lab.step(1/60,32,false);aim={x:fx,z:fz};
+}
+function fresh(label,block){
+  lastLabel=label;metrics={r:0,l:0,self:0,intrusion:0,contacts:[],ms:[],block,material:null,height:Infinity,bodyPart:''};
+  metrics.xp=g.state.woodcutting.xp;metrics.feet=lab.player.feet.clone();
+}
+function show(extra=''){
+  const m=metrics,ms=m.ms.slice().sort((a,b)=>a-b);
+  out.textContent=lastLabel+' · '+(m.material||'carrying')+' · contact '+(m.contacts.join('/')||'clear')+' · obstruction penetration '+mm(m.intrusion)+' mm · body '+mm(m.self)+' mm '+(m.bodyPart||'')+' · grip R '+mm(m.r)+' / L '+mm(m.l)+' mm · '+(g.state.woodcutting.xp-m.xp)+' XP · moved '+m.feet.distanceTo(lab.player.feet).toFixed(2)+' m · pose p95 '+(ms[Math.floor(ms.length*.95)]||0).toFixed(1)+' ms'+(m.phase?' · form '+m.form+' phase '+m.phase+' · aimed '+m.aim.toFixed(2)+' hit '+m.hit.toFixed(2)+' m':'')+(Number.isFinite(m.height)?' · low edge '+m.height.toFixed(3)+' m':'')+(m.r>.025?' · largest grip error at '+m.worst:'')+extra;
+}
+function stroke(heavy=false,moving=false){
+  const dt=1/rate();lab.input.override=()=>({...neutral(),swingPressed:true,chopPressed:true,sprint:heavy});
+  for(let i=0;i<Math.ceil(rate()*.36)&&!g.swing;i++)lab.step(dt,1,false);
+  lab.input.override=()=>({...neutral(),walk:moving,move:{x:moving?.32:0,y:0}});
+  const s=g.swing;if(s&&$('form').selectedIndex)s.variant=$('form').selectedIndex-1;
+  for(let i=0;i<rate()*.95&&s&&!s.hit;i++)lab.step(dt,1,false);
+  lab.input.override=neutral;hitFrame=s;focus=g.chopAnimation.metrics.contact?.point?.clone()||g.chopAnimation.metrics.blade.clone();
+  show(s?'':' · stroke unavailable');
+}
+function camera(close=false){
+  const feet=lab.player.feet,dir=v(aim.x-feet.x,0,aim.z-feet.z).normalize(),right=v(-dir.z,0,dir.x);
+  const look=close?g.axe.position.clone().lerp(focus||g.axe.position,.34):feet.clone().addScaledVector(dir,.40).add(v(0,1.1,0));
+  const distance=close?1.45:2.82,eye=look.clone().addScaledVector(right,distance).addScaledVector(dir,-distance*.42);eye.y+=close?.30:.57;
+  lab.view(eye.toArray(),look.toArray());lab.step(.0001,1,false);show();
+}
+function tree(){
+  const p=g.home.group.position;
+  return g.forest.trees.find(t=>!t.down&&t.type===1&&t.collider&&t.tier===0&&!g.state.woodland.reserved.includes(t.id)&&
+    Math.hypot(t.x-p.x,t.z-p.z)>17&&Math.hypot(t.x-p.x,t.z-p.z)<45&&g.forest.trees.every(o=>o===t||Math.hypot(t.x-o.x,t.z-o.z)>2.85));
+}
+function putRail(x,y,z,hx,hy,hz){
+  board=g.physics.createCollider(g.RAPIER.ColliderDesc.cuboid(hx,hy,hz).setTranslation(x,y,z));
+  wood=new lab.THREE.Mesh(new lab.THREE.BoxGeometry(hx*2,hy*2,hz*2),new lab.THREE.MeshBasicMaterial({color:0x876c51}));
+  wood.position.set(x,y,z);g.scene.add(wood);lab.step(1/60,1,false);
+}
+$('standing').onclick=()=>{clear();const t=tree();if(!t)return;visit(t.x,t.z+t.r+1.10,t.x,t.z);fresh('Standing birch',t.axeBark||t.collider);stroke();camera();};
+$('wall').onclick=()=>{clear();const p=g.home.group.position;visit(p.x-2.73,p.z+.35,p.x,p.z+.35);
+  const hit=g.physics.castRay(new g.RAPIER.Ray({x:p.x-2.75,y:p.y+1.2,z:p.z+.35},{x:1,y:0,z:0}),2,true,undefined,undefined,lab.player.collider,h.body);
+  fresh('Shack wall',hit?.collider);stroke(true,true);camera();};
+$('rail').onclick=()=>{clear();const t=tree();if(!t)return;visit(t.x,t.z+t.r+1.10,t.x,t.z);
+  putRail(t.x,lab.player.feet.y+1.25,t.z+t.r+.36,.72,.78,.009);
+  fresh('18 mm rail in front of a birch',board);stroke(true);camera();};
+$('ground').onclick=()=>{clear();const {x,z}=meadow();visit(x,z,x+1,z,.92);fresh('Downward free swing');stroke();camera();};
+$('free').onclick=()=>{clear();const {x,z}=meadow();visit(x,z,x+1,z,-.15);fresh('Open free swing');stroke();camera();};
+$('carry').onclick=()=>{clear();const {x,z}=meadow();visit(x,z,x,z-1);
+  const f=lab.player.feet;putRail(f.x+.49,f.y+.95,f.z,.052,.9,.17);fresh('Carry, turn and brush a post',board);
+  const dt=1/rate();lab.input.override=()=>({...neutral(),strafe:true,walk:true,move:{x:.82,y:.32},look:{x:.033*60*dt,y:0}});
+  lab.step(dt,Math.ceil(rate()*1.12),false);lab.input.override=neutral;focus=g.chopAnimation.metrics.blade.clone();camera();};
+$('stow').onclick=()=>{
+  clear();const {x,z}=meadow();visit(x,z,x,z-1);fresh('Stow on the pack');
+  if(!g.state.axeStowed)g.toggleAxe();lab.step(1/rate(),Math.ceil(.65*rate()),false);
+  focus=g.chopAnimation.metrics.blade.clone();camera();
+  show(' · loop gap '+mm(g.axe.position.distanceTo(lab.figure.pack.axeLoop.getWorldPosition(v())))+' mm');
+};
+$('draw').onclick=()=>{
+  clear();const t=tree();if(!t){out.textContent='No standing test tree';return;}visit(t.x,t.z+t.r+1.09,t.x,t.z);
+  if(!g.state.axeStowed)g.toggleAxe();lab.step(1/rate(),Math.ceil(rate()*.46),false);fresh('Single click from stowed',t.axeBark);
+  const dt=1/rate();lab.input.override=()=>({...neutral(),swingPressed:true,chopPressed:true});
+  lab.step(dt,1,false);lab.input.override=neutral;
+  let s;
+  for(let i=0;i<rate()*1.2;i++){lab.step(dt,1,false);s=g.swing||s;if(s?.hit)break;}
+  focus=g.chopAnimation.metrics.blade.clone();camera();show(' · '+(g.state.axeStowed?'stowed':'drawn'));
+};
+$('tier').onchange=()=>{g.state.axe=$('tier').selectedIndex;g.renderHud();lab.step(1/60,1,false);out.textContent='Equipped '+$('tier').selectedOptions[0].text;};
+$('advance').onclick=()=>{if(!metrics)return;lab.step(1/rate(),1,false);show(' · '+(g.swing?.poseProgress.toFixed(3)||'at rest'));};
+$('close').onclick=()=>metrics&&camera(true);$('wide').onclick=()=>metrics&&camera();
+</script></html>

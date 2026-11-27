@@ -13,6 +13,9 @@ uniform vec3 uL; uniform vec3 uM; uniform vec3 uS;
 uniform vec3 uL2; uniform vec3 uM2; uniform vec3 uS2;
 uniform vec3 uOwn; uniform vec3 uOwn2;
 uniform float uSplit;
+#ifdef TOOL_STEEL
+uniform float uPolish;
+#endif
 uniform float uGrain;uniform float uDistanceHaze;uniform float uCloth;uniform float uTimber;
 in vec3 vWorld; in vec3 vN; in vec3 vBind;
 layout(location = 0) out vec4 outC;
@@ -38,6 +41,15 @@ void main() {
     c=mix(c,mix(uM,uL,.16+.42*lit),.18*uTimber);
     c*=1.+(grainStroke-.40)*.23*uTimber;
   }
+  #ifdef TOOL_STEEL
+    vec3 eye=normalize(cameraPosition-vWorld),halfDir=normalize(eye+uSunDir);
+    float sky=clamp(.55+.25*Nn.y+.19*dot(Nn,uSunDir),0.,1.);
+    float reflected=smoothstep(.54+.24*uPolish,.97,dot(Nn,halfDir));
+    float grind=texture(tNoise,vec2(vBind.x*28.+vBind.y*9.,vBind.y*3.)).g;
+    c=mix(c,mix(uS,uL,sky*.61+.11),.20+.18*uPolish);
+    c*=.95+.085*grind;
+    c+=uL*reflected*(.08+.24*uPolish)*uDaylight*(1.-.65*uOvercast);
+  #endif
   if(uCloth>.5){
     vec3 low=lower?uS2:uS,mid=lower?uM2:uM,high=lower?uL2:uL;
     float skyFill=clamp(.46+Nn.y*.22+dot(Nn,uSunDir)*.23,0.,1.);
@@ -63,14 +75,14 @@ void main() {
 `;
 
 // A palette is [light, half-tone, shade] and, where a lamp is carried, the thing's own colour for its light to fall on.
-export function paint(shared, [L, M, S, A = L], { skinned = false, lower = null, split = -10, grain = 2.2, quilted = false } = {}) {
+export function paint(shared, [L, M, S, A = L], { skinned = false, lower = null, split = -10, grain = 2.2, quilted = false, stock = false, polish = null } = {}) {
   const col = (c) => ({ value: new THREE.Color(...c) });
   const [L2, M2, S2, A2 = L2] = lower ?? [L, M, S, A];
   return new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
-    defines:quilted?{QUILTED:1}:{},
+    defines:{...(quilted?{QUILTED:1}:{}),...(stock?{TOOL_STOCK:1}:{}),...(polish!=null?{TOOL_STEEL:1}:{})},
     side: THREE.DoubleSide,
-    uniforms: { ...shared,uDistanceHaze:{value:1},uCloth:{value:skinned?1:0},uTimber:{value:0}, uL: col(L), uM: col(M), uS: col(S), uL2: col(L2), uM2: col(M2), uS2: col(S2), uOwn: col(A), uOwn2: col(A2), uSplit: { value: split }, uGrain: { value: grain } },
+    uniforms: { ...shared,uDistanceHaze:{value:1},uCloth:{value:skinned?1:0},uTimber:{value:stock&&polish==null?1:0},uPolish:{value:polish??0}, uL: col(L), uM: col(M), uS: col(S), uL2: col(L2), uM2: col(M2), uS2: col(S2), uOwn: col(A), uOwn2: col(A2), uSplit: { value: split }, uGrain: { value: grain } },
     vertexShader: skinned ? /* glsl */ `
       #include <common>
       #include <skinning_pars_vertex>
@@ -92,7 +104,11 @@ export function paint(shared, [L, M, S, A = L], { skinned = false, lower = null,
         vec4 w = modelMatrix * vec4(position, 1.0);
         vWorld = w.xyz;
         vN = normalize(mat3(modelMatrix) * normal);
-        vBind = vec3(uv * 0.6, 0.0);
+        #ifdef TOOL_STOCK
+          vBind=position;
+        #else
+          vBind=vec3(uv*.6,0.);
+        #endif
         gl_Position = projectionMatrix * viewMatrix * w;
       }`,
     fragmentShader: PAINT_FRAG,

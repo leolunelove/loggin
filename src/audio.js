@@ -72,10 +72,10 @@ export class ForestAudio {
     if(!voice||voice.done||!this.context)return;voice.done=true;
     const t=this.context.currentTime;voice.level.gain.cancelScheduledValues(t);voice.level.gain.setValueAtTime(voice.level.gain.value,t);voice.level.gain.linearRampToValueAtTime(0,t+fade);voice.source.stop(t+fade+.005);
   }
-  hit(type=0,tier=0,position=null,finishing=false,heavy=false){
+  hit(type=0,tier=0,position=null,finishing=false,heavy=false,energy=1){
     let take=Math.floor(this.random()*3);if(take>=this.lastHit)take++;take%=4;this.lastHit=take;
     const rate=[.98,1.045,.9,1][type]*(.98+this.random()*.04)*(1-tier*.012)*(heavy?.91:1);
-    this.sample(`axe-${take+1}`,{gain:finishing?.98:heavy?.94:.88,rate,position});
+    this.sample(`axe-${take+1}`,{gain:(finishing?.98:heavy?.94:.88)*(.68+.32*energy),rate:rate*(1+.065*(1-energy)),position});
   }
   brushSound(kind,position,intensity=1){
     const c=this.context;if(!c||!this.on)return;
@@ -119,6 +119,10 @@ export class ForestAudio {
       const buffer=c.createBuffer(1,data.length,c.sampleRate);buffer.getChannelData(0).set(data);this.buffers.set(name,buffer);
     }
     this.sample(name,{...settings,position});
+  }
+  axeTouch(position,speed,wooden){
+    const weight=clamp(speed/5,0,1);
+    this.timberVoice('rack-knock',position,{gain:.07+.17*weight,rate:(wooden?1.24:.88)+this.random()*.06});
   }
   stack(position,amount){
     const weight=clamp(amount/22,0,1);

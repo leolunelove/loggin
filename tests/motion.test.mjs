@@ -1,15 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
 import * as THREE from 'three';
-import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {character} from './helpers/character.mjs';
 import {Follow} from '../src/figure/camera.js';
 import {Player} from '../src/figure/player.js';
 import {workClothes} from '../src/figure/work-clothes.js';
 import {paint} from '../src/figure/figure.js';
 import {characterPalettes,defaultAppearance} from '../src/appearance.js';
 import {Animator} from '../src/figure/animator.js';
-import {ChopAnimation,AXE_BLADE,LOWER_GRIP} from '../src/figure/chop.js';
+import {ChopAnimation,workingEdge} from '../src/figure/chop.js';
 import {chopContact,swingPose,CHOP_REACH,IMPACT_AT,SWING_VARIANTS,chooseSwing} from '../src/mechanics.js';
 import {Lumberjack} from '../src/game.js';
 import {createHandcart} from '../src/world/handcart.js';
@@ -17,13 +16,6 @@ import {woodcraft} from '../src/world/woodcraft.js';
 import {buildTrail} from '../src/world/trail.js';
 import {freshState,swingDuration} from '../src/economy.js';
 
-const parse=async name=>{const b=await fs.readFile(new URL('../public/figure/'+name,import.meta.url));return new GLTFLoader().parseAsync(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength),'');};
-async function character(){
- const [m,c,hands]=await Promise.all([parse('starter-man.glb'),parse('starter-man-clips.glb'),fs.readFile(new URL('../src/figure/hands-anymove.json',import.meta.url),'utf8').then(JSON.parse)]);
- const man={object:m.scene,bones:{},raw:{},clips:{},motion:{},hands};man.object.traverse(o=>{if(o.isBone)man.bones[o.name]=o;});
- for(const clip of c.animations){man.raw[clip.name]=clip;man.clips[clip.name]=new THREE.AnimationClip(clip.name,clip.duration,clip.tracks.filter(t=>!t.name.startsWith('root.')));man.motion[clip.name]={speed:1,velocity:new THREE.Vector3(),yaw:0,duration:clip.duration};}
- return man;
-}
 const angleError=(a,b)=>Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
 
 test('mouse look settles quickly without overshoot and gives the same turn at 30/60/120 fps',()=>{
@@ -82,13 +74,13 @@ test('character turning follows the shortest arc and eases into its final headin
  assert.ok(angleError(yaw,-Math.PI+.6)<1e-5);
 });
 
-test('a chop requests a gradual facing change and displays contact even at the fastest axe cadence',()=>{
+test('a chop turns gradually and waits for physical contact at the fastest axe cadence',()=>{
  const g=Object.create(Lumberjack.prototype),t={x:0,y:0,z:-1.4,r:.2,tier:0,type:1};
  Object.assign(g,{time:0,started:true,paused:false,touch:false,held:true,swing:null,state:{...freshState(),speed:4},input:{active:true,keys:new Set(),mouse:{left:false}},camera:{position:{x:0,z:4}},forest:{trees:[t]},follow:{yaw:Math.PI,look(){}},player:{feet:{x:0,y:0,z:0},visualY:0,grounded:true,speed:0,yaw:Math.PI-.8,lastYaw:Math.PI-.8}});
  let impacts=0;g.hit=()=>impacts++;const frame=()=>({move:{x:0,y:0},look:{x:0,y:0},device:'keyboard'});
  const first=frame();g.before(.02,first);assert.equal(g.swing,null);assert.equal(g.player.yaw,Math.PI-.8);assert.equal(first.facingYaw,Math.PI);
  g.player.yaw=Math.PI;g.before(.02,frame());assert.ok(g.swing);
- while(!impacts)g.before(.05,frame());assert.equal(g.swing.poseProgress,IMPACT_AT);assert.equal(impacts,1);
+ while(g.swing.poseProgress<IMPACT_AT)g.before(.02,frame());assert.equal(g.swing.hit,false);assert.equal(impacts,0);
 });
 
 test('real character grips remain on the tool and the blade reaches the cut at contact for all axe sizes',async()=>{
@@ -98,7 +90,7 @@ test('real character grips remain on the tool and the blade reaches the cut at c
  for(const distance of [.9,1.25,CHOP_REACH])for(const tier of [0,4])for(const yaw of [0,2.6])for(const variant of [0,1,2,3,4])for(const finishing of [false,true]){
   const tree={x:Math.sin(yaw)*(distance+.2),y:0,z:Math.cos(yaw)*(distance+.2),r:.2},contact=chopContact(tree,{x:0,y:0,z:0});
   man.object.rotation.y=yaw;idle();chop.update(1/60,{t:tree,contact,age:.5,duration:1,poseProgress:.5,variant,finishing},tier);
-  const blade=AXE_BLADE.clone().applyMatrix4(axe.matrixWorld);assert.ok(blade.distanceTo(new THREE.Vector3(contact.x,contact.y,contact.z))<1e-6);
+  const blade=workingEdge(tier,axe.quaternion,new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw))).applyMatrix4(axe.matrixWorld);assert.ok(blade.distanceTo(new THREE.Vector3(contact.x,contact.y,contact.z))<1e-6);
   assert.ok(chop.metrics.r<.03,`right hand ${distance}m tier${tier} variant${variant}: ${chop.metrics.r}`);assert.ok(chop.metrics.l<.03,`left hand ${distance}m tier${tier} variant${variant}: ${chop.metrics.l}`);
  }
  // Both arm segments keep their true length through the windup and strike.

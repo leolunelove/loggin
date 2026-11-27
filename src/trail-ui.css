@@ -137,7 +137,7 @@ dialog :is(a,summary),#changelog time,.price-note,.shortfall,.upgrade-row small,
 #camp-projects .project-card p{grid-column:2/-1;margin:1px 0 5px;color:var(--cream)}.project-card progress{grid-column:2/-1}
 dialog progress,#camp-projects progress{appearance:none;border:0;display:block;width:100%;height:8px;background:#506e5d;border-radius:3px;overflow:hidden;mask-image:repeating-linear-gradient(90deg,#000 0 8.7%,transparent 8.7% 10%)}
 dialog progress::-webkit-progress-bar{background:#506e5d}dialog progress::-webkit-progress-value{background:var(--honey)}dialog progress::-moz-progress-bar{background:var(--honey)}
-#changelog img{border-radius:7px}#changelog figcaption{color:var(--soft)}#sleep-fade{font:800 24px var(--display)}
+#changelog :is(img,video){border-radius:7px}#changelog video{display:block;width:100%;height:auto;background:#19332c}#changelog figcaption{color:var(--soft)}#sleep-fade{font:800 24px var(--display)}
 #touch-jump{position:fixed;right:16px;bottom:147px;pointer-events:auto;touch-action:manipulation}
 @media(max-width:860px){#outfitter{grid-template-columns:minmax(298px,43%) 1fr;padding:20px}.outfit-model{left:36%}.outfit-copy{padding:26px}.kit-options span{padding:6px}.toolbar{gap:4px}}
 @media(max-width:620px),(max-width:920px) and (orientation:portrait){

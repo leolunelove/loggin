@@ -9,7 +9,7 @@ A small third-person lumberjack game in an autumn forest painted in oils. Chop t
 1. Hold left-click beside a tree. Five two-handed strokes bite at different heights. Look down to cut a fallen log, knock its end to roll it, or swing freely through the undergrowth.
 2. Felled wood goes into your canvas bag. On your first trip, follow the compass to the shack rack and tap E or left-click to start stacking. Later, the bearing picks the nearest restored home, open rack or parked cart with room for the whole bag. Mark a discovered home under **U → Woodland** to keep that bearing across saves.
 3. At the outdoor rack, press E or left-click once. Your character stows the axe, lifts bundles from the bag and stacks them at camp. Wood transfers when each bundle lands. Moving cancels and keeps unplaced logs in the bag.
-4. Press U to spend stored wood on axes, swing speed or yield. New axes have distinct heads, handles and fittings.
+4. Press U to spend stored wood on axes, swing speed or yield. Each tool has its own forged head and curved haft. Press **X** to carry it in the pack loops. A single click draws it and starts a stroke.
 5. Return to the woods. Birch, beech, maple and oak offer different rewards; trees regrow after 90 seconds.
 
 The bag holds 24 timber until the woodshed is built. Delivering 40 ordinary timber completes the woodshed in visible stages and expands capacity to 64. Yield upgrades then add 16 capacity each, so larger harvests still fit. A tree can be harvested when its full yield fits; existing oversized saves retain all carried wood.
