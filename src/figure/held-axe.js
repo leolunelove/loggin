@@ -109,8 +109,8 @@ function mayTouch(o,a,b,span){
 // The actual player capsule encloses both arms. These smaller anatomical volumes leave
 // the hand free to grasp the handle while keeping steel outside the body and the log bag.
 export class AxeOwner {
-  constructor(R){this.R=R;this.shapes=new Map();this.brim=new R.Cylinder(.019,.304);this.bag=new R.RoundCuboid(.198,.18,.102,.07);}
-  guards(man,pack,hat){
+  constructor(R){this.R=R;this.shapes=new Map();this.brim=new R.Cylinder(.033,.246);this.crown=new R.Capsule(.026,.100);this.peak=new R.RoundCuboid(.079,.004,.059,.014);this.bag=new R.RoundCuboid(.198,.18,.102,.07);}
+  guards(man,pack,headwear){
     const bones=man.bones,guards=[];
     const bone=name=>bones[name].getWorldPosition(v());
     const capsule=(a,b,r,name)=>{
@@ -128,7 +128,13 @@ export class AxeOwner {
       const span=spanAt({ext},new THREE.Matrix4().makeRotationFromQuaternion(q));
       guards.push({name,p,q,shape,bounds:{low:p.clone().sub(span),high:p.clone().add(span)}});
     };
-    if(hat?.visible)mounted(hat,v().set(0,-.065,0),v().set(.305,.019,.305),this.brim,'hat brim');
+    const hats=Array.isArray(headwear)?headwear:[headwear],style=hats.findIndex(hat=>hat?.visible);
+    const hat=hats[style];
+    if(hat){
+      mounted(hat,v().set(0,.067,0),v().set(.104,.13,.104),this.crown,'hat crown');
+      if(style===0)mounted(hat,v().set(0,-.041,0),v().set(.246,.033,.246),this.brim,'hat brim');
+      if(style===2)mounted(hat,v().set(0,-.021,.163),v().set(.096,.018,.074),this.peak,'cap peak');
+    }
     if(pack?.group.visible){
       mounted(pack.group,v().set(0,.28,-.010),v().set(.268,.25,.172),this.bag,'pack');
       for(const log of pack.logs||[]){

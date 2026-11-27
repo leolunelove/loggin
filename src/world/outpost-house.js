@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {dressTimber} from './timber.js';
 import {dressOutpost} from './outpost-details.js';
 import {woodcraft} from './woodcraft.js';
 import {paint} from '../figure/figure.js';import {pinDabs} from '../oilpaint/pins.js';
@@ -15,7 +16,7 @@ export function createOutpostHouse(shared,site,heightAt,index,{makePaint=paint,c
  const spec=HOUSE_TYPES[index],{w,d,h}=spec,X=w/2,Z=d/2;
  const y=Math.max(...[-X,X].flatMap(x=>[-Z,Z].map(z=>heightAt(site.x+x,site.z+z))));
  const group=new THREE.Group();group.name=spec.name;group.position.set(site.x,y,site.z);
- const palettes=[spec.wall,[[.55,.38,.23],[.28,.22,.16],[.13,.14,.12]],[[.47,.53,.43],[.25,.32,.29],[.12,.2,.2]],[[.7,.69,.59],[.4,.43,.39],[.22,.27,.27]],[[.98,.79,.45],[.6,.45,.25],[.26,.25,.19]],[[.85,.81,.65],[.51,.56,.46],[.24,.3,.26]]],mats=palettes.map(p=>makePaint(shared,p)),parts=[],colliders=[];
+ const palettes=[spec.wall,[[.55,.38,.23],[.28,.22,.16],[.13,.14,.12]],[[.47,.53,.43],[.25,.32,.29],[.12,.2,.2]],[[.7,.69,.59],[.4,.43,.39],[.22,.27,.27]],[[.98,.79,.45],[.6,.45,.25],[.26,.25,.19]],[[.85,.81,.65],[.51,.56,.46],[.24,.3,.26]]],mats=palettes.map((p,i)=>makePaint(shared,p,{board:i<2})),parts=[],colliders=[];
  for(const m of mats)if(m.uniforms?.uDistanceHaze)m.uniforms.uDistanceHaze.value=.81;
  const box=(a,b,c,x,dy,z,pal=0,shell=null)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(a,b,c),mats[pal]);mesh.position.set(x,dy,z);mesh.userData.shell=shell;group.add(mesh);parts.push({mesh,count:Math.max(12,Math.min(150,Math.ceil(a*b*c*25+20))),style:()=>({pal,size:[.09,.26],dir:new THREE.Vector3(0,1,0)})});return mesh;};
  const collision=(x,dy,z,hx,hy,hz)=>colliders.push({x:site.x+x,y:y+dy,z:site.z+z,hx,hy,hz});
@@ -70,6 +71,7 @@ export function createOutpostHouse(shared,site,heightAt,index,{makePaint=paint,c
  for(const y of [.55,1.15,1.75])box(.45,.09,1.8,X-.34,y,-Z+1.2,1);for(let i=0;i<7;i++)box(.32,.15,.22,X-.34,.68+(i%3)*.6,-Z+.65+Math.floor(i/3)*.45,3);
  if(index===0){box(.9,1.7,.45,-X+.6,.93,Z-.5,5);box(.7,.1,.7,1.5,.8,-Z+.7,1);}
  let ctx,texture;if(typeof document!=='undefined'){const canvas=document.createElement('canvas');canvas.width=512;canvas.height=160;ctx=canvas.getContext('2d');ctx.fillStyle=['#593d29','#43534a','#614332'][index];ctx.fillRect(0,0,512,160);ctx.strokeStyle='#b19264';ctx.lineWidth=4;ctx.strokeRect(8,10,496,140);ctx.fillStyle='#f6dfaa';ctx.textAlign='center';ctx.font='bold 48px Georgia';ctx.fillText(['Orchard Rest','Riverwatch','Pine Hollow'][index],256,98);for(const x of [25,487]){ctx.beginPath();ctx.arc(x,80,5,0,Math.PI*2);ctx.fill();}texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const sign=new THREE.Mesh(new THREE.PlaneGeometry(2.08,.42),new THREE.MeshBasicMaterial({map:texture}));sign.position.set(doorX,Math.min(h-.13,2.67),Z+.19);sign.userData.shell='front';group.add(sign);}
+ for(const {mesh} of parts)if(mesh.material===mats[0]||mesh.material===mats[1])dressTimber(mesh.geometry,mesh.position.toArray());
  group.updateMatrixWorld(true);const painted=pinDabs(shared,palettes,parts);painted.update();const shadow=new THREE.Group(),black=new THREE.MeshBasicMaterial();for(const {mesh}of parts){const m=new THREE.Mesh(mesh.geometry,black);m.matrixAutoUpdate=false;m.matrix.copy(mesh.matrixWorld);shadow.add(m);}
  let mask='',angle=0,inhabited=false,reveal=false;function sync(){group.traverse(m=>{if(m.isMesh&&m.userData.shell)m.visible=!mask.includes(m.userData.shell);});group.updateMatrixWorld(true);parts.forEach(({mesh},i)=>{shadow.children[i].visible=mesh.visible;shadow.children[i].matrix.copy(mesh.matrixWorld);});painted.update();}
  const contains=feet=>Math.abs(feet.x-site.x)<X-.18&&Math.abs(feet.z-site.z)<Z-.18&&Math.abs(feet.y-y)<1.6;

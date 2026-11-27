@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Loggin’ · Workwear review</title>
+<style>
+*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;flex-direction:column;background:#2c332a;color:#eee4cd;font:14px system-ui}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:7px}button,select{font:inherit;padding:4px 8px}output{padding:3px 9px;font:12px ui-monospace,monospace}iframe{width:100%;border:0;flex:1;min-height:0}
+</style><header>
+<label>Outfit <select id="outfit"><option>Field shirt & brim</option><option>Quilted vest & watch cap</option><option>Mill apron & rail cap</option></select></label>
+<button data-shot="trail">Walking view</button><button data-shot="front">Work shirt</button><button data-shot="face">Portrait</button>
+<button data-shot="pack">Loaded pack</button><button data-shot="aim">Shoulder</button><button data-shot="stroke">Working in the woods</button><button data-shot="wet">Rain</button><button data-shot="fire">Firelight</button><button data-shot="bench">Sit by the fire</button>
+<button data-shot="woods">Day clearing</button><button data-shot="coals">Night clearing</button><button id="round">Chop, unload and rest</button>
+</header><output id="readout" aria-live="polite">Growing a test camp…</output><iframe title="Isolated playable camp" src="/?capture&amp;nopad&amp;woodlandReview&amp;reviewSeed=740281"></iframe>
+<script type="module">
+const frame=document.querySelector('iframe'),out=document.querySelector('output'),outfit=document.querySelector('select');
+const kits=[
+ {shirt:0,hat:0,pack:0,hair:0,skin:1,workwear:0,headwear:0,beard:0},
+ {shirt:2,hat:3,pack:1,hair:2,skin:3,workwear:1,headwear:1,beard:2},
+ {shirt:1,hat:1,pack:2,hair:3,skin:2,workwear:2,headwear:2,beard:1}
+];
+const neutral=()=>({move:{x:0,y:0},look:{x:0,y:0},zoom:0,walk:false,device:'pad'});
+let lab,shot='front';
+const screen=setInterval(()=>{
+ lab=frame.contentWindow.lab;if(!lab?.ready)return;clearInterval(screen);
+ const g=lab.game;g.started=true;g.save=()=>{};lab.input.override=neutral;g.state.day=2;g.state.fire=12;g.state.shed=40;g.state.axe=2;
+ frame.contentDocument.getElementById('intro').hidden=true;frame.contentDocument.getElementById('mouse-capture').hidden=true;
+ frame.contentDocument.head.insertAdjacentHTML('beforeend','<style>#hud,#controls,#action,#target,#home-marker,#project-status,#aim-status,#aim-crosshair,#field-action,#toasts{display:none!important}</style>');
+ show();document.body.dataset.ready='true';
+},100);
+function show(){
+ if(!lab?.ready)return;
+ const g=lab.game,nearFire=['fire','bench','coals'].includes(shot),wet=shot==='wet',heavy=['pack','trail','aim','stroke','bench'].includes(shot);
+ if(g.seat){g.standFromBench();lab.step(1/60,40,false);}
+ g.figure.man.object.visible=true;g.figure.dabs.visible=true;g.axe.visible=true;g.axePaint.mesh.visible=true;
+ const h=g.home.group.position,fire=g.home.fire.position;
+ g.state.hour=nearFire?21.2:wet?14.1:15.3;
+ g.weatherOverride={rain:wet?.83:0,mist:wet?.23:.02,overcast:wet?.84:.06,label:wet?'Rain':'Clear'};
+ g.state.carried=heavy?27:0;g.state.carriedHardwood=0;g.state.axeStowed=nearFire||shot==='pack';
+ g.state.appearance={...kits[outfit.selectedIndex]};g.figure.setAppearance(g.state.appearance);g.renderHud();
+ const x=nearFire?fire.x+1.15:h.x-1.75,z=nearFire?fire.z+.97:h.z+4.75;
+ const yaw=nearFire?Math.atan2(fire.x-x,fire.z-z):.45,forward=new lab.THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw)),right=new lab.THREE.Vector3(-forward.z,0,forward.x);
+ lab.view(null);lab.teleport(x,z,x+forward.x,z+forward.z);g.swing=null;g.lockedTree=null;lab.input.override=neutral;
+ const shots={front:[2.83,-.97,1.41,1.04,.0],face:[1.03,-.47,1.75,1.66,0],pack:[-1.45,1.39,1.53,1.22,0],trail:[-4.4,1.86,2.17,1.14,.0],wet:[1.88,-1.1,1.60,1.29,0],fire:[2.08,1.41,1.60,1.12,.1]};
+ if(shot==='woods'||shot==='coals'){
+   g.figure.man.object.visible=false;g.figure.dabs.visible=false;g.axe.visible=false;g.axePaint.mesh.visible=false;
+   const x=h.x-5.35,z=h.z+10.15,y=lab.heightAt(x,z);
+   lab.view([x,y+1.64,z],[h.x-5.95,y+1.54,h.z+.1]);
+   g.shade.refresh();lab.step(1/60,54,false);out.textContent=nearFire?'Night clearing':'Day clearing';frame.dataset.shot=shot;return;
+ }
+ if(shot==='bench'){
+   const b=g.home.bench.position;
+   lab.teleport(b.x+.12,b.z-.65,b.x,b.z+.2);g.sitOnBench();lab.step(1/60,120,false);
+   lab.view([b.x+2.82,b.y+1.65,b.z-4.20],[b.x+.07,b.y+.90,b.z-.67]);
+   lab.step(1/60,2,false);out.textContent=g.seated?'Seated · loaded pack on bench':'Standing';frame.dataset.shot=shot;return;
+ }
+ if(shot==='aim'||shot==='stroke'){
+   const tree=reviewTree();
+   if(tree){
+     approach(tree);
+     if(shot==='stroke'){
+       lab.input.override=()=>({...neutral(),aimHeld:true,swingPressed:true,chopPressed:true});lab.step(1/60,1,false);
+       lab.input.override=()=>({...neutral(),aimHeld:true});lab.step(1/60,28,false);
+       const feet=lab.player.feet;lab.view([feet.x+2.43,feet.y+1.48,feet.z-.95],[feet.x+.02,feet.y+1.12,feet.z-.40]);lab.step(.0001,1,false);
+     }
+     out.textContent=outfit.selectedOptions[0].text+' · '+(g.follow.shoulder?'over the shoulder':'walking')+' · '+(g.sight?.reachable?'in reach':'woods');frame.dataset.shot=shot;return;
+   }
+ }
+ const [along,aside,eyeY,focusY,focusSide]=shots[shot]||shots.front,feet=lab.player.feet.clone();
+ const point=(f,r,y)=>feet.clone().addScaledVector(forward,f).addScaledVector(right,r).add(new lab.THREE.Vector3(0,y,0));
+ lab.view(point(along,aside,eyeY).toArray(),point(0,focusSide,focusY).toArray());
+ lab.step(1/60,49,false);g.shade.refresh();lab.step(1/60,3,false);
+ out.textContent=outfit.selectedOptions[0].text+' · '+shot+' · '+g.weather.label+' · '+g.state.carried+' logs';
+ frame.dataset.shot=shot;
+}
+for(const button of document.querySelectorAll('[data-shot]'))button.onclick=()=>{shot=button.dataset.shot;show();};
+outfit.onchange=show;
+function reviewTree(){
+ const g=lab.game,h=g.home.group.position;
+ return g.forest.trees.find(t=>!t.down&&t.type===1&&t.tier===0&&t.collider&&!g.state.woodland.reserved.includes(t.id)&&
+   Math.hypot(t.x-h.x,t.z-h.z)>17&&Math.hypot(t.x-h.x,t.z-h.z)<45&&g.forest.trees.every(o=>o===t||Math.hypot(t.x-o.x,t.z-o.z)>2.85));
+}
+function approach(t){
+ const g=lab.game;lab.view(null);lab.input.override=neutral;g.state.axeStowed=false;g.stowWeight=0;
+ lab.teleport(t.x,t.z+t.r+.96,t.x,t.z);lab.follow.pitch=.03;lab.step(1/60,30,false);
+ lab.input.override=()=>({...neutral(),aimHeld:true});lab.step(1/60,85,false);
+ // Walk round a leaning stem to face a patch the shoulder can see obliquely.
+ for(let i=0;i<2&&g.sight?.angled&&g.sight.tree===t;i++){
+   const p=g.sight.point,n=g.sight.normal.clone().setY(0).normalize();
+   lab.teleport(p.x+n.x*.91,p.z+n.z*.91,p.x,p.z);lab.follow.pitch=.03;lab.step(1/60,80,false);
+ }
+}
+document.getElementById('round').onclick=()=>{
+ const g=lab.game;
+ if(!g||!g.started)return;
+ if(g.seat){g.standFromBench();lab.step(1/60,40,false);}
+ const t=reviewTree();if(!t){out.textContent='No standing test birch';return;}
+ g.state.axe=0;g.state.carried=g.state.carriedHardwood=0;g.state.hour=15;g.renderHud();approach(t);
+ const xp=g.state.woodcutting.xp,stock=g.state.wood,errors=[],initialFov=lab.camera.fov;
+ let strokes=0;
+ while(!t.down&&strokes<14){
+   const wanted=g.sight?.point?.clone();
+   lab.input.override=()=>({...neutral(),aimHeld:true,swingPressed:true,chopPressed:true});lab.step(1/60,1,false);
+   const swing=g.swing;lab.input.override=()=>({...neutral(),aimHeld:true});lab.step(1/60,95,false);
+   if(wanted&&swing?.bite?.wood)errors.push(Math.round(wanted.distanceTo(swing.bite.point)*100));
+   strokes++;
+ }
+ const load=g.state.carried,p=g.home.dropoff;
+ lab.input.override=neutral;lab.teleport(p.x,p.z+1.22,p.x,p.z);lab.step(1/60,35,false);
+ lab.input.override=()=>({...neutral(),interactPressed:true});lab.step(1/60,1,false);lab.input.override=neutral;lab.step(1/60,230,false);
+ const b=g.home.bench.position;lab.teleport(b.x+.12,b.z-.65,b.x,b.z+.20);lab.step(1/60,20,false);
+ lab.input.override=()=>({...neutral(),interactPressed:true});lab.step(1/60,1,false);lab.input.override=neutral;lab.step(1/60,75,false);
+ const rested=g.seated&&g.figure.pack.group.getWorldPosition(new lab.THREE.Vector3()).distanceTo(b)<1;
+ lab.input.override=()=>({...neutral(),move:{x:0,y:1}});lab.step(1/60,1,false);lab.input.override=neutral;lab.step(1/60,64,false);
+ out.textContent='Birch '+(t.down?'felled':'standing')+' · '+strokes+' strokes · mark errors '+errors.join('/')+' cm · shoulder '+initialFov.toFixed(1)+'° · '+(g.state.woodcutting.xp-xp)+' XP · '+load+' collected · '+(g.state.wood-stock)+' stacked · bag '+g.state.carried+' · bench '+(rested&&!g.seat?'sat and stood':'check');
+};
+</script></html>

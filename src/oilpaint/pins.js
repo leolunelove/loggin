@@ -11,7 +11,8 @@ import { dabMaterial, dabGeometry, dabMesh } from './dabs.js';
 export function pinDabs(shared, palettes, parts, {surface=false}={}) {
   let seed = 9151;
   const rand = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const pins = [];
+  const pins = [], batches = [];
+  const normalMatrix = new THREE.Matrix3(), linear = new THREE.Matrix3(), bindWorld = new THREE.Matrix4();
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   for (const part of parts) {
     const g = part.mesh.geometry, pos = g.attributes.position, nrm = g.attributes.normal, index = g.index;
@@ -25,17 +26,48 @@ export function pinDabs(shared, palettes, parts, {surface=false}={}) {
       total += b.sub(a).cross(c.sub(a)).length();
       sums[t] = total;
     }
+    if (!total) continue;
+    const batch = { mesh: part.mesh, first: pins.length, bones: new Map(), lastWorld: new THREE.Matrix4(), visible: null };
+    batches.push(batch);
     for (let made = 0, tries = 0; made < part.count && tries < part.count * 40; tries++) {
       const want = rand() * total;
       let lo = 0, hi = tris - 1;
       while (lo < hi) { const mid = (lo + hi) >> 1; if (sums[mid] < want) lo = mid + 1; else hi = mid; }
-      const v = at(lo, Math.floor(rand() * 3));
-      const p = new THREE.Vector3().fromBufferAttribute(pos, v), n = new THREE.Vector3().fromBufferAttribute(nrm, v);
+      const verts = [at(lo, 0), at(lo, 1), at(lo, 2)];
+      const root = Math.sqrt(rand()), v = rand(), bary = [1 - root, root * (1 - v), root * v];
+      const p = new THREE.Vector3(), n = new THREE.Vector3();
+      for (let j = 0; j < 3; j++) {
+        p.addScaledVector(a.fromBufferAttribute(pos, verts[j]), bary[j]);
+        n.addScaledVector(b.fromBufferAttribute(nrm, verts[j]), bary[j]);
+      }
       if (part.accept && !part.accept(p)) continue;
+      n.normalize();
       const s = part.style(p, n);
-      pins.push({ mesh: part.mesh, v, p, n, d: s.dir.clone().normalize(), pal: s.pal, size: s.size, seed: rand() * 1000 });
+      const pin = { p, n, d: s.dir.clone().normalize(), pal: s.pal, size: s.size, seed: rand() * 1000 };
+      // Skin the surface point as the weighted sum of the three deformed corners.
+      // Combining each bone's contribution here keeps the per-frame work small.
+      if (part.mesh.isSkinnedMesh) {
+        const influences = new Map();
+        for (let j = 0; j < 3; j++) {
+          const vertex = verts[j];
+          a.fromBufferAttribute(pos, vertex); b.fromBufferAttribute(nrm, vertex);
+          for (let k = 0; k < 4; k++) {
+            const weight = bary[j] * g.attributes.skinWeight.getComponent(vertex, k);
+            if (!weight) continue;
+            const id = g.attributes.skinIndex.getComponent(vertex, k);
+            if (!batch.bones.has(id)) batch.bones.set(id, { id, world: new THREE.Matrix4(), normal: new THREE.Matrix3(), linear: new THREE.Matrix3() });
+            if (!influences.has(id)) influences.set(id, { bone: batch.bones.get(id), p: new THREE.Vector3(), n: new THREE.Vector3(), weight: 0 });
+            const influence = influences.get(id);
+            influence.p.addScaledVector(a, weight); influence.n.addScaledVector(b, weight); influence.weight += weight;
+          }
+        }
+        pin.influences = [...influences.values()];
+        for (const inf of pin.influences) inf.p.divideScalar(inf.weight);
+      }
+      pins.push(pin);
       made++;
     }
+    batch.end = pins.length;
   }
   const count = pins.length;
   const aVisible = new Float32Array(count).fill(1);
@@ -49,8 +81,8 @@ export function pinDabs(shared, palettes, parts, {surface=false}={}) {
   const mesh = dabMesh(geometry, dabMaterial(shared, {
     head: /* glsl */ `
       in vec3 aPos; in vec3 aDir; in vec3 aNrm; in vec4 aData; in float aVisible;
-      uniform vec3 FIG_L[${n}], FIG_M[${n}], FIG_S[${n}], FIG_A[${n}];`,
-    uniforms: paletteUniforms,
+      uniform float uWearWet; uniform vec3 FIG_L[${n}], FIG_M[${n}], FIG_S[${n}], FIG_A[${n}];`,
+    uniforms: {...paletteUniforms,uWearWet:shared.uWearWet??shared.uRain??{value:0}},
     body: /* glsl */ `
       void makeDab(inout Dab d) {
         if (aVisible < 0.5) { d.alive = 0.0; return; }
@@ -61,23 +93,29 @@ export function pinDabs(shared, palettes, parts, {surface=false}={}) {
         int k = int(aData.w + 0.5);
         float lit = sunAt(aPos + Nn * 0.08) * clamp(dot(Nn, uSunDir) * 0.85 + 0.42, 0.0, 1.0);
         vec3 c = paint3(FIG_L[k], FIG_M[k], FIG_S[k], lit, r.x);
+        ${surface?`float sky=clamp(.49+.30*Nn.y+.17*dot(Nn,uSunDir),0.,1.);
+        vec3 fill=mix(FIG_S[k],FIG_M[k],.26+.59*sky);
+        c=mix(c,mix(fill,FIG_L[k],smoothstep(.25,.97,lit)),.66);`:''}
         // warm light thrown up by the leaves on the ground, cool light from the sky into the shade
         c += uBounce * max(-Nn.y, 0.0) * (1.0 - lit);
         c = mix(c, c * vec3(0.86, 0.92, 1.18), (1.0 - lit) * max(Nn.y, 0.0) * 0.6);
-        c = jitter(c, r.yzw, 0.45);
+        c = jitter(c, r.yzw, ${surface?'0.30':'0.45'});
         c += FIG_A[k] * uLampCol * lampAt(aPos, Nn);
         d.pos = aPos;
         d.dir = aDir;
         d.size = aData.yz * (0.8 + 0.45 * r.y);
-        d.c1 = hazed(c, aPos);
-        d.c2 = hazed(jitter(c * 1.22, r.wxy, 0.5), aPos);
+        ${surface?`c*=1.-uWearWet*(.115+.10*max(Nn.y,0.));
+        d.c1=hazeFacing(c,aPos,1.,Nn,.87);
+        d.c2=hazeFacing(jitter(c*1.085,r.wxy,.23),aPos,1.,Nn,.87);`:`d.c1=hazed(c,aPos);
+        d.c2=hazed(jitter(c*1.22,r.wxy,.5),aPos);`}
         d.seed = aData.x;
-        ${surface?'d.lie = 1.0; d.nrm = Nn; d.height = 0.0018;':'d.lift = 0.3;'}
+        ${surface?'d.lie = 1.0; d.nrm = Nn; d.height = 0.0009;':'d.lift = 0.3;'}
         d.turnabout = 1.0;
       }`,
-    minPx: surface ? [0.9,1.8] : [2.5,4], maxPx: [200, 400], cells: [0, 6],
+    pigment:surface, minPx: surface ? [0.62,1.25] : [2.5,4], maxPx: [200, 400], cells: [0, 6],
   }), 5);
 
+  const worldPos = new THREE.Vector3(), worldNormal = new THREE.Vector3(), worldDir = new THREE.Vector3();
   return {
     mesh,
     count,
@@ -85,18 +123,48 @@ export function pinDabs(shared, palettes, parts, {surface=false}={}) {
       Object.values(paletteUniforms).forEach((u,k)=>u.value[index].set(...(palette[k]??palette[0])));
     },
     update() {
-      for (let i = 0; i < count; i++) {
-        const pin = pins[i], m = pin.mesh, k = i * 3;
-        aVisible[i] = m.visible ? 1 : 0;
-        if (!m.visible) continue;
-        a.copy(pin.p); if (m.isSkinnedMesh) m.applyBoneTransform(pin.v, a); a.applyMatrix4(m.matrixWorld);
-        b.copy(pin.p).addScaledVector(pin.n, 0.03); if (m.isSkinnedMesh) m.applyBoneTransform(pin.v, b); b.applyMatrix4(m.matrixWorld);
-        c.copy(pin.p).addScaledVector(pin.d, 0.03); if (m.isSkinnedMesh) m.applyBoneTransform(pin.v, c); c.applyMatrix4(m.matrixWorld);
-        aPos[k] = a.x; aPos[k + 1] = a.y; aPos[k + 2] = a.z;
-        aNrm[k] = b.x - a.x; aNrm[k + 1] = b.y - a.y; aNrm[k + 2] = b.z - a.z;
-        aDir[k] = c.x - a.x; aDir[k + 1] = c.y - a.y; aDir[k + 2] = c.z - a.z;
+      let moved = false, visibilityChanged = false;
+      for (const batch of batches) {
+        const m = batch.mesh;
+        let visible = true;
+        for (let node = m; node && visible; node = node.parent) visible = node.visible;
+        const changed = visible !== batch.visible;
+        if (changed) {
+          aVisible.fill(visible ? 1 : 0, batch.first, batch.end);
+          batch.visible = visible; visibilityChanged = true;
+        }
+        if (!visible || (!m.isSkinnedMesh && !changed && batch.lastWorld.equals(m.matrixWorld))) continue;
+        moved = true;
+        if (m.isSkinnedMesh) {
+          bindWorld.multiplyMatrices(m.matrixWorld, m.bindMatrixInverse);
+          for (const bone of batch.bones.values()) {
+            bone.world.copy(bindWorld).multiply(m.skeleton.bones[bone.id].matrixWorld)
+              .multiply(m.skeleton.boneInverses[bone.id]).multiply(m.bindMatrix);
+            bone.normal.getNormalMatrix(bone.world); bone.linear.setFromMatrix4(bone.world);
+          }
+        } else {
+          batch.lastWorld.copy(m.matrixWorld);
+          normalMatrix.getNormalMatrix(m.matrixWorld); linear.setFromMatrix4(m.matrixWorld);
+        }
+        for (let i = batch.first; i < batch.end; i++) {
+          const pin = pins[i], k = i * 3;
+          if (pin.influences) {
+            worldPos.set(0, 0, 0); worldNormal.set(0, 0, 0); worldDir.set(0, 0, 0);
+            for (const inf of pin.influences) {
+              worldPos.addScaledVector(a.copy(inf.p).applyMatrix4(inf.bone.world), inf.weight);
+              worldNormal.add(b.copy(inf.n).applyMatrix3(inf.bone.normal));
+              worldDir.addScaledVector(c.copy(pin.d).applyMatrix3(inf.bone.linear), inf.weight);
+            }
+          } else {
+            worldPos.copy(pin.p).applyMatrix4(m.matrixWorld);
+            worldNormal.copy(pin.n).applyMatrix3(normalMatrix);
+            worldDir.copy(pin.d).applyMatrix3(linear);
+          }
+          worldPos.toArray(aPos, k); worldNormal.toArray(aNrm, k); worldDir.toArray(aDir, k);
+        }
       }
-      for (const name of ['aPos', 'aDir', 'aNrm', 'aVisible']) geometry.attributes[name].needsUpdate = true;
+      if (moved) for (const name of ['aPos', 'aDir', 'aNrm']) geometry.attributes[name].needsUpdate = true;
+      if (visibilityChanged) geometry.attributes.aVisible.needsUpdate = true;
     },
   };
 }

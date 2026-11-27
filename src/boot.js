@@ -4,8 +4,11 @@ import {WORLD,randomSeed} from './world/seed.js';
 document.documentElement.dataset.scene='autumn';
 const $=id=>document.getElementById(id);
 const campAge=s=>`Day ${s.day} · ${s.felled} ${s.felled===1?'tree':'trees'} felled`;
+const params=new URLSearchParams(location.search),reviewSeed=params.get('reviewSeed');
+const fixtureSeed=params.has('capture')&&params.has('woodlandReview')&&/^\d{1,10}$/.test(reviewSeed)?Number(reviewSeed)>>>0:null;
 let storage;try{storage=localStorage;}catch{storage=null;}
-if(storage&&new URLSearchParams(location.search).has('woodlandReview'))storage=reviewStorage(storage);
+if(fixtureSeed!==null)storage=null;
+else if(storage&&params.has('woodlandReview'))storage=reviewStorage(storage);
 WORLD.storage=storage;
 const saved=readSave(storage),state=saved.state;let appearance=sanitizeAppearance(state.appearance),disposePreview,growing=false,editedLook=false,previewTicket=0;
 let startSnapshot;try{startSnapshot=storage?.getItem(SAVE_KEY);}catch{}
@@ -23,6 +26,7 @@ async function grow(){
  try{if(storage&&startSnapshot!==storage.getItem(SAVE_KEY)){const current=readSave(storage);Object.assign(state,current.state);status=current.status;}}catch{}
  if(editedLook||status==='new'||status==='damaged')state.appearance={...appearance};
  if(status==='new'||status==='damaged')state.seed=randomSeed();
+ if(fixtureSeed!==null)state.seed=fixtureSeed;
  WORLD.seed=state.seed;WORLD.state=state;
  if(!new URLSearchParams(location.search).has('capture'))writeSave(storage,state);
  closePreview();$('welcome').hidden=true;document.body.classList.remove('at-title');$('loading').hidden=false;
@@ -63,10 +67,11 @@ else{
  $('quality').onclick=()=>{state.low=!state.low;$('quality').textContent=state.low?'Low':'High';savePreference('low');};
  $('sensitivity').oninput=e=>{state.sensitivity=Number(e.target.value);$('sensitivity-value').textContent=state.sensitivity.toFixed(2)+'×';};$('sensitivity').onchange=()=>savePreference('sensitivity');
  $('changelog-open').onclick=()=>{settings.close();$('changelog').showModal();};
+ $('welcome-changelog').onclick=()=>$('changelog').showModal();
  $('changelog').querySelector('.close').onclick=()=>$('changelog').close();
  $('grow-world').textContent=saved.status==='new'?'Grow my forest':'Return to my camp';
  $('lobby-note').textContent=saved.status==='new'?'New camp · Random woodland':campAge(state);
- const labels={workwear:'Workwear',headwear:'Headwear',shirt:'Shirt',hat:'Hat',pack:'Bag',skin:'Skin tone',hair:'Hair'};
+ const labels={workwear:'Workwear',headwear:'Headwear',shirt:'Shirt',hat:'Hat',pack:'Bag',skin:'Skin tone',hair:'Hair',beard:'Facial hair'};
  for(const [key,label] of Object.entries(labels)){
    const swatches=OUTFITS[key],options=swatches||CUTS[key].map(name=>[name]);
    const field=document.createElement('fieldset'),legend=document.createElement('legend');legend.textContent=label;field.append(legend);
@@ -79,7 +84,8 @@ else{
      else mark.textContent=name;
      radio.onchange=()=>{editedLook=true;appearance[key]=i;selected.textContent=name;};l.append(radio,mark);choices.append(l);
    }
-   if(swatches)field.append(selected);$(swatches?'colour-fields':'kit-fields').append(field);
+   if(swatches)field.append(selected);
+   const group=['skin','hair','beard'].includes(key)?'face':swatches?'colour':'kit';$(group+'-fields').append(field);
  }
  for(const b of document.querySelectorAll('[data-tab]'))b.onclick=()=>{
    for(const tab of document.querySelectorAll('[data-tab]')){const active=b===tab;tab.setAttribute('aria-pressed',String(active));$(tab.dataset.tab+'-fields').hidden=!active;}

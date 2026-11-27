@@ -14,6 +14,19 @@ test('pack load restores the current wood balance and tracks collecting and spen
  p.setWood(6);p.update(1);assert.equal(p.logs.filter(l=>l.mesh.visible).length,1);
  assert.equal(visibleWoodCount(100000),PACK_LOGS);assert.equal(visibleWoodCount(-10),0);
 });
+test('a seated pack rests on the bench with its cargo and returns to the same shoulder loops',()=>{
+ const {p,object,spine}=pack();p.setWood(24);
+ object.position.set(3,.3,4);object.rotation.y=.83;spine.rotation.z=.13;object.updateMatrixWorld(true);
+ const before=p.axeLoop.getWorldPosition(new THREE.Vector3()),seat={position:new THREE.Vector3(3,.3,4),yaw:Math.PI};
+ p.restAtBench(seat,1);p.update(1);
+ const rested=p.group.getWorldPosition(new THREE.Vector3());assert.ok(Math.abs(rested.y-seat.position.y-.565)<.001);
+ assert.ok(rested.x>seat.position.x+.55);assert.equal(p.logs.filter(l=>l.mesh.visible).length,4);
+ spine.rotation.x=.16;object.updateMatrixWorld(true);p.restAtBench(seat,1);
+ assert.ok(p.group.getWorldPosition(new THREE.Vector3()).distanceTo(rested)<.00001);
+ spine.rotation.x=0;object.updateMatrixWorld(true);p.restAtBench(null,0);
+ assert.ok(p.axeLoop.getWorldPosition(new THREE.Vector3()).distanceTo(before)<.00001);
+});
+
 test('pack stays attached to the upper body while its paint and shadow geometry follow',()=>{
  const {p,spine,object}=pack();p.setWood(24);p.update(.016);
  assert.equal(p.group.parent,spine);const before=p.logs[0].mesh.getWorldPosition(new THREE.Vector3());

@@ -92,10 +92,11 @@ export class ChopAnimation {
   const bodyQ=body.getWorldQuaternion(new THREE.Quaternion()),forward=new THREE.Vector3(0,0,1).applyQuaternion(bodyQ),right=new THREE.Vector3(-1,0,0).applyQuaternion(bodyQ);
   const sink=pose?.sink??(this.last?.sink||0)*releaseWeight;
   // Settle the hips and bend the knees while preserving the feet already placed on the terrain.
-  if(sink>0&&animator.legIK){
+  const enteringCut=!!swing?.sight?.entry&&swing.sight.reachable;
+  if((sink>0||enteringCut)&&animator.legIK){
    const feet=['l','r'].map(side=>point(b[`foot_${side}`]));
    const distance=swing?Math.hypot(swing.contact.x-body.position.x,swing.contact.z-body.position.z):0;
-   const reachShift=Math.min(.25,Math.max(0,distance-.93)*.70)*smooth((p-.29)/.20)*(1-smooth((p-.57)/.30));
+   const reachShift=Math.min(.27,Math.max(0,distance-(enteringCut ? .87 : .93))*(enteringCut ? .92 : .70))*smooth((p-.29)/.20)*(1-smooth((p-.57)/.30));
    const shift=forward.clone().multiplyScalar(lean*.06+reachShift).addScaledVector(UP,-sink);
    for(const [i,side] of ['l','r'].entries()){
     const hip=point(b['thigh_'+side]),knee=point(b['calf_'+side]),foot=feet[i];
@@ -138,7 +139,18 @@ export class ChopAnimation {
    rotation=axeRotation(aim,pose.angle,pose.roll);
    rotation.slerpQuaternions(carryQ,rotation.clone(),smooth(p/.16));
    const contact=new THREE.Vector3(swing.contact.x,swing.contact.y,swing.contact.z);
-   const contactPose=swingPose(IMPACT_AT,swing.variant,swing.finishing),contactQ=axeRotation(aim,contactPose.angle+low*1.04,contactPose.roll);
+   const contactPose=swingPose(IMPACT_AT,swing.variant,swing.finishing);
+   const entry=swing.sight?.entry;
+   const longReach=smooth(((swing.sight?.distance||0)-1.08)/.16);
+   const contactQ=entry?axeRotation(entry.clone().negate(),.84+low*.34-.35*longReach,-.80+contactPose.roll*.32):
+     axeRotation(aim,contactPose.angle+low*1.04,contactPose.roll);
+   if(swing.sight?.tree&&!entry){
+     // On the shoulder-side edge of a trunk the mark can be almost side-on.
+     // Turn the cheeks into the surface so the blade can lead the handle.
+     const n=swing.sight.normal.clone().setY(0).normalize().negate();
+     const oblique=smooth((.83-n.dot(aim))/.30);
+     if(oblique)contactQ.slerp(axeRotation(n,.45+low*.52,contactPose.roll*.45),oblique);
+   }
    const lowWork=swing.sight?.reachable&&swing.contact.y-body.position.y<.63||swing.t.windthrow||['section','stump'].includes(swing.t.kind)||swing.free&&swing.pitch>.70;
    if(!swing.free||swing.sight?.reachable||lowWork)contactEdge=workingEdge(tier,contactQ,lowWork?new THREE.Vector3(0,-1,0):aim);
    const contactPalm=contact.clone().sub(contactEdge.clone().sub(gripAt(LOWER_GRIP)).applyQuaternion(contactQ).multiplyScalar(scale));
@@ -171,7 +183,7 @@ export class ChopAnimation {
    if(swing.sight?.reachable&&!swing.hit&&p>.23){
     // Set the edge opposite the selected patch before driving it through the final
     // handspan. A high or diagonal wind-up can then finish on the same pencil mark.
-    const normal=swing.sight.normal,settle=smooth((p-.23)/.15),drive=smooth((p-.385)/.122);
+    const normal=entry||swing.sight.normal,settle=smooth((p-.23)/.15),drive=smooth((p-.385)/.122);
     rotation.slerp(contactQ,settle);
     const edge=workingEdge(tier,rotation,normal.clone().negate());
     const goal=contact.clone().addScaledVector(normal,.265-.303*drive)

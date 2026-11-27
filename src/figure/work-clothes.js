@@ -41,11 +41,13 @@ function garmentWeights(suit){
 
 export function workClothes(shared,man,paint,hatPalette,clothPalette) {
   const leather=[[.63,.43,.24],[.34,.23,.16],[.18,.15,.13]], lining=[[.90,.80,.58],[.64,.52,.34],[.33,.28,.22]];
-  const palettes=[hatPalette,clothPalette,leather,lining],materials=palettes.map(p=>paint(shared,p));
+  const palettes=[hatPalette,clothPalette,leather,lining,clothPalette,clothPalette];
+  const finishes=['felt','cloth','leather','cloth','cloth','cloth'];
+  const materials=palettes.map((p,i)=>paint(shared,p,{material:finishes[i]}));
   for(const mat of materials)mat.uniforms.uCloth.value=.85;
   const hats=[[],[],[]],coats=[[],[],[]],parts=[],up=new THREE.Vector3(0,1,0);
   let suit;man.object.traverse(o=>{if(o.isSkinnedMesh&&o.name.includes('casualsuit'))suit=o;});
-  const fit=garmentWeights(suit),fabrics=palettes.map(p=>paint(shared,p,{skinned:true}));
+  const fit=garmentWeights(suit),fabrics=palettes.map((p,i)=>paint(shared,p,{skinned:true,material:finishes[i]}));
   function piece(set,bone,geometry,slot,x,y,z,scale,count=45,tilt=0) {
     const coat=coats.indexOf(set);let m;
     if(coat>=0){
@@ -71,12 +73,41 @@ export function workClothes(shared,man,paint,hatPalette,clothPalette) {
     }
     return g;
   };
-  const felt=piece(hats[0],head,lathe([[0,.15],[.09,.135],[.14,.075],[.15,0],[.23,-.035],[.35,-.085],[.37,-.07]]),0,0,1.815,-.012,[.86,.87,.86],140);
-  piece(hats[0],head,new THREE.CylinderGeometry(.15,.157,.044,22,1,true),2,0,1.836,-.012,[.86,.87,.86]);
-  piece(hats[1],head,lathe([[.148,-.07],[.156,0],[.151,.075],[.119,.138],[.055,.175],[0,.18]]),0,0,1.811,-.006,[.70,.71,.75],85);
-  piece(hats[1],head,lathe([[.15,-.068],[.169,-.059],[.167,-.006],[.153,.001]],24),0,0,1.811,-.006,[.70,.71,.75],45);
-  piece(hats[2],head,lathe([[.14,-.03],[.164,.005],[.18,.065],[.135,.116],[0,.124]]),0,0,1.799,0,[.75,.80,.81],95);
-  piece(hats[2],head,new THREE.SphereGeometry(1,18,8),2,0,1.785,.096,[.126,.014,.104],60);
+  // A rolled edge gives the brim an upper and a lower surface. Lift the front
+  // off the eyes, turn up one corner and press the centre crease into the crown.
+  const brim=lathe([[.146,-.005],[.208,-.022],[.305,-.052],[.340,-.060],[.350,-.055],
+    [.348,-.047],[.331,-.044],[.300,-.040],[.219,-.014],[.163,.008],
+    [.154,.041],[.150,.101],[.133,.143],[.104,.155],[.063,.146],[0,.127]]);
+  const brimPos=brim.attributes.position;
+  for(let i=0;i<brimPos.count;i++){
+    const x=brimPos.getX(i),y=brimPos.getY(i),z=brimPos.getZ(i),r=Math.hypot(x,z),angle=Math.atan2(x,z);
+    const edge=THREE.MathUtils.smoothstep(r,.16,.35),crown=THREE.MathUtils.smoothstep(y,.065,.15);
+    const roll=edge*(.031*Math.sin(angle+.54)+.016*Math.cos(2*angle-.6)+.021*Math.cos(angle));
+    const pinch=crown*Math.max(0,z/.16);
+    brimPos.setXYZ(i,x*(1.-.105*pinch),y+roll-.019*crown*Math.exp(-((x/.041)**2)),z*(1.045-.09*edge)+.004*crown);
+  }
+  brim.computeVertexNormals();
+  const felt=piece(hats[0],head,brim,0,0,1.815,-.012,[.68,.74,.73],102);
+  piece(hats[0],head,lathe([[.158,.002],[.160,.006],[.155,.039],[.152,.042]]),2,0,1.819,-.011,[.68,.74,.76],18);
+  piece(hats[0],head,new THREE.BoxGeometry(.014,.030,.040),3,-.104,1.837,-.027,[.84,.80,.84],2);
+  piece(hats[1],head,lathe([[.148,-.07],[.156,0],[.151,.075],[.119,.138],[.055,.175],[0,.18]]),0,0,1.805,-.006,[.575,.54,.66],68);
+  piece(hats[1],head,lathe([[.15,-.068],[.169,-.059],[.167,-.006],[.153,.001]],24),0,0,1.805,-.006,[.575,.54,.66],28);
+  const rail=lathe([[.141,-.032],[.151,-.024],[.154,.001],[.173,.031],[.170,.064],[.142,.096],[.081,.122],[0,.128]]);
+  const crown=rail.attributes.position;
+  for(let i=0;i<crown.count;i++){
+    const x=crown.getX(i),y=crown.getY(i),z=crown.getZ(i),lift=THREE.MathUtils.smoothstep(y,-.013,.12);
+    crown.setXYZ(i,x*(1.+.020*Math.sin(5*Math.atan2(x,z))*lift),y-.16*z*lift,z+.024*lift);
+  }
+  rail.computeVertexNormals();
+  piece(hats[2],head,rail,0,0,1.799,-.005,[.596,.59,.68],66);
+  const peak=new THREE.SphereGeometry(1,20,8),peakPos=peak.attributes.position;
+  for(let i=0;i<peakPos.count;i++){
+    const x=peakPos.getX(i),y=peakPos.getY(i),z=peakPos.getZ(i);
+    peakPos.setXYZ(i,x*(1.-.16*Math.max(z,0)),y*.58-.43*x*x-.34*z,z);
+  }
+  peak.computeVertexNormals();
+  piece(hats[2],head,peak,2,0,1.787,.087,[.102,.015,.092],24);
+  piece(hats[2],head,new THREE.SphereGeometry(1,10,5),0,0,1.876,.009,[.010,.006,.010],1);
   // Sew the vest and apron around the actual width of the character's chest and hips.
   function panel(rows,columns,point){
     const vertices=[],uvs=[],indices=[];
@@ -89,6 +120,41 @@ export function workClothes(shared,man,paint,hatPalette,clothPalette) {
   }
   const sew=(set,bone,geo,slot,count)=>piece(set,bone,geo,slot,0,0,0,[1,1,1],count);
   const rounded=n=>Math.sign(n)*Math.abs(n)**.82;
+
+  // Fit the collar, pocket and placket to the actual front of the shirt. Their
+  // flat pattern is expressed in metres across and up the original garment.
+  const body=suit.geometry.attributes.position,idx=suit.geometry.index,frontFaces=[];
+  const vertex=i=>new THREE.Vector3().fromBufferAttribute(body,idx?idx.getX(i):i);
+  for(let i=0;i<(idx?.count??body.count);i+=3){
+    const a=vertex(i),b=vertex(i+1),c=vertex(i+2);
+    if(Math.max(a.y,b.y,c.y)<1.02||Math.min(a.y,b.y,c.y)>1.59||Math.max(a.z,b.z,c.z)<.03)continue;
+    const ab=b.sub(a),ac=c.sub(a),det=ab.x*ac.y-ab.y*ac.x;
+    if(Math.abs(det)>.0000001)frontFaces.push({a,ab,ac,det});
+  }
+  function shirtFront(x,y){
+    let z=.035;
+    for(const {a,ab,ac,det} of frontFaces){
+      const dx=x-a.x,dy=y-a.y,v=(dx*ac.y-dy*ac.x)/det,w=(ab.x*dy-ab.y*dx)/det;
+      if(v>=-.0001&&w>=-.0001&&v+w<=1.0001)z=Math.max(z,a.z+v*ab.z+w*ac.z);
+    }
+    return z;
+  }
+  const shirt=(rows,cols,pattern,slot,count)=>sew(coats[0],chest,panel(rows,cols,(j,u)=>{
+    const [x,y,lift]=pattern(j,u);return [x,y,shirtFront(x,y)+lift];
+  }),slot,count);
+  // Make the two pointed collar leaves and a folded button stand.
+  for(const s of [-1,1]){
+    const rows=[[.013,1.495,.034,1.468],[.031,1.529,.111,1.491],[.046,1.552,.102,1.536]];
+    shirt(3,5,(j,u)=>{const [xi,yi,xo,yo]=rows[j],t=s>0?u:1-u;
+      return [s*THREE.MathUtils.lerp(xi,xo,t),THREE.MathUtils.lerp(yi,yo,t),.010+.007*Math.sin(t*Math.PI)];
+    },4,12);
+  }
+  shirt(13,2,(j,u)=>[(u-.5)*.021,1.038+j*.038,.005+.003*u],4,11);
+  for(const y of [1.12,1.242,1.367,1.466]){
+    piece(coats[0],chest,new THREE.SphereGeometry(1,8,5),2,0,y,shirtFront(0,y)+.011,[.008,.008,.0034],0);
+  }
+  shirt(3,8,(j,u)=>[.090+(u-.5)*[.071,.096,.100][j],[1.294,1.312,1.379][j]+.003*u,.008],4,14);
+  shirt(2,8,(j,u)=>[.090+(u-.5)*.102,1.368+j*.014+.003*u,.012],5,4);
   // Cut the vest from the shirt's own rigged surface, with a little loft between the quilt lines.
   const vestGeo=suit.geometry.clone(),vp=vestGeo.attributes.position,vn=vestGeo.attributes.normal;
   const sourceIndex=vestGeo.index,indices=[];
@@ -101,7 +167,7 @@ export function workClothes(shared,man,paint,hatPalette,clothPalette) {
     const y=vp.getY(i),loft=.012+.010*(.5-.5*Math.cos((y-1.041)*Math.PI*24));
     vp.setXYZ(i,vp.getX(i)+loft*vn.getX(i),y+loft*vn.getY(i),vp.getZ(i)+loft*vn.getZ(i));
   }
-  const quilt=paint(shared,clothPalette,{skinned:true,quilted:true}),vest=new THREE.SkinnedMesh(vestGeo,quilt);
+  const quilt=paint(shared,clothPalette,{skinned:true,quilted:true,material:'cloth'}),vest=new THREE.SkinnedMesh(vestGeo,quilt);
   suit.parent.add(vest);vest.bind(suit.skeleton,suit.bindMatrix);vest.frustumCulled=false;vest.layers.enable(1);
   vest.name='work-clothing';Object.assign(vest.userData,{hatStyle:-1,coatStyle:1,fabric:1});coats[1].push(vest);
   // A lined stand collar stays visible above the loaded pack.
@@ -137,10 +203,14 @@ export function workClothes(shared,man,paint,hatPalette,clothPalette) {
   sew(coats[2],chest,panel(3,6,(j,u)=>[(u-.5)*[.098,.142,.144][j]+.030,[1.129,1.145,1.231][j],.212-.019*(u-.25)**2]),2,20);
   sew(coats[2],chest,panel(2,6,(j,u)=>[(u-.5)*.145+.030,1.223+j*.010,.214-.019*(u-.25)**2]),3,6);
   const strokes=pinDabs(shared,palettes,parts,{surface:true});
-  return {hat:felt,mesh:strokes.mesh,update:strokes.update,
+  return {hat:felt,headwear:hats.map(set=>set[0]),mesh:strokes.mesh,update:strokes.update,
     set(a,p){tint(materials[0],p.HAT);strokes.setPalette(0,p.HAT);
       const waxed=[[.79,.66,.45],[.50,.385,.24],[.25,.205,.16]];
       const vest=p.SHIRT.map((c,i)=>c.map((v,k)=>waxed[i][k]*.70+v*.30));
+      const shirtShade=p.SHIRT.map(c=>c.map((v,k)=>v*[.87,.88,.90][k]));
+      const shirtEdge=p.SHIRT.map(c=>c.map((v,k)=>v*.91+[.077,.063,.039][k]));
+      tint(fabrics[4],shirtShade);tint(fabrics[5],shirtEdge);
+      strokes.setPalette(4,shirtShade);strokes.setPalette(5,shirtEdge);
       tint(fabrics[1],vest);tint(quilt,vest);strokes.setPalette(1,vest);
       hats.forEach((set,i)=>set.forEach(m=>m.visible=i===a.headwear));
       coats.forEach((set,i)=>set.forEach(m=>m.visible=i===a.workwear));

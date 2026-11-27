@@ -8,7 +8,7 @@ const BARK=[[.65,.44,.24],[.35,.24,.16],[.16,.13,.13]],CUT=[[.99,.83,.53],[.73,.
 export class UnloadAnimation {
  constructor({scene,shared,figure,animator,home,paint}){
   Object.assign(this,{figure,animator,home});this.weight=0;this.last=null;
-  this.bundle=new THREE.Group();this.bundle.name='unloading-logs';const parts=[],materials=[paint(shared,BARK),paint(shared,CUT)];
+  this.bundle=new THREE.Group();this.bundle.name='unloading-logs';const parts=[],materials=[paint(shared,BARK,{material:'bark'}),paint(shared,CUT,{material:'endgrain'})];
   for(let i=0;i<3;i++){
    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(.057,.064,.63+i*.045,9),[materials[0],materials[1],materials[1]]);
    mesh.position.set((i-1)*.10,(i%2)*.025,0);mesh.layers.enable(1);this.bundle.add(mesh);

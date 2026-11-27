@@ -11,7 +11,12 @@ export function seatedPose(man,animator,arms,seat,weight){
   const sign=side==='l'?1:-1;
   const foot=body.localToWorld(new THREE.Vector3(sign*.17,.11,.52));
   animator.legIK(side,foot.sub(b[`foot_${side}`].getWorldPosition(V())).multiplyScalar(weight));
-  arms.arm(side,body.localToWorld(new THREE.Vector3(sign*.24,.69,.37)),weight);
+  const wrist=new THREE.Vector3(sign*.24,.69,.37);
+  if(side==='r'){
+    const guiding=Math.sin(Math.PI*weight)**2;
+    wrist.lerp(new THREE.Vector3(-.50,.98,-.02),guiding*.9);
+  }
+  arms.arm(side,body.localToWorld(wrist),weight);
  }
  body.updateMatrixWorld(true);
 }

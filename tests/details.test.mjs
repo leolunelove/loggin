@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import * as THREE from 'three';
 import {createForest} from '../src/world/forest.js';import {createAxes,AXE_PROFILES} from '../src/figure/axes.js';
 import {beginDelivery,advanceDelivery,DELIVERY_SECONDS,DELIVERY_LAND} from '../src/delivery.js';
+import {insideNotch} from '../src/world/bark-cut.js';
 import {freshState,depositWood} from '../src/economy.js';
 
 test('successive cuts deform the actual trunk, expose wood and reset on regrowth without affecting other trees',()=>{
@@ -10,6 +11,14 @@ test('successive cuts deform the actual trunk, expose wood and reset on regrowth
  for(const damage of [.2,.5,.9]){f.carveTree(t,contact,0,1,damage);let moved=0;for(let i=range[0];i<range[1];i++)moved=Math.max(moved,Math.abs(p.getZ(i)-original[(i-range[0])*3+2]));assert.ok(moved>previous);previous=moved;assert.ok([...c.array.slice(...range)].some(v=>v>0));}
  assert.deepEqual(p.array.slice(other.ranges.wood[0]*3,other.ranges.wood[1]*3),otherBefore);
  f.resetCut(t);assert.deepEqual(p.array.slice(range[0]*3,range[1]*3),original);assert.ok([...c.array.slice(...range)].every(v=>v===0));
+});
+test('a cut keeps its mouth when the blade enters a sloping lip and opens a new one across the trunk',()=>{
+ const cut={x:1.3,y:1.02,z:4,nx:.6,nz:.8,width:.24,depth:.14,height:.12};
+ assert.ok(insideNotch(cut,{x:1.3-.6*.13,y:1.08,z:4-.8*.13}));
+ assert.equal(insideNotch(cut,{x:1.3+.8*.44,y:1.02,z:4-.6*.44}),false);
+ assert.equal(insideNotch(cut,{x:1.3,y:1.30,z:4}),false);
+ assert.equal(insideNotch(cut,{x:1.3-.6*.65,y:1.02,z:4-.8*.65}),false);
+ assert.equal(insideNotch(null,{x:1.3,y:1.02,z:4}),false);
 });
 test('all five axes have distinct silhouettes and only the equipped model leaves visible paint',()=>{
  assert.equal(new Set(AXE_PROFILES.map(p=>JSON.stringify(p.points))).size,5);const a=createAxes({},()=>new THREE.MeshBasicMaterial());

@@ -1,3 +1,4 @@
+import {workwearWetness} from '../src/weather.js';
 import test from 'node:test';import assert from 'node:assert/strict';import * as THREE from 'three';
 import {weatherAt,shelterAt,rainMix} from '../src/weather.js';import {rainSamples} from '../src/rain-audio.js';import {createWeather} from '../src/world/weather.js';import {createShared} from '../src/oilpaint/common.js';
 test('forecasts are deterministic, vary across camps and give occasional morning mist and rain',()=>{let rain=0,mist=0;const schedules=new Set();for(let seed=1;seed<=30;seed++){const hours=[];for(let h=0;h<24;h+=.5){const s={seed,day:3,hour:h},w=weatherAt(s);assert.deepEqual(w,weatherAt(JSON.parse(JSON.stringify(s))));for(const k of ['rain','mist','overcast'])assert.ok(w[k]>=0&&w[k]<=1);rain+=w.rain>.2;mist+=w.mist>.2;hours.push(w.label);if(h>11)assert.equal(w.mist,0);}schedules.add(hours.join(','));}assert.ok(rain>0);assert.ok(mist>0);assert.ok(schedules.size>10);assert.equal(weatherAt({seed:10,day:1,hour:9}).rain,0);});
@@ -5,3 +6,15 @@ test('rain fades continuously between weather windows and over midnight',()=>{fo
 test('indoor and earned roofs shelter the player while the fireside bench remains open to rain',()=>{const h={x:3,y:2,z:4},s={porch:0,lodge:0,sawmill:0},p=(x,z)=>({x:h.x+x,y:2,z:h.z+z});assert.equal(shelterAt(h,s,p(0,0)),1);assert.equal(shelterAt(h,s,p(0,2.5)),0);s.porch=12;s.sawmill=40;s.lodge=24;assert.equal(shelterAt(h,s,p(0,-3)),1);assert.equal(shelterAt(h,s,p(0,2.5)),.7);assert.equal(shelterAt(h,s,p(6.4,-4.6)),.65);assert.equal(shelterAt(h,s,p(-3,7)),0);const a=rainMix(1,0),b=rainMix(1,1);assert.ok(b.woods<a.woods);assert.ok(b.roof>a.roof);assert.ok(b.cutoff<a.cutoff);assert.deepEqual(rainMix(0,1),{woods:0,roof:0,cutoff:1700});});
 test('rain buffers are stereo, finite and bounded; roof patter differs from the open rain wash',()=>{for(const roof of [false,true]){let n=2;const rng=()=>{n=(n*1664525+1013904223)>>>0;return n/4294967296;};const channels=rainSamples(22050,roof,2,rng);assert.equal(channels[0].length,44100);assert.notDeepEqual(channels[0],channels[1]);let energy=0,peak=0;for(const channel of channels)for(const v of channel){assert.ok(Number.isFinite(v));energy+=v*v;peak=Math.max(peak,Math.abs(v));}assert.ok(energy>1);assert.ok(peak<.9);}});
 test('rain rendering is bounded, low detail halves streak count, and lodge/porch roofs cover their full footprint',()=>{const u=createShared(),home={group:{position:new THREE.Vector3()}},fx=createWeather(u,home),camera=new THREE.PerspectiveCamera();fx.update(.1,camera,{lodge:24,porch:12,sawmill:40},{rain:1},true);assert.equal(fx.rain.geometry.drawRange.count,1600);const roof=fx.rain.material.uniforms.uRoof.value[0];assert.ok(roof.y-roof.w<=-4.1);assert.ok(roof.y+roof.w>=3.1);fx.update(.1,camera,{},{rain:0});assert.equal(fx.group.visible,false);});
+
+test('the woodshed stops rain and soaked workwear dries progressively at the hearth',()=>{
+ const home={group:{position:new THREE.Vector3(3,2,4)}},state={shed:40},covered=new THREE.Vector3(-.7,2,4);
+ assert.equal(shelterAt(home.group.position,state,covered),.68);
+ assert.equal(shelterAt(home.group.position,{shed:32},covered),0);
+ const fx=createWeather(createShared(),home);fx.update(.1,new THREE.PerspectiveCamera(),state,{rain:1});
+ const roof=fx.rain.material.uniforms.uRoof.value[3];assert.ok(Math.abs(covered.x-roof.x)<roof.z&&Math.abs(covered.z-roof.y)<roof.w);
+ const wet=workwearWetness(0,8,.93,0,0),dry=workwearWetness(wet,8,0,1,1);
+ assert.ok(wet>.74&&dry>0&&dry<.20);assert.ok(workwearWetness(wet,8,0,0,0)>dry);
+ let stepped=0;for(let i=0;i<480;i++)stepped=workwearWetness(stepped,1/60,.93,0,0);
+ assert.ok(Math.abs(stepped-wet)<1e-10);
+});

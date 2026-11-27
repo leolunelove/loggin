@@ -52,6 +52,7 @@ function tube(out, pts, radii, sides, kind, seed) {
       out.position.push(p.x, p.y, p.z);
       out.normal.push(n.x * dx + b.x * dy, n.y * dx + b.y * dy, n.z * dx + b.z * dy);
       out.data.push(kind, seed, pts[i].y - pts[0].y);
+      out.ring.push(dx,dy);
     }
   }
   for (let i = 0; i < pts.length - 1; i++) {
@@ -103,7 +104,8 @@ export function createForest(shared) {
   const trees = plant();
   const home = homeSite(trees);
   const rand = rng(99173);
-  const wood = { position: [], normal: [], data: [], index: [] };
+  const wood = { position: [], normal: [], data: [], ring: [], index: [] };
+  const trunkMarks=[];
   const barkDabs = []; // pos 3, dir 3, nrm 3, data 4 (seed, across, kind, along)
   const leafDabs = []; // pos 3, nrm 3, data 4 (seed, size, family, core)
   const lobes = []; // x y z r, for the shade they cast
@@ -211,6 +213,7 @@ export function createForest(shared) {
     }
 
     // --- bark ---
+    const firstTrunkMark=barkDabs.length/13;
     const marks = full ? Math.round(110 + t.r * 150) : some ? 36 : 0;
     const barkTop = Math.min(top, full ? 14 : 18);
     for (let k = 0; k < marks; k++) {
@@ -221,6 +224,7 @@ export function createForest(shared) {
       const across = Math.min(0.5, r * (t.type === BIRCH ? 1.5 : 0.75)) * (some ? 1.5 : 1);
       barkDabs.push(p.x + nx * r, p.y, p.z + nz * r, t.lean[0], 1, t.lean[1], nx, 0, nz, rand() * 1000, across, t.type, (t.type === BIRCH ? Math.min(0.5, r * 2.3) : 1.0 + rand() * 1.5) * (some ? 1.6 : 1));
     }
+    trunkMarks.push([firstTrunkMark,barkDabs.length/13,t.r]);
     t.indexEnd=wood.index.length;
     t.ranges.wood.push(wood.position.length / 3);
     t.ranges.bark.push(barkDabs.length / 13);
@@ -257,6 +261,7 @@ export function createForest(shared) {
   woodGeometry.setAttribute('position', new THREE.Float32BufferAttribute(wood.position, 3));
   woodGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(wood.normal, 3));
   woodGeometry.setAttribute('aData', new THREE.Float32BufferAttribute(wood.data, 3));
+  woodGeometry.setAttribute('aRing',new THREE.Float32BufferAttribute(wood.ring,2));
   woodGeometry.setAttribute('aCut',new THREE.Float32BufferAttribute(new Float32Array(wood.position.length/3),1));
   woodGeometry.setIndex(wood.index);
   const woodMaterial = new THREE.ShaderMaterial({
@@ -264,25 +269,51 @@ export function createForest(shared) {
     uniforms: shared,
     vertexShader: /* glsl */ `
       ${COMMON}
-      in vec3 aData; in float aCut;
-      out vec3 vWorld; out vec3 vN; out vec3 vData; out float vCut;
-      void main() { vWorld = position; vN = normal; vData = aData; vCut=aCut; gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0); }`,
+      in vec3 aData; in float aCut; in vec2 aRing;
+      out vec3 vWorld; out vec3 vN; out vec3 vData; out float vCut; out vec2 vRing;
+      void main() { vRing=aRing;vWorld = position; vN = normal; vData = aData; vCut=aCut; gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
       ${COMMON}
       ${BARK}
       ${RANGE_GLSL}
-      in vec3 vWorld; in vec3 vN; in vec3 vData; in float vCut;
+      in vec3 vWorld; in vec3 vN; in vec3 vData; in float vCut; in vec2 vRing;
       layout(location = 0) out vec4 outC;
       void main() {
         float detail=woodDetail(length(vWorld.xz-cameraPosition.xz));
         if(detail<.999 && detail<=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715)))))discard;
         vec3 Nn = normalize(vN);
-        float grain = texture(tNoise, vec2(atan(Nn.z, Nn.x) * 1.3 + vData.y, vWorld.y * 0.07)).r;
-        vec3 c = bark(int(vData.x + 0.5), vWorld, Nn, grain, vData.z) * (0.72 + 0.3 * grain);
+        vec2 ring=normalize(vRing+vec2(.00001));
+        float azimuth=atan(ring.y,ring.x)/TAU+.5,seed=fract(vData.y*.417),h=vData.z;
+        float grain=texture(tNoise,vec2(dot(ring,vec2(.87,.58))+seed,h*.078)).r;
+        int kind=int(vData.x+.5);
+        vec3 c=bark(kind,vWorld,Nn,grain,h)*(.76+.28*grain);
+        float close=1.-smoothstep(4.,16.,length(vWorld-cameraPosition));
+        if(close>.001){
+          if(kind==1){
+            // Short lenticels are painted on the bending trunk; their position
+            // stays fixed through a cut and through the fall.
+            vec2 tiles=vec2(azimuth*12.,h*6.8+seed*17.);
+            tiles.x+=floor(tiles.y)*.37;
+            vec2 cell=floor(tiles),uv=fract(tiles);vec4 r=hash4(vec2(mod(cell.x,12.),cell.y),seed+.31);
+            float x=(uv.x-(.35+.30*r.y))/(.10+.24*r.z);
+            float y=(uv.y-(.34+.33*r.w)+.055*x)/(.040+.072*r.x);
+            float scar=(1.-smoothstep(.48,1.04,length(vec2(x,y))))*smoothstep(.38,.75,r.y);
+            float paper=texture(tNoise,vec2(dot(ring,vec2(.57,1.04))*.62,h*2.15)).g;
+            c=mix(c,c*(.87+.22*paper)+vec3(.031,.024,.014),close*.58);
+            c=mix(c,c*vec3(.37,.35,.40),scar*close*.82);
+          }else{
+            vec2 fibre=vec2(dot(ring,vec2(1.12,-.73))*2.4+seed,h*.18);
+            float furrow=texture(tNoise,fibre+vec2(.16*grain,0.)).g;
+            float depth=kind==2?.27:kind==3?.16:.11;
+            c*=1.+(furrow-.48)*depth*close;
+          }
+        }
         float cutLit=max(.28,sunAt(vWorld+Nn*.025)*clamp(dot(Nn,uSunDir)*.8+.4,0.0,1.0));
         vec3 exposed=paint3(vec3(.98,.8,.48),vec3(.63,.43,.24),vec3(.27,.19,.14),cutLit,grain);
         exposed*=.94+.06*texture(tNoise,vWorld.xz*12.0+vWorld.y*1.2).r;
         c=mix(c,exposed,smoothstep(.01,.45,vCut));
+        float lip=smoothstep(.008,.045,vCut)*(1.-smoothstep(.06,.21,vCut));
+        c=mix(c,mix(BARK_S[kind],exposed,.21),lip*.40);
         outC = vec4(hazed(c, vWorld), 1.0);
       }`,
   });
@@ -296,9 +327,10 @@ export function createForest(shared) {
     for (let k = 0; k < 3; k++) { bp[i * 3 + k] = barkDabs[i * 13 + k]; bd[i * 3 + k] = barkDabs[i * 13 + 3 + k]; bn[i * 3 + k] = barkDabs[i * 13 + 6 + k]; }
     for (let k = 0; k < 4; k++) bx[i * 4 + k] = barkDabs[i * 13 + 9 + k];
   }
-  const barkVisible=new Float32Array(nb).fill(1);
-  const barkMesh = dabMesh(dabGeometry(nb, { aPos: [bp, 3], aDir: [bd, 3], aNrm: [bn, 3], aData: [bx, 4], aVisible:[barkVisible,1] }), dabMaterial(shared, {
-    head: BARK + RANGE_GLSL + /* glsl */ `in vec3 aPos; in vec3 aDir; in vec3 aNrm; in vec4 aData; in float aVisible;`,
+  const barkVisible=new Float32Array(nb).fill(1),bole=new Float32Array(nb);
+  for(const [first,end,radius] of trunkMarks)bole.fill(radius,first,end);
+  const barkMesh = dabMesh(dabGeometry(nb, { aPos: [bp, 3], aDir: [bd, 3], aNrm: [bn, 3], aData: [bx, 4], aVisible:[barkVisible,1], aBole:[bole,1] }), dabMaterial(shared, {
+    head: BARK + RANGE_GLSL + /* glsl */ `in vec3 aPos; in vec3 aDir; in vec3 aNrm; in vec4 aData; in float aVisible; in float aBole;`,
     body: /* glsl */ `
       void makeDab(inout Dab d) {
         d.alive=woodDetail(length(aPos.xz-cameraPosition.xz));if(aVisible<.5||d.alive<.004){d.alive=0.0;return;}
@@ -323,6 +355,16 @@ export function createForest(shared) {
         d.c2 = hazed(jitter(c * 1.2 + vec3(0.02, 0.02, 0.05), r.wxy, 0.6), aPos);
         d.seed = aData.x;
         d.lift = 0.5;
+        if(aBole>0.){
+          vec3 eye=cameraPosition-aPos;
+          float facing=dot(Nn,normalize(eye));
+          if(facing<=0.){d.alive=0.;return;}
+          float near=1.-smoothstep(3.,14.,length(eye));
+          vec2 hugging=k==1?vec2(min(.049,aData.y*.24),min(aBole*.69,aData.w*.61)):
+            vec2(min(aBole*.40,aData.y*.52),min(.61,aData.w*.41));
+          d.size=mix(d.size,hugging,near);d.alive*=smoothstep(0.,.16,facing);
+          d.lie=1.;d.nrm=Nn;d.height=.0016;
+        }
       }`,
     minPx: [3, 10], maxPx: [120, 500], cells: [0, 4],
   }), 3);

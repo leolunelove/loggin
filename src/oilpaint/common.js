@@ -181,7 +181,8 @@ float sunAt(vec3 world) { return min(woodSunAt(world), figSunAt(world)); }
 vec3 paint3(vec3 cl, vec3 cm, vec3 cs, float x, float r) {
   x += (r - 0.5) * 0.2;
   vec3 c = mix(cs, cm, smoothstep(0.24, 0.36, x));
-  return mix(c, cl, smoothstep(0.56, 0.7, x));
+  vec3 painted=mix(c,cl,smoothstep(.56,.70,x));
+  return mix(painted,cm,uOvercast*.20);
 }
 
 // Broken colour: every dab is mixed a little differently on the palette (value, hue, strength).
@@ -217,16 +218,24 @@ float mistBetween(vec3 world) {
   float up = clamp((0.5 * (world.y + cameraPosition.y) - uFocus.y - 2.0) / 22.0, 0.0, 1.0);
   return 1.0 - exp(-dist * uHazeDensity * mix(1.2, 0.4, up) * (1.0 + 0.7 * sunward * sunward));
 }
-vec3 hazeAt(vec3 c, vec3 world, float densityScale) {
+vec3 hazeFacing(vec3 c, vec3 world, float densityScale, vec3 normal, float directionality) {
+  vec3 pigment=c;
   float grey=dot(c,vec3(.3,.59,.11));
   vec3 moon=mix(c*vec3(.16,.22,.34),vec3(grey)*vec3(.22,.31,.48),.45);
   vec3 daylight=c*mix(vec3(1.),vec3(1.13,.86,.69),uDusk*.5);
   c=mix(moon,daylight,uDaylight);
   c=mix(c,c*vec3(.67,.73,.79),uOvercast*.6);
   float warm=0.;
-  for(int i=0;i<11;i++){float d=length(world-uCampLights[i].xyz);float fall=max(0.,1.-d/6.);warm+=uCampLights[i].w*fall*fall;}
-  c+=vec3(1.,.51,.18)*min(warm,1.8)*(.16+c*.78);
+  for(int i=0;i<11;i++){
+    vec3 toward=uCampLights[i].xyz-world;float dist=length(toward);
+    float fall=max(0.,1.-dist/6.);
+    float facing=.49+.84*max(0.,dot(normal,toward)/max(.001,dist));
+    warm+=uCampLights[i].w*fall*fall*mix(1.,facing,directionality);
+  }
+  vec3 reflected=mix(.16+c*.78,vec3(.087)+.69*mix(c,pigment,.74*(1.-uDaylight)),directionality);
+  c+=mix(vec3(1.,.51,.18),vec3(1.,.575,.285),directionality)*min(warm,1.8)*reflected;
   return mix(c, airColour(normalize(world - cameraPosition)), 1.-pow(max(.0001,1.-mistBetween(world)),densityScale));
 }
+vec3 hazeAt(vec3 c,vec3 world,float density){return hazeFacing(c,world,density,vec3(0.),0.);}
 vec3 hazed(vec3 c,vec3 world){return hazeAt(c,world,1.);}
 `;

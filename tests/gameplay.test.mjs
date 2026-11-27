@@ -191,6 +191,15 @@ test('shoulder aim works two distinct patches of bark with real axe contact for 
  }
  assert.deepEqual(bad,[]);
 });
+test('the shoulder sight gives a step-around cue for an oblique patch visible past a trunk',()=>{
+ const g=sightRig(1.12),tree=g.forest.trees[0],aim={...frame(),aimHeld:true};
+ g.step(.12,aim);assert.ok(g.sight.reachable);
+ g.camera.position.set(1.1,1.48,-1.03);g.camera.lookAt(0,1.12,-1.19);g.camera.updateMatrixWorld(true);
+ g.step(.12,aim);
+ assert.equal(g.sight.tree,tree);assert.ok(g.sight.distance<CHOP_REACH);
+ assert.equal(g.sight.angled,true);assert.equal(g.sight.reachable,false);
+ g.physics.free();
+});
 test('the shoulder sight sees a thin rail first, even with a Q lock on the trunk behind it',()=>{
  const g=sightRig(1.12),tree=g.forest.trees[0],aim={...frame(),aimHeld:true};
  g.lockedTree=tree;const wall=g.physics.createCollider(R.ColliderDesc.cuboid(.95,.85,.009).setTranslation(0,1,-.76));

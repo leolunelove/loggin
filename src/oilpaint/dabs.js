@@ -57,7 +57,7 @@ void main() {
   if (d.lie > 0.5) {
     vec3 Nn = normalize(d.nrm);
     vec3 A = d.dir - Nn * dot(d.dir, Nn);
-    A = dot(A, A) > 1e-8 ? normalize(A) : normalize(cross(Nn, vec3(1.0, 0.0, 0.0)));
+    A = dot(A, A) > 1e-8 ? normalize(A) : normalize(cross(Nn, abs(Nn.x) < .9 ? vec3(1.,0.,0.) : vec3(0.,1.,0.)));
     vec3 B = cross(Nn, A);
     vec3 P = d.pos + Nn * d.height;
     vc = viewMatrix * vec4(P, 1.0);
@@ -140,15 +140,23 @@ void main() {
     col = mix(col * uGlazeMul + uGlazeAdd, col, lit);
   }
   col *= mix(0.95, 1.04, t.r);
-  col *= 1.0 + rake * 1.25 * uImpasto;
-  col += vec3(1.0, 0.97, 0.9) * pow(max(rake, 0.0), 2.0) * 1.2 * uImpasto;
+  #ifdef SURFACE_PIGMENT
+    // A thin scumble follows the colour and lighting of its support. A charcoal
+    // hat remains dark when a ridge of paint catches the distant fire.
+    col*=1.+rake*.30*uImpasto;
+    col+=(.035+col*.33)*pow(max(rake,0.),2.)*uImpasto;
+  #else
+    col*=1.+rake*1.25*uImpasto;
+    col+=vec3(1.,.97,.9)*pow(max(rake,0.),2.)*1.2*uImpasto;
+  #endif
   outC = vec4(col, smoothstep(0.3, 0.62, t.g));
 }
 `;
 
-export function dabMaterial(shared, { head = '', body, uniforms = {}, minPx = [5, 9], maxPx = [400, 700], cells = [0, 8], depthTest = true, depthWrite = true } = {}) {
+export function dabMaterial(shared, { head = '', body, uniforms = {}, minPx = [5, 9], maxPx = [400, 700], cells = [0, 8], pigment = false, depthTest = true, depthWrite = true } = {}) {
   return new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
+    defines:pigment?{SURFACE_PIGMENT:1}:{},
     vertexShader: VERT(head, body),
     fragmentShader: FRAG,
     uniforms: {

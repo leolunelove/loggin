@@ -1,4 +1,5 @@
-const smooth=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+const clamp=x=>Math.max(0,Math.min(1,x));
+const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a));return t*t*(3-2*t);};
 const roll=(seed,index)=>{let n=(seed^Math.imul(index+127,0x45d9f3b))>>>0;n=Math.imul(n^(n>>>16),0x45d9f3b);return ((n^(n>>>16))>>>0)/4294967296;};
 // Forecast follows saved camp time; reloading or opening menus cannot reroll it.
 export function weatherAt({seed=0,day=1,hour=9}){
@@ -14,7 +15,14 @@ export function shelterAt(origin,state,feet){
  if(Math.abs(feet.y-origin.y)>2)return 0;
  if(Math.abs(x)<1.8&&z<1.5&&z>(state.lodge>=24?-4.1:-1.5))return 1;
  if(state.porch>=12&&Math.abs(x)<1.9&&z>=1.5&&z<3.1)return .7;
+ if(state.shed>=40&&Math.abs(x+3.7)<1.40&&Math.abs(z)<1.48)return .68;
  if(state.sawmill>=40&&Math.abs(x-6.4)<1.9&&Math.abs(z+4.6)<1.45)return .65;
  return 0;
+}
+// Canvas takes on rain outdoors and dries gradually under a roof or by the fire.
+export function workwearWetness(current,seconds,rain,shelter,heat){
+ const target=clamp(rain)*(1-clamp(shelter))*(1-.9*clamp(heat));
+ const rate=target>current?.24:.025+.046*clamp(shelter)+.18*clamp(heat);
+ return target+(current-target)*Math.exp(-rate*Math.max(0,seconds));
 }
 export function rainMix(intensity,shelter){return {woods:intensity*(.34-.24*shelter),roof:intensity*shelter*.65,cutoff:6500-4800*shelter};}
