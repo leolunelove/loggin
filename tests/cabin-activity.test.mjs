@@ -6,7 +6,9 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {Animator} from '../src/figure/animator.js';
 import {cabinPose} from '../src/figure/cabin-pose.js';
 import {cabinActivity,guideCabinWalk,advanceCabin,nearestGuestBed} from '../src/world/cabin-activity.js';
-import {createCabinQuilt} from '../src/world/cabin-quilt.js';
+import {createCabinQuilt,foldedQuilt} from '../src/world/cabin-quilt.js';
+import {linenPillow,pressPillow} from '../src/world/bed-pillow.js';
+import {bedBeats,bedPoint} from '../src/bed-motion.js';
 import {Follow} from '../src/figure/camera.js';
 import {furnishingSamples} from '../src/timber-audio.js';
 
@@ -66,6 +68,40 @@ test('both beds take the weight in stages, with the head on the pillow and soles
     assert.ok(leftKnee.distanceTo(clothKnee)<.0001);
     a.progress=.3;quilt.update(a,asleep.bones);assert.equal(quilt.mesh.visible,false);
   }
+});
+test('the cot and mirrored guest bed carry weight through a planted palm and one boot at a time',async()=>{
+  const guest={...house,spec:{w:6,d:5},beds:[],dropoff:{x:13},contains:()=>true};
+  for(const a of [action('bed'),cabinActivity('bed',guest,{},house.group.position,{x:-1.8,z:-1.6,top:.68,side:1})]){
+    const support=a.braceSide,lead=support==='r'?'l':'r',ground=a.stand.y+.103;
+    const seat=await pose(a,.35),firstLeg=await pose(a,.53);
+    const hand=bedPoint(a,-.205,a.width*.5-.050,.023);
+    assert.ok(seat.palm(support).distanceTo(hand)<.055);
+    assert.ok(firstLeg.palm(support).distanceTo(hand)<.07);
+    assert.ok(Math.abs(seat.point('foot_'+support).y-ground)<.02);
+    assert.ok(Math.abs(firstLeg.point('foot_'+support).y-ground)<.035);
+    assert.ok(firstLeg.point('foot_'+lead).y>ground+.27);
+    a.stage='rise';a.waking=true;
+    const awake=bedBeats({...a,progress:.72}),interrupted=bedBeats({...a,waking:false,progress:.54});
+    assert.ok(awake.cover<.01&&awake.head<.7&&awake.lead>.99);
+    const gettingUp=bedBeats({...a,progress:.54});
+    assert.ok(gettingUp.lead>.80&&interrupted.lead<.62);
+    const seated=await pose(a,.30);
+    assert.ok(Math.abs(seated.point('foot_'+support).y-ground)<.03);
+    assert.ok(Math.abs(seated.point('foot_'+lead).y-ground)<.03);
+  }
+});
+test('the same folded quilt returns after a cancelled reach and the pillow rebounds on its original base',async()=>{
+  const a=action('bed');a.blanket=foldedQuilt({},new THREE.Group(),0,a.top,0,0,a.width);
+  const q=createCabinQuilt({}),asleep=await pose(a,1);q.update(a,asleep.bones);
+  assert.equal(q.mesh.visible,true);assert.equal(a.blanket.visible,false);
+  a.progress=.35;q.update(a,asleep.bones);
+  assert.equal(q.mesh.visible,false);assert.equal(a.blanket.visible,true);
+  q.update(null,asleep.bones);assert.equal(a.blanket.visible,true);
+  const h=.15,pillow=new THREE.Mesh(linenPillow(.36,h,.48));pillow.position.y=.52;
+  const bottom=pillow.position.y-h/2;
+  pressPillow(pillow,1);assert.ok(pillow.scale.y<.72&&pillow.scale.x>1);
+  assert.ok(Math.abs(pillow.position.y-h*pillow.scale.y/2-bottom)<1e-6);
+  pressPillow(pillow,0);assert.equal(pillow.position.y,.52);assert.equal(pillow.scale.y,1);
 });
 test('furniture reaches its action once after approach and can be left before activation',()=>{
   for(const fps of [30,60,144])for(const kind of ['bench','ledger','bed']){

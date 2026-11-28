@@ -50,6 +50,24 @@ export function brushContacts(plants, pose) {
       pose(p,p.bendX,p.bendZ,false);
     }
   }
+  // Test the same leaf clusters that bend in the renderer, including their spring offset.
+  function nearCrown(feet,forward){
+    let closest=null,best=Infinity;
+    const eye=feet.y+1.54,x=feet.x+.37*forward.x,z=feet.z+.37*forward.z;
+    query(x,z,3,plant=>{
+      for(const crown of plant.crowns||[]){
+        const flex=Math.min(1.25,Math.max(0,(crown.y-plant.y)/plant.height));
+        const cx=crown.x+plant.bendX*flex,cz=crown.z+plant.bendZ*flex;
+        const cy=crown.y-(plant.bendX**2+plant.bendZ**2)*flex*.26;
+        if(cy+crown.r<feet.y+1.08||cy-crown.r>feet.y+1.84)continue;
+        const dx=cx-x,dz=cz-z,d=Math.hypot(dx,dz,(cy-eye)*.85);
+        if(d>crown.r+.29||(cx-feet.x)*forward.x+(cz-feet.z)*forward.z<-.08)continue;
+        const gap=d-crown.r;
+        if(gap<best){best=gap;closest={plant,x:cx,y:cy,z:cz,gap};}
+      }
+    });
+    return closest;
+  }
   function strike(from,to){
     const dx=to.x-from.x,dy=to.y-from.y,dz=to.z-from.z,length=dx*dx+dz*dz;
     let first=null,tFirst=Infinity;
@@ -65,5 +83,5 @@ export function brushContacts(plants, pose) {
     }
     return first;
   }
-  return {clear,update,strike};
+  return {clear,update,strike,nearCrown};
 }

@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {foldedQuilt} from './cabin-quilt.js';
+import {linenPillow} from './bed-pillow.js';
 import {dressTimber} from './timber.js';
 import {dressOutpost} from './outpost-details.js';
 import {woodcraft} from './woodcraft.js';
@@ -18,7 +20,7 @@ export function createOutpostHouse(shared,site,heightAt,index,{makePaint=paint,c
  const group=new THREE.Group();group.name=spec.name;group.position.set(site.x,y,site.z);
  const palettes=[spec.wall,[[.55,.38,.23],[.28,.22,.16],[.13,.14,.12]],[[.47,.53,.43],[.25,.32,.29],[.12,.2,.2]],[[.7,.69,.59],[.4,.43,.39],[.22,.27,.27]],[[.98,.79,.45],[.6,.45,.25],[.26,.25,.19]],[[.85,.81,.65],[.51,.56,.46],[.24,.3,.26]]],mats=palettes.map((p,i)=>makePaint(shared,p,{board:i<2})),parts=[],colliders=[];
  for(const m of mats)if(m.uniforms?.uDistanceHaze)m.uniforms.uDistanceHaze.value=.81;
- const box=(a,b,c,x,dy,z,pal=0,shell=null)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(a,b,c),mats[pal]);mesh.position.set(x,dy,z);mesh.userData.shell=shell;group.add(mesh);parts.push({mesh,count:Math.max(12,Math.min(150,Math.ceil(a*b*c*25+20))),style:()=>({pal,size:[.09,.26],dir:new THREE.Vector3(0,1,0)})});return mesh;};
+ const box=(a,b,c,x,dy,z,pal=0,shell=null,geometry=null)=>{const mesh=new THREE.Mesh(geometry||new THREE.BoxGeometry(a,b,c),mats[pal]);mesh.position.set(x,dy,z);mesh.userData.shell=shell;group.add(mesh);parts.push({mesh,count:Math.max(12,Math.min(150,Math.ceil(a*b*c*25+20))),style:()=>({pal,size:[.09,.26],dir:new THREE.Vector3(0,1,0)})});return mesh;};
  const collision=(x,dy,z,hx,hy,hz)=>colliders.push({x:site.x+x,y:y+dy,z:site.z+z,hx,hy,hz});
  box(w+.2,.22,d+.2,0,-.02,0,3);collision(0,-.02,0,X+.1,.11,Z+.1);
  const doorX=index===0?-1.1:0,doorW=1.45,porchDepth=index===1?2.3:1.5;
@@ -66,10 +68,17 @@ export function createOutpostHouse(shared,site,heightAt,index,{makePaint=paint,c
  const obstacle=(x,dy,z,hx,hy,hz)=>{collision(x,dy,z,hx,hy,hz);obstacles.push(colliders.at(-1));};
  const furniture=(a,b,c,x,dy,z,pal=1)=>{box(a,b,c,x,dy,z,pal);obstacle(x,dy,z,a/2,b/2,c/2);};
  const bedPlaces=[];
- const beds=index===2?4:index===1?2:1;for(let i=0;i<beds;i++){const x=i%2===0?-X+.7:X-.7,z=-Z+1.2+Math.floor(i/2)*2.05;bedPlaces.push({x,z,top:.685,side:x<0?1:-1});furniture(1.05,.35,1.9,x,.29,z);box(.98,.15,1.8,x,.54,z,5);box(.85,.12,.4,x,.67,z-.58,5);box(.98,.055,1.1,x,.65,z+.24,index===0?4:2);}
+ const beds=index===2?4:index===1?2:1;
+ for(let i=0;i<beds;i++){
+   const x=i%2===0?-X+.7:X-.7,z=-Z+1.2+Math.floor(i/2)*2.05;
+   furniture(1.05,.35,1.9,x,.29,z);box(.98,.18,1.8,x,.595,z,5);
+   const pillow=box(.85,.18,.43,x,.711,z-.64,5,null,linenPillow(.85,.18,.43));parts.at(-1).count=0;
+   bedPlaces.push({x,z,top:.685,side:x<0?1:-1,pillow});
+ }
  const tableX=index===0?.74:index===1?1.31:1.38;
  furniture(index===2?2.3:1.5,.13,.85,tableX,.86,-.2);for(const dx of [-.55,.55])box(.1,.75,.1,tableX+dx,.46,-.2,1);furniture(1.38,.12,.38,tableX,.48,.65);
  const details=dressOutpost(group,craft,spec,index,doorX,tableX,bedPlaces);
+ for(const bed of bedPlaces)bed.blanket=foldedQuilt(shared,details.room,bed.x,bed.top,bed.z,0,.94);
  if(index===2)obstacle(-X+.55,.49,Z-.66,.25,.49,.23);
  const shelfZ=index===0?-Z+1.2:Z-1.19;
  for(const y of [.55,1.15,1.75])box(.45,.09,1.8,X-.34,y,shelfZ,1);for(let i=0;i<7;i++)box(.32,.15,.22,X-.34,.68+(i%3)*.6,shelfZ-.55+Math.floor(i/3)*.45,3);

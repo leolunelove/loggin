@@ -19,6 +19,9 @@ import {weatherAt,shelterAt} from './weather.js';
 import {createWeather} from './world/weather.js';
 import {seatedPose} from './figure/sit.js';
 import {cabinActivity,guideCabinWalk,advanceCabin,nearestGuestBed} from './world/cabin-activity.js';
+import {bedBeats,bedPoint} from './bed-motion.js';
+import {TrailContact} from './figure/trail-contact.js';
+import {pressPillow} from './world/bed-pillow.js';
 import {cabinPose} from './figure/cabin-pose.js';
 import {createCabinQuilt} from './world/cabin-quilt.js';
 import {advanceClock,canSleep,sleepUntilMorning,daylightAt,clockLabel,sleepFade} from './daylight.js';
@@ -76,7 +79,7 @@ export class Lumberjack {
   this.chipGeometry=woodChip();
   this.looseTimber=new Set();ensureOrder(this.state);this.player.endurance=new Endurance(this.state.stamina);
   this.makeAxe();
-  this.playTime=0;
+  this.playTime=0;this.trailContact=new TrailContact();
   this.cabinQuilt=createCabinQuilt(shared);scene.add(this.cabinQuilt.mesh);
   this.chopAnimation=new ChopAnimation(figure.man,animator,this.axe);
   this.heldAxe=new HeldAxe(physics,RAPIER,player.collider,heightAt);player.heldAxe=this.heldAxe;
@@ -462,22 +465,31 @@ export class Lumberjack {
   if(a.stage==='blocked'){this.toast('Move a little closer to the furnishing.');a.stage='rise';}
   const old=a.progress,oldStroke=a.stroke,oldPage=a.page,event=advanceCabin(a,dt),p=a.progress;
   if(a.kind==='ledger'&&old<.48&&p>=.48)this.audio?.boardStep?.(a.hips,.35);
-  if(a.kind==='bed'&&old<.46&&p>=.46)this.audio?.boardStep?.(a.hips,.18);
-  const wave=.5-.5*Math.cos(a.age*2.75),leaf=a.age%5.6;
-  a.stroke=a.kind==='bench'?wave*THREE.MathUtils.smootherstep(p,.71,1):0;
+  if(a.kind==='bed'){
+    if(old<.30&&p>=.30||a.waking&&old>.62&&p<=.62)this.audio?.timberVoice?.('cart-creak',a.hips,{gain:.105,rate:.76});
+    if(old<.81&&p>=.81||a.waking&&old>.90&&p<=.90)this.audio?.furnishing?.('quilt',a.mid);
+    if(a.waking&&old>.36&&p<=.36)this.audio?.boardStep?.(a.stand,.26);
+  }
+  const cycle=a.age%2.6,leaf=a.age%5.6;
+  const push=THREE.MathUtils.smootherstep(cycle,.07,1.03)*(1-THREE.MathUtils.smootherstep(cycle,1.22,1.89));
+  a.stroke=a.kind==='bench'?push*(Math.floor(a.age/2.6)%2?.83:1)*THREE.MathUtils.smootherstep(p,.71,1):0;
   a.page=a.kind==='ledger'?THREE.MathUtils.smootherstep(leaf,1,2.16)*THREE.MathUtils.smoothstep(p,.81,1):0;
   if(a.stage==='using'&&a.stroke>.13&&oldStroke<=.13)this.audio?.furnishing?.('plane',a.right);
   if(a.stage==='using'&&a.page>.12&&oldPage<=.12)this.audio?.furnishing?.('page',a.right);
-  const close=a.stage==='walk'?THREE.MathUtils.clamp(1-Math.hypot(feet.x-a.stand.x,feet.z-a.stand.z),0,1)*.24:
+  let close=a.stage==='walk'?THREE.MathUtils.clamp(1-Math.hypot(feet.x-a.stand.x,feet.z-a.stand.z),0,1)*.24:
     a.stage==='rise'?THREE.MathUtils.smoothstep(p,0,.92):.24+.76*THREE.MathUtils.smootherstep(p,0,.83);
-  this.follow.cabinShot={focus:a.focus,eye:a.eye,weight:close,panel:!!a.panel};
-  if(event==='ready'){
-    if(a.kind==='bed')this.beginSleep();
-    else{
-      if(a.kind==='bench')this.showBenchSection('upgrade-list');
-      $(a.panel).dataset.cabin=a.kind;this.open(a.panel,true);
-    }
+  let focus=a.focus;
+  if(a.kind==='bed'){
+    const m=bedBeats(a);
+    if(a.stage!=='walk')close=a.stage==='rise'?THREE.MathUtils.smootherstep(p,0,.51):.24+.76*THREE.MathUtils.smootherstep(p,0,.64);
+    focus=bedPoint(a,-.055-.12*m.head,.135*(1-m.slide),.64-.34*m.recline);
+    pressPillow(a.pillow,m.pillow);
+    if(a.stage==='using'&&a.age>=.48&&!this.sleeping)this.beginSleep();
+  }else if(event==='ready'){
+    if(a.kind==='bench')this.showBenchSection('upgrade-list');
+    $(a.panel).dataset.cabin=a.kind;this.open(a.panel,true);
   }
+  this.follow.cabinShot={focus,eye:a.eye,weight:close,panel:!!a.panel};
   if(event==='done'){
     this.follow.cabinShot=null;this.cabin=null;this.figure.pack.restAtBench(null,0);
     document.body.classList.remove('cabin-activity');this.held=false;this.input.clear();
@@ -740,7 +752,7 @@ export class Lumberjack {
   ring.rotation.x=-Math.PI/2;ring.position.copy(p);ring.position.y+=.025;ring.scale.setScalar(.045);
   this.scene.add(ring);(this.ripples??=[]).push({ring,age:0});
  }
- pose(dt=1/60){
+ pose(dt=1/60,inp){
   const s=this.swing;
   if(s&&!s.hit)s.contact=this.swingPoint(s);
   const seated=!!this.seat;
@@ -752,6 +764,9 @@ export class Lumberjack {
   this.stowWeight=THREE.MathUtils.clamp(this.stowWeight+(packed?dt/.38:-dt/.29),0,1);
   const guards=()=>this.axeOwner.guards(this.figure.man,this.figure.pack,this.figure.headwear??this.figure.hat);
   const furnished=!!this.cabin&&this.cabin.stage!=='walk';
+  const free=!!inp?.playing&&!s&&!this.sight&&!inp.aimHeld&&!this.drawStroke&&!this.seat&&!this.cabin&&!this.delivery&&!this.cart?.towing&&this.player.grounded;
+  this.trailContact?.sense(dt,this.player,this.forest,this.insideShack||this.indoorPlace>=0,free,!!inp&&Math.hypot(inp.move.x,inp.move.y)>.12);
+  this.trailContact?.posture(this.figure.man,this.animator);
   if(seated||furnished)this.heldAxe.stow();
   this.chopAnimation.update(dt,s,this.state.axe,seated||furnished?null:this.heldAxe,guards,{weight:this.stowWeight,loop:this.figure.pack.axeLoop},this.sight,this.player);
   const {contact,blade}=this.chopAnimation.metrics;
@@ -793,6 +808,7 @@ export class Lumberjack {
       this.figure.pack.axeLoop.getWorldQuaternion(this.axe.quaternion);this.axe.updateMatrixWorld(true);
     }
   }
+  this.trailContact?.hand(dt,this.figure.man,this.animator,this.chopAnimation.metrics);
   this.cabinQuilt?.update(this.cabin,this.figure.man.bones);
   this.cart?.pose();this.axePaint.update();
   if(this.seat&&!this.seated&&this.seatWeight===0){this.seat=null;this.syncCapture();}
@@ -878,7 +894,7 @@ export class Lumberjack {
  updateDaylight(dt){
   if(this.sleeping){if(!document.hidden&&!this.externalSaveChange)this.sleepAge+=dt;$('sleep-fade').style.opacity=sleepFade(this.sleepAge);
    if(this.sleepAge>=.7&&!this.sleepApplied){this.sleepApplied=true;sleepUntilMorning(this.state);this.player.endurance?.replenish();this.save();$('sleep-message').textContent=`Morning · Day ${this.state.day}`;}
-   if(this.sleepAge>=2){this.sleeping=false;this.paused=false;this.cabin.stage='rise';this.input.lockable=!this.touch;this.input.clear();$('sleep-fade').hidden=true;$('sleep-message').textContent='Resting at camp…';this.syncCapture();this.toast('A fresh morning in the woods.');}
+   if(this.sleepAge>=2){this.sleeping=false;this.paused=false;this.cabin.waking=true;this.cabin.stage='rise';this.input.lockable=!this.touch;this.input.clear();$('sleep-fade').hidden=true;$('sleep-message').textContent='Resting at camp…';this.syncCapture();this.toast('A fresh morning in the woods.');}
   }else if(this.started&&!this.paused&&!document.hidden&&this.cabin?.kind!=='bed'){advanceClock(this.state,dt);this.clockSave=(this.clockSave||0)+dt;if(this.clockSave>=30){this.clockSave=0;this.save();}}
   const light=daylightAt(this.state.hour),u=this.shared;
   const arc=(this.state.hour-6)*Math.PI/12;

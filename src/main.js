@@ -185,7 +185,7 @@ function tick(dt,draw=true) {
   const onGround = player.grounded && player.mode !== 'jump' && player.mode !== 'air';
   animator.placeFeet(dt, (x, z, from) => player.ground(x, z, from, 1.4), root.y, onGround ? 1 : 0);
   man.object.updateMatrixWorld(true);
-  game.pose(dt);
+  game.pose(dt,inp);
   figure.update(dt,game.cabin);
   const sheltered=game.insideShack||game.indoorPlace>=0;
   leaves.mesh.visible=!sheltered;

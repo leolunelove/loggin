@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import {foldedQuilt} from './cabin-quilt.js';
+import {linenPillow} from './bed-pillow.js';
 import {furnishCabin} from './shack-keepsakes.js';
 import {AXE_PROFILES} from '../figure/axes.js';
 
-export function buildShackRoom({box,part,root}){
+export function buildShackRoom({box,part,root,shared}){
  const stool=new THREE.Group(),plane=new THREE.Group(),page=new THREE.Group();
  function assemble(group,mesh){group.add(mesh);mesh.userData.movable=true;return mesh;}
  function leg(w,h,d,x,y,z){return assemble(stool,box(w,h,d,1,[x,y,z],3));}
@@ -59,15 +61,22 @@ export function buildShackRoom({box,part,root}){
  }
  const rug=box(1.25,.012,1.4,7,[-.22,.125,.16],45);rug.visible=false;
  // The completed rear room can be walked into and gains a bed and a reading shelf.
- const cot=[box(1.91,.16,.64,1,[.02,.2,-.94],25),box(1.86,.12,.60,7,[.02,.34,-.94],30),box(.95,.045,.59,3,[.25,.42,-.94],25),box(.34,.13,.47,7,[-.68,.43,-.94],15)];
+ const cotLinen=new THREE.Group(),bedroomLinen=new THREE.Group();root.add(cotLinen,bedroomLinen);
+ const cotCover=foldedQuilt(shared,cotLinen,.02,.45,-.94,Math.PI/2,.64);
+ const bedroomCover=foldedQuilt(shared,bedroomLinen,.95,.53,-2.86,0,.92);
+ const cotPillow=part(linenPillow(.40,.165,.51),7,[-.66,.464,-.94],0);
+ const bedroomPillow=part(linenPillow(.76,.18,.40),7,[.95,.566,-3.49],0);
+ for(const pillow of [cotPillow,bedroomPillow])pillow.userData.movable=true;
+ const cot=[box(1.91,.16,.64,1,[.02,.2,-.94],25),box(1.86,.15,.60,7,[.02,.375,-.94],30),cotPillow];
  const room=[];
- for(const m of [box(.98,.24,1.78,1,[.95,.22,-2.88],35),box(.92,.15,1.7,7,[.95,.4,-2.88],40),box(.91,.05,1.1,3,[.95,.5,-2.58],30),box(.72,.12,.35,7,[.95,.55,-3.48],20),box(.6,.65,.45,0,[-1.25,.33,-3.3],25)]){room.push(m);m.visible=false;}
+ for(const m of [box(.98,.24,1.78,1,[.95,.22,-2.88],35),box(.92,.17,1.7,7,[.95,.445,-2.88],40),bedroomPillow,box(.6,.65,.45,0,[-1.25,.33,-3.3],25)]){room.push(m);m.visible=false;}
  // A small lantern gives the room its own warm colour.
  box(.18,.24,.18,5,[1.28,1.83,-.6],15);box(.22,.035,.22,6,[1.28,1.68,-.6],8);box(.22,.035,.22,6,[1.28,1.98,-.6],8);
  let ctx,texture,previous='',expanded=false;
  if(typeof document!=='undefined'&&document.createElement){const canvas=document.createElement('canvas');canvas.width=640;canvas.height=320;ctx=canvas.getContext('2d');if(ctx){texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const label=part(new THREE.PlaneGeometry(1.22,.61),3,[0,1.55,-1.274],0);boardParts.push(label);label.material=new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide});}}
  const show=(mesh,value)=>{if(mesh.userData.shown===value)return false;mesh.userData.shown=value;return true;};
- return {activity(action,cutaway){
+ return {cotPillow,bedroomPillow,cotCover,bedroomCover,activity(action,cutaway){
+  cotLinen.visible=cutaway&&!expanded;bedroomLinen.visible=cutaway&&expanded;
   stool.visible=plane.visible=cutaway;
   const reading=action?.kind==='ledger',working=action?.kind==='bench';
   stool.position.x=.97-.42*(reading?THREE.MathUtils.smootherstep(action.progress,.07,.42):0);

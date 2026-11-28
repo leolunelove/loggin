@@ -323,6 +323,7 @@ export class ChopAnimation {
   }
   const tucked=stow?smooth(stow.weight/.74):0;
   let rightWeight=stow?1-smooth((stow.weight-.75)/.25):1;
+  leftWeight*=1-tucked;
   if(tucked){
    const socket=stow.loop,arc=Math.sin(Math.PI*tucked);
    position.lerp(socket.getWorldPosition(new THREE.Vector3()),tucked).addScaledVector(UP,arc*.115).addScaledVector(right,arc*.095);

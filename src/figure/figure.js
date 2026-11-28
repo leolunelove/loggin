@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { COMMON } from '../oilpaint/common.js';
 import { GROOM, WORKWEAR_PAINT } from './workwear-paint.js';
 import { loadMan } from './man.js';
+import {bedBeats} from '../bed-motion.js';
 import {workClothes,tint} from './work-clothes.js';
 import {characterPalettes,sanitizeAppearance} from '../appearance.js';
 import {workwearWetness} from '../weather.js';
@@ -261,15 +262,15 @@ export async function createFigure(sceneShared, onProgress, palettes = {}, appea
   const quiet=[3.7,5.1,3.25,4.75,4.20];
   let blinkClock=0,blinkIndex=0,hatHem=1.802;
   function update(dt,activity) {
-    const recline=activity?.kind==='bed'?activity.progress:0;
-    if(hair)hair.material.uniforms.uHatHem.value=hatHem+.16*THREE.MathUtils.smootherstep(recline,.49,.68);
+    const bed=activity?.kind==='bed'?bedBeats(activity):null;
+    if(hair)hair.material.uniforms.uHatHem.value=hatHem+.16*(bed?.hat||0);
     if(eyeUniforms){
       blinkClock+=dt;
       const interval=quiet[blinkIndex];
       if(blinkClock>=interval){blinkClock-=interval;blinkIndex=(blinkIndex+1)%quiet.length;}
       const age=blinkClock-(quiet[blinkIndex]-.17);
       eyeUniforms.uBlink.value=age<0?0:age<.06?THREE.MathUtils.smoothstep(age,0,.06):1.-THREE.MathUtils.smoothstep(age,.065,.17);
-      eyeUniforms.uBlink.value=Math.max(eyeUniforms.uBlink.value,THREE.MathUtils.smootherstep(recline,.80,.995));
+      eyeUniforms.uBlink.value=Math.max(eyeUniforms.uBlink.value,bed?.eyes||0);
       eyeUniforms.uGaze.value=.00145*Math.sin((blinkIndex+1)*2.31+.27*blinkClock);
     }
     bodyDabs.update();wardrobe.update();

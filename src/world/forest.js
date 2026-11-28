@@ -283,9 +283,10 @@ export function createForest(shared) {
     const y = heightAt(x, z), tall = 1.1 + rand() * rand() * 3.4;
     const family = rand() < 0.4 ? 3 : rand() < 0.6 ? 0 : rand() < 0.5 ? 1 : 2;
     const n = 3 + Math.floor(rand() * 4);
-    const plant={x,y,z,height:tall,radius:Math.min(1.8,.48+tall*.34),leaf:[leafDabs.length/10],bark:[barkDabs.length/13]};
+    const plant={x,y,z,height:tall,radius:Math.min(1.8,.48+tall*.34),crowns:[],leaf:[leafDabs.length/10],bark:[barkDabs.length/13]};
     for (let k = 0; k < n; k++) {
       const lx = x + (rand() - 0.5) * tall * 0.9, ly = y + tall * (0.45 + rand() * 0.6), lz = z + (rand() - 0.5) * tall * 0.9, lr = 0.38 + rand() * 0.5;
+      plant.crowns.push({x:lx,y:ly,z:lz,r:lr});
       for (let j = 0; j < 12; j++) {
         const d = new THREE.Vector3(rand() - 0.5, rand() - 0.3, rand() - 0.5).normalize();
         leafDabs.push(lx + d.x * lr, ly + d.y * lr, lz + d.z * lr, d.x, d.y, d.z, rand() * 1000, 0.22 + rand() * 0.2, rand() < 0.2 ? Math.floor(rand() * 4) : family, 0);
@@ -653,5 +654,5 @@ export function createForest(shared) {
     if(t.cut&&!t.detailMesh)setBarkDetail(t,true);
     return new FallenWood(t,woodMesh,barkMesh,leafMesh);
   }
-  return { fallenWood,shadeMaterial:black,barkSurface,uncutNormal,setBarkDetail,guideCut,updateDistance,clearBrush:brush.clear,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
+  return { fallenWood,shadeMaterial:black,barkSurface,uncutNormal,setBarkDetail,guideCut,updateDistance,clearBrush:brush.clear,nearCrown:brush.nearCrown,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
 }

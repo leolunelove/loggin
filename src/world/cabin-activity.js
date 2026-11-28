@@ -67,10 +67,15 @@ export function cabinActivity(kind,house,state,feet,guestBed=null){
     const mid=local(bed.x,bed.top+.115,bed.z);
     const stand=sideBed?local(bed.x+side*.94,guestBed ? .09 : .185,bed.z+.10):local(bed.x+.12,.12,bed.z+.77);
     const yaw=sideBed?side*HALF_PI:0;
-    set={stand,yaw,bedYaw:sideBed?0:HALF_PI,hips:seat,mid,top:origin.y+bed.top,
-      side:sideBed?side:1,sideBed,focus:mid.clone().add(V(0,.22,0)),
-      eye:sideBed?V(side*1.42,1.53,1.57):V(.62,1.56,2.01),seconds:2.40,
-      packPosition:sideBed?local(bed.x+side*.70,guestBed ? .10 : .20,bed.z+.64):local(.70,.13,-.37),packYaw:sideBed ? .16 : -.65};
+    const bedYaw=sideBed?0:HALF_PI,axis=V(Math.sin(bedYaw),0,Math.cos(bedYaw)),outward=V(Math.sin(yaw),0,Math.cos(yaw));
+    const width=guestBed ? .94 : sideBed ? .92 : .64;
+    const packPosition=mid.clone().addScaledVector(axis,.65).addScaledVector(outward,width*.5+.34);
+    packPosition.y=stand.y+.01;
+    set={stand,yaw,bedYaw,hips:seat,mid,top:origin.y+bed.top,axis,outward,width,sideBed,
+      braceSide:axis.dot(V(Math.cos(yaw),0,-Math.sin(yaw)))>0?'r':'l',
+      focus:mid.clone().add(V(0,.23,0)),eye:outward.clone().multiplyScalar(1.95).addScaledVector(axis,.62).add(V(0,1.21,0)),
+      seconds:3.65,packPosition,packYaw:yaw+.35,pillow:guestBed?.pillow??(sideBed?house.bedroomPillow:house.cotPillow),
+      blanket:guestBed?.blanket??(sideBed?house.bedroomCover:house.cotCover)};
   }
   const points=[],z=feet.z-origin.z;
   if(guestBed){
@@ -112,7 +117,7 @@ export function advanceCabin(action,dt){
   }else if(action.stage==='using'){
     action.age+=dt;
   }else if(action.stage==='rise'){
-    action.progress=Math.max(0,action.progress-dt/(action.kind==='bed'?1.59:action.kind==='ledger'?.94:.62));
+    action.progress=Math.max(0,action.progress-dt/(action.kind==='bed'?(action.waking?2.90:2.06):action.kind==='ledger'?.94:.62));
     if(!action.progress)return 'done';
   }
   return null;

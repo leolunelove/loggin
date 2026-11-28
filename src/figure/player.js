@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { rootAt } from './man.js';
 import { Endurance } from '../effort.js';
-import {PLAYER_GROUPS} from '../world/woodland-physics.js';
+import {AXE_GROUPS,PLAYER_GROUPS} from '../world/woodland-physics.js';
 
 const damp = (a, b, rate, dt) => b + (a - b) * Math.exp(-rate * dt);
 const angleWrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -65,6 +65,16 @@ export class Player {
     const hit = this.world.castRayAndGetNormal(this.ray, maxDist, true, undefined, PLAYER_GROUPS, this.collider);
     if (!hit) return null;
     return { y: fromY - hit.timeOfImpact, normal: new THREE.Vector3(hit.normal.x, hit.normal.y, hit.normal.z) };
+  }
+
+  handSurface(origin,dir,max){
+    this.ray.origin=origin;this.ray.dir=dir;
+    const flags=this.R.QueryFilterFlags.ONLY_FIXED|this.R.QueryFilterFlags.EXCLUDE_SENSORS;
+    // The nearby bark mesh includes the actual cut faces of each trunk.
+    const hit=this.world.castRayAndGetNormal(this.ray,max,true,flags,AXE_GROUPS,this.collider);
+    if(!hit||hit.timeOfImpact<.02||Math.abs(hit.normal.y)>.58)return null;
+    return {id:hit.collider.handle,distance:hit.timeOfImpact,
+      point:origin.clone().addScaledVector(dir,hit.timeOfImpact),normal:new THREE.Vector3().copy(hit.normal).normalize()};
   }
 
   castRay(origin, dir, max) {

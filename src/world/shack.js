@@ -136,7 +136,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  // Keep tool-sized strokes on the furnishings, especially when the camera comes indoors.
  const roomPart=(geo,ink,pos,count,size=[.019,.064],dir=ACROSS)=>part(geo,ink,pos,count,size,dir);
  const roomBox=(w,h,d,ink,pos,count)=>roomPart(new THREE.BoxGeometry(w,h,d),ink,pos,count);
- const room=buildShackRoom({box:roomBox,part:roomPart,root:group});
+ const room=buildShackRoom({box:roomBox,part:roomPart,root:group,shared});
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x-1.45,y:y+1.16,z:site.z-1.45,hx:.35,hy:1.1,hz:.08},{key:'lodge',stage:24,until:true,x:site.x+.975,y:y+1.16,z:site.z-1.45,hx:.825,hy:1.1,hz:.08});
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x+DOOR.x,y:y+1.15,z:site.z-1.45,hx:.625,hy:1.1,hz:.08});
  campColliders.push({key:'lodge',stage:24,x:site.x,y:y+.06,z:site.z-2.85,hx:1.8,hy:.125,hz:1.3});
@@ -203,6 +203,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
    shared.uLamp.value.set(site.x+1.28,y+1.83,site.z-.6,night*.6);
   },
   nearDoor(feet){return atShackDoor(group.position,feet);},
+  cotPillow:room.cotPillow,bedroomPillow:room.bedroomPillow,cotCover:room.cotCover,bedroomCover:room.bedroomCover,
   activity(action){room.activity(action,cutaway);},
   focus(station,camera,dt){
    const mat=focusMark.material;
