@@ -216,6 +216,23 @@ export function createForest(shared) {
         treeLobes.push([crown.x + Math.cos(a) * d, crown.y + (rand() - 0.45) * t.h * 0.3, crown.z + Math.sin(a) * d, (some ? 2.3 : 3.4) + rand() * 1.2]);
       }
     }
+    // The simpler crowns use their existing leaf clusters as endpoints. Give
+    // reachable trees actual branch wood without changing the seeded forest.
+    if(!full&&t.hull){
+      const count=some?3:2;
+      for(let i=0;i<count;i++){
+        const at=top*(.53+.33*i/count),start=new THREE.Vector3(),r=trunkAt(at,start);
+        const lobe=treeLobes[Math.floor(i*treeLobes.length/count)],end=new THREE.Vector3(...lobe.slice(0,3));
+        if(Math.hypot(end.x-start.x,end.z-start.z)<r*2+.5){
+          const a=t.seed+i*2*Math.PI/count;end.x=start.x+Math.cos(a)*(r*2+.65);end.z=start.z+Math.sin(a)*(r*2+.65);
+        }
+        const mid=start.clone().lerp(end,.48);mid.y-=.2;
+        const points=[start,mid,end],radii=[r*.42,r*.28,.038];
+        const limb={at,first:wood.position.length/3,firstBark:barkDabs.length/13,endBark:barkDabs.length/13};
+        tube(wood,points,radii,6,t.type,t.seed+i);limb.end=wood.position.length/3;
+        limb.joints=points.map((p,j)=>[p.x-t.x,p.y-t.y,p.z-t.z,radii[j]]);t.limbs.push(limb);
+      }
+    }
     const perLobe = full ? (t.hero ? 150 : 54) : some ? 20 : 11;
     const touch = full ? (t.hero ? 0.2 : 0.27) : 0.4;
     for (const [lx, ly, lz, lr,at=top] of treeLobes) {

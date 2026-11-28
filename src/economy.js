@@ -1,3 +1,4 @@
+import {AWAITING_COLLECTION} from './timber-harvest.js';
 import {readWoodland} from './woodland.js';
 import {TREES,readSkill} from './woodcutting.js';
 export {TREES};
@@ -19,12 +20,16 @@ export function sanitize(data) {
   for (const k of ['sound','low','axeStowed']) if (typeof data?.[k] === 'boolean') s[k] = data[k];
   if(Number.isFinite(data?.stamina))s.stamina=Math.max(0,Math.min(100,data.stamina));
   s.sensitivity = Math.max(.5, Math.min(2, Number(data?.sensitivity) || 1));
-  for (const [k,v] of Object.entries(data?.down || {})) if (/^\d{1,5}$/.test(k) && Number.isFinite(v) && v > Date.now()) s.down[k] = Math.min(v, Date.now()+90000);
   s.shed=Math.max(0,Math.min(40,Math.floor(Number(data?.shed)||0)));
   s.carriedHardwood=Math.min(s.carried,s.carriedHardwood);
   s.hardwood=Math.min(s.wood,s.hardwood);
   s.woodland=readWoodland(data?.woodland);
   s.woodcutting=readSkill(data?.woodcutting,s.felled);
+  for(const [id,v] of Object.entries(data?.down||{})){
+    if(!/^\d{1,5}$/.test(id))continue;
+    if(v===AWAITING_COLLECTION&&s.woodcutting.splits[id]?.until===AWAITING_COLLECTION)s.down[id]=v;
+    else if(Number.isFinite(v)&&v>Date.now())s.down[id]=Math.min(v,Date.now()+90000);
+  }
   s.seed=Math.max(0,Math.min(4294967295,Math.floor(Number(data?.seed)||0)));
   s.appearance=sanitizeAppearance(data?.appearance);
   for(const [key,max] of [['sawmill',40],['porch',12],['lodge',24]])s[key]=Math.max(0,Math.min(max,Math.floor(Number(data?.[key])||0)));
@@ -61,4 +66,8 @@ export const rewardFor = (s, type) => Math.round(TREES[type].wood * (1 + s.yield
 export const bagCapacity=s=>(s.shed||0)>=40?64+16*s.yield+(s.lodge>=24?32:0):24;
 export const isHardwood=type=>type===2||type===3;
 export const canHarvest=(s,type)=>!isHardwood(type)||((s.shed||0)>=40&&s.axe>=1);
-export const harvestFits=(s,type)=>s.carried+rewardFor(s,type)<=bagCapacity(s);
+export function packTimber(s,amount,hardwood=false){
+  if(!Number.isInteger(amount)||amount<0||amount>Math.max(0,bagCapacity(s)-s.carried))return false;
+  s.carried+=amount;if(hardwood)s.carriedHardwood+=amount;
+  s.total=Math.min(1e12,s.total+amount);return true;
+}

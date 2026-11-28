@@ -6,13 +6,13 @@ A small third-person lumberjack game in an autumn forest painted in oils. Chop t
 
 ## The loop
 
-1. Hold left-click beside a tree. Five two-handed strokes bite at different heights. Look down to cut a fallen log, knock its end to roll it, or swing freely through the undergrowth.
-2. Felled wood goes into your canvas bag. On your first trip, follow the compass to the shack rack and tap E or left-click to start stacking. Later, the bearing picks the nearest restored home, open rack or parked cart with room for the whole bag. Mark a discovered home under **U → Woodland** to keep that bearing across saves.
+1. Hold left-click beside a tree to fell it. Walk along the fallen trunk and chop off its branches. Cut across the pale bands to make pieces short enough to lift.
+2. Face a short, trimmed log and press **E** to lift it into your bag. You can pack the bare end while branches still grow from the crown. Follow the compass to the shack rack for your first delivery. Later it points to the nearest restored home, open rack or parked cart with room for your load. Mark a discovered home under **U → Woodland** to keep that bearing across saves.
 3. At the outdoor rack, press E or left-click once. Your character stows the axe, lifts bundles from the bag and stacks them at camp. Wood transfers when each bundle lands. Moving cancels and keeps unplaced logs in the bag.
 4. Press U to spend stored wood on axes, swing speed or yield. Each tool has its own forged head and curved haft. Press **X** to carry it in the pack loops. A single click draws it and starts a stroke.
-5. Return to the woods. Birch, beech, maple and oak offer different rewards; trees regrow after 90 seconds.
+5. Return for the remaining pieces. Each birch, beech, maple or oak starts its 90-second regrowth countdown once you have gathered the last timber.
 
-The bag holds 24 timber until the woodshed is built. Delivering 40 ordinary timber completes the woodshed in visible stages and expands capacity to 64. Yield upgrades then add 16 capacity each, so larger harvests still fit. A tree can be harvested when its full yield fits; existing oversized saves retain all carried wood.
+The bag holds 24 timber until the woodshed is built. Delivering 40 ordinary timber completes the woodshed in visible stages and expands capacity to 64. Yield upgrades then add 16 capacity each. Each piece needs enough empty spaces in the bag for its own timber. You can keep chopping with a full bag, unload at camp and return to the same pieces.
 
 Oak and maple are hardwood: build the woodshed and equip the felling axe to harvest them. Hardwood shares bag capacity and is tracked when unloaded; advanced axes require 8 hardwood alongside their timber price. Woodshed progress counts cumulative ordinary timber deliveries without consuming your spendable stockpile.
 
@@ -20,7 +20,7 @@ Jumping and sprinting draw from the stamina bar above the bag. A full load takes
 
 Closing the workbench with its close button or U returns control to the forest. Escape releases the mouse. Tap for one stroke or hold for a run of swings. Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Hold the right mouse button for an over-the-shoulder view. Aim at a patch of bark. Scroll to rotate the guide or use Z / C for a fine adjustment, then left-click. The two-handed swing follows the selected line. Crossing strokes leave separate grooves. Following one line deepens it, and the cuts stay on the tree when you return. Release to recover your walking view. Press Q to lock or release a tree. Felling, range and menus also release the lock.
 
-Felling a tree pays its wood into your bag once. The birch, beech, maple or oak tips from its stump with its branches, leaves and bark cuts still attached. Work the same spot on the fallen trunk to part it after three clean starter-axe hits. A heavy stroke or a stronger axe cuts faster. The two lengths can roll independently and keep their cuts and positions when you save.
+The same tree tips from its stump with its branches, leaves and bark cuts attached. A clean hit frees a branch and its leaves. Three clean hand-axe hits across the same spot part the trunk. Heavy strokes and stronger axes cut faster. Each length can roll on its own. Trimmed pieces up to 2.4 metres long can go in your bag. Wood and hardwood count when your hands take the piece. Your save remembers unfinished cuts, remaining limbs and the pieces you left in the clearing. The windthrows by the trails also leave their cut sections for pickup.
 
 Start a stroke close to a trunk and the woodcutter will ease back or sideways if the footing allows. Keep moving with WASD to choose your own footing. In a tight pocket he slides his hands up the handle for a short stroke. When running he holds the axe across his body with both hands.
 
@@ -28,7 +28,7 @@ Start a stroke close to a trunk and the woodcutter will ease back or sideways if
 
 ## Woodcutting
 
-Press **K** or open **Upgrades → Skills** for your level, XP to the next level, species records and current order. Birch, beech, maple and old oak award 42, 68, 125 and 190 XP per tree before bonuses. A useful blow earns part of the total. Felling the tree pays the rest. Splitting one of its three original lengths earns 18 XP once per length. The notch and earned XP survive a reload.
+Press **K** or open **Upgrades → Skills** for your level, XP to the next level, species records and current order. Birch, beech, maple and old oak award 42, 68, 125 and 190 XP per tree before bonuses. A useful blow earns part of the total. Felling the tree pays the rest. Removing a branch earns 3 XP. A crosscut through a long trunk earns 18 XP across its productive hits. The notch and earned XP survive a reload.
 
 Level 2 starts at 92 XP, level 10 at 1,382, level 50 at 42,041 and level 99 at 890,291. Camp orders open at 5, precision bonuses at 10, hardwood orders at 20 and figured-grain bonuses at 35. Levels 50 and 75 bring larger orders and better bonuses. Established camps receive 26 XP for each previously recorded tree.
 

@@ -4,7 +4,7 @@ import {PROJECT} from './woodland.js';
 export function campObjective(s) {
   if (s.shed < 40) return {
     title: `Woodshed · ${s.shed} / 40 timber delivered`,
-    detail: s.carried ? 'Follow the bearing to stack your bag.' : s.felled ? 'Birch and beech build the woodshed.' : 'Fell a birch. Bring your first load to the shack.'
+    detail: s.carried ? 'Follow the bearing to stack your bag.' : s.felled ? 'Trim branches, buck short logs, then press E to pack them.' : 'Fell a birch and pack your first cut log.'
   };
   if (s.axe === 0) return {title:'Equip a felling axe', detail:'Spend 12 timber at the workbench to cut hardwood.'};
   if (s.sawmill < 40) return {title:`Sawmill · ${s.sawmill} / 40 hardwood`,

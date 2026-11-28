@@ -20,7 +20,7 @@ export function workStance(game,stroke){
     const hit=physics.castShape(from,identity,path,shape,.006,1,false,R.QueryFilterFlags.EXCLUDE_SENSORS,PLAYER_GROUPS,player.collider);
     return hit?clamp(hit.time_of_impact-.012/len,0,1):1;
   };
-  const stock=shapes(R),work=!stroke.free||stroke.sight?.reachable||stroke.t.kind==='section'||stroke.t.kind==='stump';
+  const stock=shapes(R),work=!stroke.free||stroke.sight?.reachable||['section','branch','stump'].includes(stroke.t.kind);
   const target=V().set(point.x,feet.y,point.z);
   const room=spot=>{
     const shoulder=spot.clone().addScaledVector(up,1.38).addScaledVector(right,.15);

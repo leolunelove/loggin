@@ -8,6 +8,7 @@ import {readSave,writeSave,reviewStorage} from '../src/save.js';
 import {Lumberjack} from '../src/game.js';
 import {buildTrail} from '../src/world/trail.js';
 import {createFieldwork} from '../src/world/fieldwork.js';
+import {commitPickup} from '../src/world/gather.js';
 import {woodcraft} from '../src/world/woodcraft.js';
 import {dabGeometry,dabMesh} from '../src/oilpaint/dabs.js';
 import {nearTile,tileDabs,VIEW_RANGE} from '../src/world/forest-distance.js';
@@ -21,7 +22,7 @@ test('old camps retain balances and gain initial woodland, clothes and collectio
   const old=sanitize({wood:87,hardwood:32,planks:13,seed:587,appearance:{hat:2,skin:1}});
   assert.deepEqual([old.wood,old.hardwood,old.planks,old.seed],[87,32,13,587]);
   assert.equal(old.appearance.hat,2);assert.equal(old.appearance.headwear,0);
-  assert.deepEqual(old.woodland.sections,[0,0,0,0,0]);assert.equal(old.woodland.cart.built,false);
+  assert.deepEqual(old.woodland.sections,[0,0,0,0,0]);assert.deepEqual(old.woodland.looseSections,[0,0,0,0,0]);assert.equal(old.woodland.cart.built,false);
   const w=old.woodland;Object.assign(w,{reserved:[2,2,13,-2],finds:['kiln','bad'],sections:[1,2,27],edge:true});
   Object.assign(w.cart,{built:true,hired:true,running:true,route:2,progress:.34,x:2,z:15,load:82});
   old.appearance.workwear=2;const saved=sanitize(JSON.parse(JSON.stringify(old)));
@@ -110,6 +111,16 @@ test('the physical bridge, racks, remaining windthrow sections and trail surface
   assert.equal(field.windthrows().length,5);assert.equal(bodies.size,15);
   const first=field.windthrows()[0];g.state.woodland.sections[0]=1;field.sync();
   assert.equal(first.g.visible,false);assert.equal(field.windthrows()[0].section,1);assert.equal(bodies.size,14);
+  // A newly cut section stays at the site even after the next section becomes workable.
+  g.state.woodland.looseSections[0]=1;g.state=sanitize(JSON.parse(JSON.stringify(g.state)));field.sync();
+  assert.ok(first.ready&&first.g.visible);assert.equal(first.ring.visible,false);assert.ok(first.body);
+  assert.ok(Math.hypot(first.g.position.x-first.x,first.g.position.z-first.z)>.22);
+  assert.equal(field.windthrows()[0].section,1);assert.equal(bodies.size,15);
+  const target={field:first,amount:5,hard:false};Object.assign(g,{field,shade:{refresh(){}},renderHud(){},save(){}});
+  g.state.carried=62;assert.equal(commitPickup(g,target),null);assert.ok(first.ready);
+  g.state.carried=0;assert.ok(commitPickup(g,target));assert.equal(g.state.carried,5);
+  assert.equal(commitPickup(g,target),null);assert.equal(g.state.total,5);assert.equal(bodies.size,14);
+  assert.equal(first.g.visible,false);assert.equal(g.state.woodland.looseSections[0],0);
   for(let n=1;n<=4;n++){
     assert.ok(contributeLocal(g.state,1,'bridge'));field.sync();field.sync();
     assert.equal(field.stageParts.filter(s=>s.key==='bridge'&&s.g.visible).length,n);assert.equal(bodies.size,14+6*n);

@@ -10,11 +10,11 @@ export function looseAim(trees,feet,yaw,pitch=0){
   const dx=Math.sin(yaw),dz=Math.cos(yaw);
   const aim=new THREE.Vector3(feet.x+dx*.91,feet.y+.37,feet.z+dz*.91);
   let best=null,score=Infinity;
-  function consider(p,kind,tree,part){
+  function consider(p,kind,tree,part,limb=null,normal=null){
     const x=p.x-feet.x,z=p.z-feet.z,d=Math.hypot(x,z),facing=(x*dx+z*dz)/Math.max(.001,d);
     if(d>reach+.06||facing<.56||Math.abs(p.y-feet.y-.55)>1.0||pitch<-.38)return;
     const rank=d+.85*(1-facing);
-    if(rank<score){best={kind,tree,part,point:p,x:p.x,y:p.y,z:p.z,r:.12,type:tree.type};score=rank;}
+    if(rank<score){best={kind,tree,part,limb,normal,point:p,x:p.x,y:p.y,z:p.z,r:.12,type:tree.type};score=rank;}
   }
   for(const tree of trees){
     if(tree.stump&&Math.hypot(tree.x-feet.x,tree.z-feet.z)<=reach+tree.r){
@@ -23,14 +23,24 @@ export function looseAim(trees,feet,yaw,pitch=0){
     }
     for(const part of tree.sections||[]){
       if(part.body.isKinematic?.())continue;
-      const centre=part.body.translation();if(Math.hypot(centre.x-feet.x,centre.z-feet.z)>reach+part.length*.5+.5)continue;
+      const centre=part.body.translation(),bounds=part.skin?.toolBounds;
+      const span=bounds?Math.max(bounds.min.length(),bounds.max.length()):part.length*.5+.5;
+      if(Math.hypot(centre.x-feet.x,centre.z-feet.z)>reach+span)continue;
       if(part.owner){
         const {wood}=part.owner,q=part.body.rotation();
-        const station=THREE.MathUtils.clamp(part.owner.local(part,aim).y,part.lo+.12,part.hi-.12);
+        const local=part.owner.local(part,aim);
+        const station=THREE.MathUtils.clamp(local.y,part.lo+.12,part.hi-.12);
         const p=wood.centre(station).sub(part.rest).applyQuaternion(q).add(centre);
         const axis=up.clone().applyQuaternion(q),top=up.clone().projectOnPlane(axis).normalize();
         p.addScaledVector(top,wood.radius(station)*.94);
-        consider(p,'section',tree,part);
+        consider(p,'section',tree,part,null,top);
+        const b=part.owner.branchNear?.(part,local);
+        if(b&&b.distance<.88){
+          const surface=part.owner.worldPoint(part,b.point),tangent=b.tangent.applyQuaternion(q);
+          const normal=feet.clone().addScaledVector(up,1.18).sub(surface).normalize().addScaledVector(up,.85).projectOnPlane(tangent).normalize();
+          surface.addScaledVector(normal,b.radius);
+          consider(surface,'branch',tree,part,b.limb,normal);
+        }
         continue;
       }
       const axis=up.clone().applyQuaternion(part.body.rotation()),c=new THREE.Vector3().copy(centre);
@@ -88,7 +98,10 @@ export function shoulderSight(game){
     const part=!stump&&collider.fallenPart?.tree===trunk?collider.fallenPart:null;
     if(!part&&!stump)continue;
     sight.timber={kind:stump?'stump':'section',tree:trunk,part,point,x:point.x,y:point.y,z:point.z,r:.12,type:trunk.type};
-    if(part){const body=part.body;sight.body=body;sight.local=point.clone().sub(body.translation()).applyQuaternion(new THREE.Quaternion().copy(body.rotation()).invert());}
+    if(part){
+      const b=part.owner?.branchNear(part,part.owner.local(part,point));
+      if(b&&b.distance<.09){sight.timber.kind='branch';sight.timber.limb=b.limb;}
+      const body=part.body;sight.body=body;sight.local=point.clone().sub(body.translation()).applyQuaternion(new THREE.Quaternion().copy(body.rotation()).invert());}
     break;
   }
   return sight;

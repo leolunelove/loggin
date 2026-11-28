@@ -204,10 +204,19 @@ export class ChopAnimation {
      const oblique=smooth((.83-n.dot(aim))/.30);
      if(oblique)contactQ.slerp(axeRotation(n,.45+low*.52,contactPose.roll*.45),oblique);
    }
+   // A thin bough needs a deliberate edge-first approach. Drive towards the
+   // actual face of the moving wood in the last handspan of an un-aimed cut.
+   const logFace=!swing.sight?.cutLine&&swing.free&&swing.t.normal;
+   if(logFace){
+     const into=logFace.clone().negate(),across=aim.clone().projectOnPlane(into);
+     if(across.lengthSq()<.04)across.copy(UP).projectOnPlane(into);
+     if(across.lengthSq()>.001)contactQ.copy(toolInCutPlane(into,across.normalize(),.50+.22*low));
+   }
    const cutTilt=1.01+.16*longReach+.10*low;
    if(along)contactQ.copy(toolInCutPlane(inward,along,cutTilt));
-   const lowWork=swing.sight?.reachable&&swing.contact.y-body.position.y<.63||swing.t.windthrow||['section','stump'].includes(swing.t.kind)||swing.free&&swing.pitch>.70;
-   if(along)contactEdge=workingEdge(tier,contactQ,inward);
+   const lowWork=swing.sight?.reachable&&swing.contact.y-body.position.y<.63||swing.t.windthrow||['section','stump','branch'].includes(swing.t.kind)||swing.free&&swing.pitch>.70;
+   if(logFace)contactEdge=workingEdge(tier,contactQ,logFace.clone().negate());
+   else if(along)contactEdge=workingEdge(tier,contactQ,inward);
    else if(!swing.free||swing.sight?.reachable||lowWork)contactEdge=workingEdge(tier,contactQ,lowWork?new THREE.Vector3(0,-1,0):aim);
    const contactPalm=contact.clone().sub(contactEdge.clone().sub(gripAt(LOWER_GRIP)).applyQuaternion(contactQ).multiplyScalar(scale));
    const local=(x,y,z)=>new THREE.Vector3(x,y,z).applyMatrix4(body.matrixWorld);
@@ -250,10 +259,10 @@ export class ChopAnimation {
       .addScaledVector(along,.31*(1-sweep)-.10*recover)
       .sub(edge.applyQuaternion(rotation).multiplyScalar(scale));
     position.lerp(goal,take);
-   }else if(swing.sight?.reachable&&!swing.hit&&p>.23){
+   }else if((swing.sight?.reachable||logFace)&&!swing.hit&&p>.23){
     // Set the edge opposite the selected patch before driving it through the final
     // handspan. A high or diagonal wind-up can then finish on the same pencil mark.
-    const normal=entry||swing.sight.normal,settle=smooth((p-.23)/.15),drive=smooth((p-.385)/.122);
+    const normal=entry||swing.sight?.normal||logFace,settle=smooth((p-.23)/.15),drive=smooth((p-.385)/.122);
     rotation.slerp(contactQ,settle);
     const edge=workingEdge(tier,rotation,normal.clone().negate());
     const goal=contact.clone().addScaledVector(normal,.265-.303*drive)

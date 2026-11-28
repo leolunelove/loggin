@@ -1,3 +1,5 @@
+import {AWAITING_COLLECTION,CARRY_LENGTH,readHarvest} from './timber-harvest.js';
+
 // Total XP for a completed tree is shared across its useful cuts and final fall.
 export const TREES = [
   {name:'Beech',health:14,wood:14,xp:68,minCuts:4},
@@ -51,7 +53,7 @@ function readNotches(value){
 }
 export function readSkill(data,legacyFelled=0){
   const legacy=count(data?data.legacy:legacyFelled);
-  const skill={xp:data?count(data.xp):Math.min(1e12,legacy*26),legacy,strokes:count(data?.strokes),bucked:count(data?.bucked),orders:count(data?.orders),
+  const skill={xp:data?count(data.xp):Math.min(1e12,legacy*26),legacy,strokes:count(data?.strokes),limbed:count(data?.limbed),bucked:count(data?.bucked),orders:count(data?.orders),
     species:TREES.map((_,i)=>count(data?.species?.[i])),order:null,cuts:{},splits:{}};
   const o=data?.order;
   if(o&&Object.hasOwn(orders,o.key)){
@@ -65,8 +67,11 @@ export function readSkill(data,legacyFelled=0){
     const notches=readNotches(cut.notches);if(notches.length)saved.notches=notches;
   }
   for(const [id,split] of Object.entries(data?.splits||{})){
-    if(!/^\d{1,5}$/.test(id)||!Number.isFinite(split?.until)||split.until<=Date.now()||!Number.isInteger(split.mask))continue;
+    if(!/^\d{1,5}$/.test(id)||!Number.isFinite(split?.until)||!Number.isInteger(split.mask))continue;
+    const harvest=readHarvest(split.harvest),pending=split.until===AWAITING_COLLECTION&&harvest;
+    if(!pending&&split.until<=Date.now())continue;
     const record=skill.splits[id]={until:split.until,mask:split.mask&7};
+    if(harvest)record.harvest=harvest;
     if(Array.isArray(split.scores))record.scores=[0,1,2].map(i=>Math.min(2,count(split.scores[i])));
     if(Number.isFinite(split.bearing))record.bearing=split.bearing%(Math.PI*2);
     const notches=readNotches(split.notches);if(notches.length)record.notches=notches;
@@ -94,7 +99,16 @@ export function cappedPower(tree,power,heavy){
   const species=TREES[tree.type],cuts=species.minCuts-(heavy&&(tree.type===2||tree.type===3)?1:0);
   return Math.min(power,species.health/cuts);
 }
+export function awardBranch(s){
+  const skill=s.woodcutting,old=skillProgress(skill.xp).level;
+  skill.limbed++;skill.strokes++;skill.xp=Math.min(1e12,skill.xp+3);ensureOrder(s);
+  return {xp:3,bonus:0,old,level:skillProgress(skill.xp).level};
+}
 export function logCut(s,tree,part){
+  if(tree.fallen?.record.harvest){
+    if(part.length<=CARRY_LENGTH+.001)return null;
+    return awardWork(s,{type:tree.type,split:true,before:3-part.before,after:3-part.hits});
+  }
   const index=part.sourceIndex;
   if(!Number.isInteger(index)||index<0||index>2||part.length<=1.1)return null;
   const entries=s.woodcutting.splits,bit=1<<index;

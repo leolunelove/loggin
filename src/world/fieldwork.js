@@ -138,8 +138,8 @@ export function createFieldwork(game,craft) {
       const pitch=(heightAt(x+dir.x*.5,z+dir.z*.5)-heightAt(x-dir.x*.5,z-dir.z*.5));g.rotation.x=-Math.atan(pitch);
       pole(g,'bark',[0,r,-.55],[0,r,.55],r);pole(g,'cut',[0,r,-.562],[0,r,-.55],r*.96);pole(g,'cut',[0,r,.55],[0,r,.562],r*.96);
       if(n===2)pole(g,'dark',[0,r,-.12],[.38,r+.31,.17],.072);
-      const ring=new THREE.Mesh(new THREE.TorusGeometry(r+.002,.012,4,12),mats.chalk);ring.position.set(0,r,-.20);g.add(ring);join(g);
-      current.push({g,x,z,y:g.position.y,r,type:0,tier:0,windthrow:true,job:i,section:n,hp:game.state.woodcutting.cuts['w'+i+'-'+n]?.hp||WINDTHROW_HEALTH,maxHp:WINDTHROW_HEALTH,id:'w'+i+'-'+n});
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(r+.002,.012,4,12),mats.chalk);ring.position.set(0,r,-.20);join(g);g.add(ring);
+      current.push({g,ring,x,z,y:g.position.y,r,type:0,tier:0,windthrow:true,job:i,section:n,hp:game.state.woodcutting.cuts['w'+i+'-'+n]?.hp||WINDTHROW_HEALTH,maxHp:WINDTHROW_HEALTH,id:'w'+i+'-'+n});
     }jobs.push(current);
   }
   const chimney=sites[2].clone().add(new THREE.Vector3(-2.6,net.sites[2].spec.h+1.86,-1.6));
@@ -154,11 +154,20 @@ export function createFieldwork(game,craft) {
       if(shown&&!e.bodies.length)for(const c of e.colliders){let d=game.RAPIER.ColliderDesc.cuboid(c.hx,c.hy,c.hz).setTranslation(c.x,c.y,c.z);if(c.yaw)d.setRotation({x:0,y:Math.sin(c.yaw/2),z:0,w:Math.cos(c.yaw/2)});e.bodies.push(game.physics.createCollider(d));}
     }
     syncSupplies();fieldRack.visible=restored(s.places[1]);dryRack.visible=w.projects.shelter===3;pennant.visible=w.finds.includes('tools');smoke.visible=restored(s.places[2]);
-    jobs.forEach((list,i)=>list.forEach((t,n)=>{t.down=n!==w.sections[i];t.g.visible=n>=w.sections[i];
+    jobs.forEach((list,i)=>list.forEach((t,n)=>{
+      t.down=n!==w.sections[i];
+      const ready=!!(w.looseSections[i]&(1<<n)),moved=ready!==!!t.ready;
+      t.ready=ready;t.g.visible=ready||n>=w.sections[i];t.ring.visible=!ready;
+      if(moved){
+        const roll=(n%2?-.24:.24)*(ready?1:0),yaw=t.g.rotation.y;
+        t.g.position.set(t.x+Math.cos(yaw)*roll,t.y,t.z-Math.sin(yaw)*roll);
+        t.g.position.y=heightAt(t.g.position.x,t.g.position.z);t.g.rotation.z=-roll/t.r;
+        if(t.body){game.physics.removeCollider(t.body,true);t.body=null;}
+      }
       if(t.g.visible&&!t.body){
         const centre=t.g.localToWorld(new THREE.Vector3(0,t.r,0));
         const rotation=t.g.quaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));
-        t.body=game.physics.createCollider(game.RAPIER.ColliderDesc.cylinder(.55,t.r).setTranslation(centre.x,centre.y,centre.z).setRotation(rotation));
+        t.body=game.physics.createCollider(game.RAPIER.ColliderDesc.cylinder(.55,t.r).setTranslation(centre.x,centre.y,centre.z).setRotation(rotation));t.body.fieldSection=t;
       }
       if(!t.g.visible&&t.body){game.physics.removeCollider(t.body,true);t.body=null;}}));
     for(const t of [...kept.keys()])if(!w.reserved.includes(t.id)){const marker=kept.get(t);root.remove(marker);marker.traverse(o=>o.geometry?.dispose());kept.delete(t);}

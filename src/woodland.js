@@ -29,6 +29,7 @@ export function readWoodland(value = {}) {
     projects: Object.fromEntries(Object.entries(PROJECT).map(([k,p]) => [k,integer(w.projects?.[k],p.stages)])),
     finds: Object.keys(FINDS).filter(k => Array.isArray(w.finds) && w.finds.includes(k)),
     reserved: tags(w.reserved, 99999), sections: Array.from({length: 5}, (_,i) => integer(w.sections?.[i],3)),
+    looseSections:Array.from({length:5},(_,i)=>integer(w.looseSections?.[i],7)&((1<<integer(w.sections?.[i],3))-1)),
     freight: Array.from({length: 3}, (_,i) => integer(w.freight?.[i],1e12)),
     cart: { built: c.built === true, hired: c.built === true && c.hired === true, running: c.built === true && c.hired === true && c.running === true,
       route: integer(c.route,2), progress: clamp(c.progress,1), returning: c.returning === true,

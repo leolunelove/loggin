@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {dabGeometry,dabMesh} from '../oilpaint/dabs.js';
 
-export const HINGE=.38;
+export {HINGE} from '../timber-harvest.js';
 const V=()=>new THREE.Vector3(),fields=[['position',3],['normal',3],['aData',3],['aRing',2],['aCut',1],['aCutFace',1]];
 const mix=(a,b,u)=>u===0?a:u===1?b:a.map((x,i)=>x+(b[i]-x)*u);
 
@@ -35,18 +35,18 @@ function ringCentre(points){
 }
 function copyPaint(source,first,end,origin,attachment){
   const attrs=Object.entries(source.geometry.attributes).filter(([,a])=>a.isInstancedBufferAttribute);
-  const data={},at=[];for(const [name,a] of attrs)data[name]=[a.array.slice(first*a.itemSize,end*a.itemSize),a.itemSize];
+  const data={},at=[],limbs=[];for(const [name,a] of attrs)data[name]=[a.array.slice(first*a.itemSize,end*a.itemSize),a.itemSize];
   const p=data.aPos[0];
   for(let i=0;i<end-first;i++){
     p[i*3]-=origin.x;p[i*3+1]-=origin.y;p[i*3+2]-=origin.z;
-    at.push(attachment(first+i,p[i*3+1]));
+    const owner=attachment(first+i,p[i*3+1]);at.push(owner.at);limbs.push(owner.limb??-1);
   }
-  return {data,at,material:source.material,order:source.renderOrder};
+  return {data,at,limbs,material:source.material,order:source.renderOrder};
 }
 const belongs=(at,lo,hi,top)=>at>=lo&&(at<hi||hi===top&&at<=top+.001);
 
-function paintedPiece(paint,lo,hi,top,centre){
-  const ids=[];paint.at.forEach((at,i)=>{if(belongs(at,lo,hi,top))ids.push(i);});
+function paintedPiece(paint,include,centre){
+  const ids=[];paint.at.forEach((at,i)=>{if(include(at,paint.limbs[i]))ids.push(i);});
   if(!ids.length)return null;
   const attrs={};
   for(const [name,[values,size]] of Object.entries(paint.data)){
@@ -70,13 +70,39 @@ export class FallenWood{
       let sides=1;while(sides<heights.count&&heights.getZ(sides)===first)sides++;
       this.bands=[rings(fine,0,heights.count,sides,V()),this.stock.slice(toolRings.count-1)];
     }
-    this.limbs=tree.limbs.map(l=>({...l,vertices:Array.from({length:l.end-l.first},(_,i)=>vertex(g,l.first+i,origin))}));
-    this.bunches=tree.leafBunches;
-    this.bark=copyPaint(bark,...tree.ranges.bark,origin,(i,y)=>tree.limbs.find(l=>i>=l.firstBark&&i<l.endBark)?.at??y);
+    this.limbs=tree.limbs.map((l,id)=>({...l,id,vertices:Array.from({length:l.end-l.first},(_,i)=>vertex(g,l.first+i,origin))}));
+    for(const limb of this.limbs){
+      // Start a limb target where the bough emerges from the bole. A hit on the
+      // opposite side of the trunk should make a crosscut, even at this height.
+      const joints=limb.joints.map(j=>V().fromArray(j));
+      let j=1;
+      const outside=p=>{const c=this.centre(p.y);return Math.hypot(p.x-c.x,p.z-c.z)>this.radius(p.y);};
+      while(j<joints.length-1&&!outside(joints[j]))j++;
+      let a=joints[j-1].clone(),b=joints[j].clone();
+      for(let n=0;n<8;n++){const mid=a.clone().lerp(b,.5);if(outside(mid))b=mid;else a=mid;}
+      limb.collar=b;limb.axis=joints[j].clone().sub(joints[j-1]).normalize();
+      limb.path=[b,...joints.slice(j)];limb.radius=limb.joints[Math.max(0,j-1)][3];
+    }
+    this.bunches=tree.leafBunches.map(b=>{
+      let limb=this.limbs.find(l=>l.at===b.at);
+      if(!limb&&this.limbs.length){
+        const point=V().fromArray(b.lobe);
+        let best=Infinity;
+        for(const l of this.limbs){
+          const distance=point.distanceToSquared(V().fromArray(l.joints.at(-1)));
+          if(distance<best){best=distance;limb=l;}
+        }
+      }
+      return {...b,at:limb?.at??b.at,limb:limb?.id??-1};
+    });
+    this.bark=copyPaint(bark,...tree.ranges.bark,origin,(i,y)=>{
+      const l=this.limbs.find(l=>i>=l.firstBark&&i<l.endBark);
+      return {at:l?.at??y,limb:l?.id};
+    });
     let bunch=0;
     this.leaves=copyPaint(leaves,...tree.ranges.leaf,origin,i=>{
       while(bunch+1<this.bunches.length&&i>=this.bunches[bunch].end)bunch++;
-      return this.bunches[bunch]?.at??this.top;
+      return this.bunches[bunch]??{at:this.top};
     });
   }
   centre(at){return ringCentre(ringAt(this.stock,at));}
@@ -84,10 +110,23 @@ export class FallenWood{
     const ring=ringAt(this.stock,at),c=ringCentre(ring);
     return ring.reduce((n,v)=>n+Math.hypot(v[0]-c.x,v[2]-c.z),0)/ring.length;
   }
+  band(at,width=.039){
+    const points=[],indices=[];
+    for(const h of [at-width/2,at+width/2]){
+      const ring=ringAt(this.stock,h),c=ringCentre(ring);
+      for(const v of ring){const p=V().fromArray(v).sub(c).multiplyScalar(1.035).add(c);points.push(...p.toArray());}
+    }
+    const n=points.length/6;
+    for(let i=0;i<n;i++){const j=(i+1)%n;indices.push(i,j,n+i,j,n+j,n+i);}
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(points,3));geo.setIndex(indices);
+    geo.computeVertexNormals();return geo;
+  }
   // Keep all original vertices and brush marks between the two saw lines.
   // At an actual crosscut, interpolate a new rim on both matching ends.
-  piece(lo,hi,endMaterial,shadeMaterial){
-    const centre=this.centre((lo+hi)/2),attrs=fields.map(()=>[]),sides=[],caps=[];
+  piece(lo,hi,endMaterial,shadeMaterial,removed=[],only=null){
+    const centre=only?V().fromArray(only.joints[Math.floor(only.joints.length/2)]):this.centre((lo+hi)/2);
+    const include=(at,id)=>belongs(at,lo,hi,this.top)&&(only?id===only.id:!removed.includes(id));
+    const attrs=fields.map(()=>[]),sides=[],caps=[];
     const append=row=>{
       const index=attrs[0].length/3;let j=0;
       for(let f=0;f<fields.length;f++)for(let k=0;k<fields[f][1];k++,j++)
@@ -103,7 +142,7 @@ export class FallenWood{
       const rim=row.map(p=>{const v=p.slice();v.splice(3,3,0,sign,0);return append(v);});
       for(let j=0;j<rim.length;j++){const k=(j+1)%rim.length;caps.push(mid,rim[sign>0?j:k],rim[sign>0?k:j]);}
     };
-    for(const band of this.bands){
+    for(const band of only?[]:this.bands){
       if(band.length<2)continue;
       const low=Math.max(lo,band[0].at),high=Math.min(hi,band.at(-1).at);if(high-low<.0001)continue;
       const bottom=ringAt(band,low),top=ringAt(band,high);
@@ -114,7 +153,7 @@ export class FallenWood{
       if(Math.abs(low-lo)<.0001)cap(bottom,-1);
       if(Math.abs(high-hi)<.0001)cap(top,1);
     }
-    for(const limb of this.limbs)if(belongs(limb.at,lo,hi,this.top)){
+    for(const limb of this.limbs)if(include(limb.at,limb.id)){
       const start=attrs[0].length/3;for(const v of limb.vertices)append(v);
       for(let j=6;j<limb.vertices.length;j+=6)connect(start+j-6,start+j,6,sides);
     }
@@ -122,9 +161,9 @@ export class FallenWood{
     fields.forEach(([name,size],i)=>geometry.setAttribute(name,new THREE.Float32BufferAttribute(attrs[i],size)));
     geometry.setIndex(sides.concat(caps));geometry.addGroup(0,sides.length,0);geometry.addGroup(sides.length,caps.length,1);geometry.computeBoundingSphere();
     const mesh=new THREE.Group();mesh.add(new THREE.Mesh(geometry,[this.material,endMaterial]));
-    for(const p of [this.bark,this.leaves]){const m=paintedPiece(p,lo,hi,this.top,centre);if(m)mesh.add(m);}
+    for(const p of [this.bark,this.leaves]){const m=paintedPiece(p,include,centre);if(m)mesh.add(m);}
     const shadow=new THREE.Group();shadow.add(new THREE.Mesh(geometry,shadeMaterial));
-    const bunches=this.bunches.filter(b=>belongs(b.at,lo,hi,this.top));
+    const bunches=this.bunches.filter(b=>include(b.at,b.limb));
     if(bunches.length){
       const shade=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,0),shadeMaterial,bunches.length);
       bunches.forEach(({lobe:[x,y,z,r]},i)=>shade.setMatrixAt(i,new THREE.Matrix4().makeScale(r*.36,r*.29,r*.36).setPosition(x-centre.x,y-centre.y,z-centre.z)));

@@ -6,7 +6,7 @@ export function skillsPage(state){
   const ranks=['Apprentice','Camp hand','Woodcutter','Timber hand','Sawyer','Journeyman','Veteran','Master woodcutter'];
   const rank=ranks[milestones.filter(([level])=>level<=p.level).length-1];
   const next=milestones.find(([level])=>level>p.level);
-  const stats=[[state.felled,'Trees felled'],[skill.strokes,'Landed chops'],[skill.bucked,'Logs bucked'],[skill.orders,'Orders filled']];
+  const stats=[[state.felled,'Trees felled'],[skill.strokes,'Landed chops'],[skill.limbed,'Branches trimmed'],[skill.bucked,'Logs bucked'],[skill.orders,'Orders filled']];
   const job=order?`<section class="book-order"><small>Current camp order</small><h3>${order.title}</h3><div><span>${order.verb}</span><b>${order.done} / ${order.goal}</b></div><progress aria-label="Camp order progress" value="${order.done}" max="${order.goal}"></progress><p>Completing this order earns ${number(order.reward)} bonus XP.</p></section>`:
     '<section class="book-order"><small>Camp orders</small><p>Your first job opens at Woodcutting level 5.</p></section>';
   return `<div class="skill-spread"><section class="skill-summary sewn"><div class="level-emblem"><small>Level</small><b>${p.level}</b></div><div><small>${rank}</small><h3>Woodcutting</h3><p>${number(skill.xp)} total XP</p></div>

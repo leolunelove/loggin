@@ -2,6 +2,7 @@ import {createFingerpost} from './fingerpost.js';
 import {buildTrail} from './trail.js';
 import {pinDabs} from '../oilpaint/pins.js';
 import * as THREE from 'three';
+import {AWAITING_COLLECTION} from '../timber-harvest.js';
 import {createOutpostHouse,HOUSE_TYPES,houseCollider} from './outpost-house.js';import {paint} from '../figure/figure.js';import {PLACES,restored,segmentDistance} from '../exploration.js';import {settlementSites} from './settlement-sites.js';
 // Reusable camp dressing: timber carts, wheel spokes, orchard trees, fences, barrels,
 // tool piles, washing lines, garden beds and wayfinding signs share painted palettes.
@@ -10,7 +11,7 @@ export function createSettlements(game,craft){
  const district=new THREE.Group();scene.add(district);
  const palettes=[[[.64,.45,.26],[.35,.26,.18],[.15,.15,.12]],[[.66,.67,.52],[.36,.4,.33],[.18,.23,.2]],[[.75,.32,.16],[.4,.18,.12],[.18,.12,.09]]],mats=palettes.map(p=>paint(shared,p));
  function box(g,w,h,d,x,y,z,m=0){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mats[m]);o.position.set(x,y,z);g.add(o);return o;}
- function clearAt(p,r){forest.clearBrush?.(p.x,p.z,r+1);for(const t of forest.trees)if(!t.routeCleared&&Math.hypot(t.x-p.x,t.z-p.z)<r+t.r){t.routeCleared=true;t.down=true;delete game.state.down[t.id];if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}game.clearRemains(t);forest.poseTree(t,0,0,1,true);}}
+ function clearAt(p,r){forest.clearBrush?.(p.x,p.z,r+1);for(const t of forest.trees)if(!t.routeCleared&&Math.hypot(t.x-p.x,t.z-p.z)<r+t.r){t.routeCleared=true;t.down=true;if(t.fallen?.record.until===AWAITING_COLLECTION)continue;delete game.state.down[t.id];if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}game.clearRemains(t);forest.poseTree(t,0,0,1,true);}}
  const plots=settlementSites(origin,game.state.seed,HOUSE_TYPES,heightAt);
  for(const [i,site] of plots.entries()){
   const spec=HOUSE_TYPES[i],deck=i===1?2.3:1.5;
