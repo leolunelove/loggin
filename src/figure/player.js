@@ -108,6 +108,16 @@ export class Player {
     if(active)this.endurance.update(dt,{sprinting:sprint&&this.grounded&&this.actualSpeed>1.65,moving:walking,load,lunch:input.provisioned,resting:input.resting});
     if(this.endurance.exhausted)input={...input,sprint:false};
     const want=this.intent(input,camYaw);
+    if(input.roomWalk&&this.mode!=='jump'&&this.mode!=='air'){
+      if(this.mode!=='move'||this.strafe)A.enter(A.locoState({strafe:false}),.13);
+      this.mode='move';this.strafe=false;this.jumpBuffer=0;this.moveAngle=0;this.lastInputMag=want.mag;
+      const speed=want.mag<.06?0:A.setup.speeds.walk*want.mag;
+      const v=new THREE.Vector3(this.vel.x,0,this.vel.z);
+      const change=want.dir.clone().multiplyScalar(speed).sub(v);
+      v.add(change.clampLength(0,(speed?17:24)*dt));
+      if(speed)this.yaw=this.turnToward(this.yaw,want.dirYaw,15,dt);
+      this.speed=v.length();return this.step(dt,v,false);
+    }
     this.jumpBuffer=active&&!input.blockJump?(input.jump?.145:Math.max(0,this.jumpBuffer-dt)):0;
     this.coyote=this.grounded?.105:Math.max(0,this.coyote-dt);
     const planted=this.grounded||this.coyote>0;

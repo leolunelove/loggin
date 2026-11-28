@@ -124,6 +124,13 @@ export class ForestAudio {
     const weight=clamp(speed/5,0,1);
     this.timberVoice('rack-knock',position,{gain:.07+.17*weight,rate:(wooden?1.24:.88)+this.random()*.06});
   }
+  boardStep(position,load){
+    if(!this.context||!this.on)return;
+    const grain=Math.sin(position.x*5.2+position.z*.9);
+    this.brushSound('ground',position,.12+.06*load);
+    this.timberVoice('rack-knock',position,{gain:.080+.040*load,rate:.71+grain*.07+this.random()*.055});
+    if(grain>.68&&this.random()<.32)this.timberVoice('cart-creak',position,{gain:.048,rate:1.45+this.random()*.24});
+  }
   stack(position,amount){
     const weight=clamp(amount/22,0,1);
     this.timberVoice('rack-knock',position,{gain:.47+.2*weight,rate:1.10-.15*weight+this.random()*.06});

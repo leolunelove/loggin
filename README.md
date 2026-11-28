@@ -7,7 +7,7 @@ A small third-person lumberjack game in an autumn forest painted in oils. Chop t
 ## The loop
 
 1. Hold left-click beside a tree to fell it. Walk along the fallen trunk and chop off its branches. Cut across the pale bands to make pieces short enough to lift.
-2. Face a short, trimmed log and press **E** to lift it into your bag. You can pack the bare end while branches still grow from the crown. Follow the compass to the shack rack for your first delivery. Later it points to the nearest restored home, open rack or parked cart with room for your load. Mark a discovered home under **U → Woodland** to keep that bearing across saves.
+2. Walk near a short, trimmed log with room in your bag. Watch the piece lift, turn and draw into your backpack as you move. You can pack the bare end while branches still grow from the crown. Follow the compass to the shack rack for your first delivery. Later it points to the nearest restored home, open rack or parked cart with room for your load. Mark a discovered home under **U → Woodland** to keep that bearing across saves.
 3. At the outdoor rack, press E or left-click once. Your character stows the axe, lifts bundles from the bag and stacks them at camp. Wood transfers when each bundle lands. Moving cancels and keeps unplaced logs in the bag.
 4. Press U to spend stored wood on axes, swing speed or yield. Each tool has its own forged head and curved haft. Press **X** to carry it in the pack loops. A single click draws it and starts a stroke.
 5. Return for the remaining pieces. Each birch, beech, maple or oak starts its 90-second regrowth countdown once you have gathered the last timber.
@@ -20,7 +20,7 @@ Jumping and sprinting draw from the stamina bar above the bag. A full load takes
 
 Closing the workbench with its close button or U returns control to the forest. Escape releases the mouse. Tap for one stroke or hold for a run of swings. Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Hold the right mouse button for an over-the-shoulder view. Aim at a patch of bark. Scroll to rotate the guide or use Z / C for a fine adjustment, then left-click. The two-handed swing follows the selected line. Crossing strokes leave separate grooves. Following one line deepens it, and the cuts stay on the tree when you return. Release to recover your walking view. Press Q to lock or release a tree. Felling, range and menus also release the lock.
 
-The same tree tips from its stump with its branches, leaves and bark cuts attached. A clean hit frees a branch and its leaves. Three clean hand-axe hits across the same spot part the trunk. Heavy strokes and stronger axes cut faster. Each length can roll on its own. Trimmed pieces up to 2.4 metres long can go in your bag. Wood and hardwood count when your hands take the piece. Your save remembers unfinished cuts, remaining limbs and the pieces you left in the clearing. The windthrows by the trails also leave their cut sections for pickup.
+The same tree tips from its stump with its branches, leaves and bark cuts attached. A clean hit frees a branch and its leaves. Three clean hand-axe hits across the same spot part the trunk. Heavy strokes and stronger axes cut faster. Each length can roll on its own. Trimmed pieces up to 2.4 metres long can go in your bag. Wood and hardwood count when the piece reaches the pack. Your save remembers unfinished cuts, remaining limbs and the pieces you left in the clearing. The windthrows by the trails also leave their cut sections for pickup.
 
 Start a stroke close to a trunk and the woodcutter will ease back or sideways if the footing allows. Keep moving with WASD to choose your own footing. In a tight pocket he slides his hands up the handle for a short stroke. When running he holds the axe across his body with both hands.
 
@@ -36,11 +36,11 @@ Even the Forester’s axe takes three cuts to fell a birch and at least six heav
 
 ## Walk into your shack
 
-Approach any front doorway and the door swings open. Walk through with WASD as the roof opens and the camera eases overhead. Movement follows the room on screen. Cross the threshold on your way out and the view settles back behind your character.
+Approach any front doorway and the door swings open. Walk through with WASD as the roof opens and the camera eases overhead. WASD and the left stick follow the room on screen. Release to stop beside a furnishing. Scroll the wheel indoors to frame a closer or wider view. Cross the threshold on your way out and the view settles back behind your character.
 
-Supply shelves reflect stored logs, hardwood and planks. Purchased axes stay on the wall, building mementos mark completed projects, and a camp board displays your totals. Press E or left-click inside to open the camp ledger, then Open workbench for upgrades and building work. Logs are still unloaded at the outdoor rack.
+Supply shelves reflect stored logs, hardwood and planks. Purchased axes stay on the wall, building mementos mark completed projects, and a camp board displays your totals. In the home shack a gold stitch marks the furnishing in reach. Press **E**, left-click, tap the action button or press **Y** on a controller. The writing desk opens the camp ledger, the shelves show supplies, the tool bench opens upgrades, and the cot lets you sleep after dusk. Logs are still unloaded at the outdoor rack.
 
-The finished porch adds a rug. Completing the cabin extension removes the rear partition and opens a furnished room with a bed and reading shelf. Walk back through the front door to return to the forest.
+The finished porch adds a rug. Completing the cabin extension removes the rear partition and opens a rear bedroom with a patchwork quilt, bound books and a window. The starter room has an open ledger, a wood plane and vice, dried herbs, enamel tea ware and a bow saw. Boots tap and creak on its plank floor. Walk back through the front door to return to the forest.
 
 ## Build a bigger camp
 
@@ -62,7 +62,7 @@ A restored home's ledger has **Home**, **Trail & cart** and **Projects** pages. 
 - **Move through the woods.** Saplings bend where you brush them and loose leaves skip across the ground. Standing trunks follow the shape and lean of the tree. Felled sections can roll downhill and settle against other timber. Stumps stay solid until the trees regrow.
 - **Tend the woods.** Cut windthrown trunks along their chalk rings, hold Shift for a stronger stroke on tough wood, and look for figured oak and curly maple. Near a home, press R to blaze a mature tree for protection. Felled clearings flower, grow saplings and fill in with young trees as they recover.
 
-Detailed tree crowns fade into painted silhouettes between 68 and 106 metres. Rain and morning mist draw in the horizon while roofs and chimney smoke remain visible as bearings.
+Detailed tree crowns fade into painted silhouettes between 68 and 106 metres. Four seeded mountain ranges rise beyond the treeline. River bends open views to the ridges, with cloud banks, a moving moon and stars over the canopy. Rain and morning mist soften the far slopes. Roofs and chimney smoke remain visible as bearings.
 
 ## Your lumberjack and world
 
@@ -136,7 +136,7 @@ Built from Blendi / Patch’s [Oil Paint](https://patch.gg/blendi/oil-paint) ren
 Original code: MIT. Character and clips: CC0; see `LICENCE-NOTES.md`, `OIL-PAINT-REFERENCE.md` and `public/LICENSES/`. Three.js: MIT. Rapier: Apache-2.0. Recorded sound licences are retained with `public/audio/`. Original notices remain in `LICENSE` and the production build. Do not remove these when publishing a fork.
 
 ### Day and night
-A full day takes 18 active minutes. The clock pauses in menus and hidden tabs and is saved locally, without offline catch-up. Camp lanterns turn on gradually at dusk. Walk into the shack, press E, then choose **Sleep until morning** after 18:00 (or before 06:30) to wake at 06:30. Sleeping keeps your bag, supplies and upgrades. The starter shack includes a bedroll; the extension adds a bedroom.
+A full day takes 18 active minutes. The clock pauses in menus and hidden tabs and is saved locally, without offline catch-up. Camp lanterns turn on gradually at dusk. Walk to the cot and press **E** after 18:00 (or before 06:30) to wake at 06:30. You can also choose **Sleep until morning** at the writing desk. Sleeping keeps your bag, supplies and upgrades. The starter shack includes a bedroll; the extension adds a bedroom.
 
 ### A campfire to build
 The stone hearth outside the shack takes **12 ordinary logs from stored camp supplies**, contributed up to four at a time. Press E or left-click at the hearth, or use Campfire in the Upgrades menu near camp. No woodshed prerequisite. Part-built logs and the lit fire persist in saves; completed fires burn without upkeep. Animated flames, rising embers, drifting smoke and warm flickering light run locally. The stereo crackle is generated once per audio context from a long noise bed and irregular wood-fracture transients, fades with distance, muffles indoors and obeys the Sound toggle.

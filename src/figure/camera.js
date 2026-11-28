@@ -60,7 +60,7 @@ export class Follow {
   look(look, dt = 1 / 60) {
     const sensitivity=1-this.shoulderBlend*.32;
     this.aimYaw -= look.x*sensitivity;
-    this.aimPitch = THREE.MathUtils.clamp(this.aimPitch + look.y*sensitivity, -0.75, 1.2);
+    this.aimPitch = THREE.MathUtils.clamp(this.aimPitch + look.y*sensitivity, this.shoulder?-.80:-1.43, 1.2);
     // A short, frame-rate independent filter removes mouse-event steps without a long camera trail.
     this._yaw = damp(this._yaw, this.aimYaw, 32, dt);
     this._pitch = damp(this._pitch, this.aimPitch, 32, dt);
@@ -77,10 +77,12 @@ export class Follow {
     if(this.shoulderBlend<.0004)this.shoulderBlend=0;
     const blend=this.shoulderBlend;
     if(close)this.shoulderDistance=THREE.MathUtils.clamp(this.shoulderDistance+zoom*.18,1.42,2.45);
+    else if(this.interior)this.roomZoom=THREE.MathUtils.clamp((this.roomZoom??1)+zoom*.070,.80,1.26);
     else this.want=THREE.MathUtils.clamp(this.want+zoom*.5,2.8,13);
     const lens=this.fieldOfView-4*blend;
     if(cam.isPerspectiveCamera&&Math.abs(cam.fov-lens)>.007){cam.fov=lens;cam.updateProjectionMatrix();}
-    const boom=THREE.MathUtils.lerp(this.want,this.shoulderDistance,blend);
+    const skyLook=(1-blend)*THREE.MathUtils.smoothstep(-this.pitch,.38,1.28);
+    const boom=THREE.MathUtils.lerp(THREE.MathUtils.lerp(this.want,this.shoulderDistance,blend),1.45,skyLook);
     if(this.rest){
       const r=this.rest,focus=r.target,orbit=r.orbit||0,tilt=r.tilt||0;
       this.restCheck=(this.restCheck||0)-dt;
@@ -96,7 +98,7 @@ export class Follow {
     const oldRotation=this.restExit>0||this.exitBlend>0?cam.quaternion.clone():null;
 
     if(this.interior){
-      const c=this.interior.center, distance=this.interior.distance;
+      const c=this.interior.center, distance=this.interior.distance*(this.roomZoom??1);
       const centre=new THREE.Vector3(c.x+(target.x-c.x)*.14,c.y,c.z+(target.z-c.z)*.14);
       const eye=centre.clone().addScaledVector(new THREE.Vector3(.10,.84,.53).normalize(),distance);
       const orientation=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye,centre,UP));
@@ -140,6 +142,7 @@ export class Follow {
       const direction=lookAt.clone().sub(cam.position).normalize().lerp(cut.sub(cam.position).normalize(),blend).normalize();
       lookAt.copy(cam.position).add(direction);
     }
+    if(skyLook){const skyPoint=cam.position.clone().addScaledVector(back,-6);lookAt.lerp(skyPoint,skyLook);}
     cam.lookAt(lookAt);
     if(oldRotation){
       const keep=Math.exp(-(this.restExit>0?2.2:4.8)*dt);

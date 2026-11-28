@@ -34,6 +34,19 @@ vec3 materialPigment(vec3 c, vec3 low, vec3 mid, vec3 high, vec3 p, vec3 normal,
     c=mix(c,mix(low,high,.24+.53*wash),.16);
     float closeDetail=1.-smoothstep(.012,.035,max(fwidth(plane.x),fwidth(plane.y)));
     c*=1.+.13*(wash-.5)+.11*(bristle-.5)*closeDetail;
+    #ifdef FOREST_FIGURE
+      // Mix three pigment values in broad connected shapes. The broken boundary
+      // is fixed on the garment, including while its skinning bones turn.
+      float key=dot(normal,normalize(vec3(-.48,.77,.42)))*.41+.33*lit+.22*sky;
+      float stroke=texture(tNoise,plane*vec2(5.7,2.1)+wash*.17).g;
+      float edge=key+.12*(wash-.5)+.067*(stroke-.5);
+      vec3 cool=mix(low*vec3(.84,.88,1.08),mid,.13);
+      vec3 halfTone=mix(mid,high,.13+.10*wash);
+      vec3 painted=mix(cool,halfTone,smoothstep(-.01,.15,edge));
+      painted=mix(painted,high*vec3(1.045,1.01,.94),smoothstep(.52,.69,edge));
+      c=mix(c,painted,.72);
+      c*=1.+(smoothstep(.51,.66,stroke)-.40)*.12*closeDetail;
+    #endif
     #if defined(CANVAS) || defined(CLOTH)
       float fleck=smoothstep(.53,.77,bristle+.08*wash);
       c=mix(c,mid*vec3(1.11,1.055,.93),.12*fleck*closeDetail);
@@ -85,8 +98,8 @@ vec3 materialPigment(vec3 c, vec3 low, vec3 mid, vec3 high, vec3 p, vec3 normal,
       float mouth=front*softOval(face,vec2(0.,1.661+.004*abs(p.x)/.025),vec2(.029,.006));
       float lowerLip=front*softOval(face,vec2(.002,1.654),vec2(.021,.004));
       float nose=front*softOval(face,vec2(.011,1.689),vec2(.007,.004));
-      c=mix(c,mix(mid,high,.33)*vec3(1.12,.88,.83),cheek*.225);
-      c=mix(c,mix(mid,high,.57),bridge*.28);
+      c=mix(c,mix(mid,high,.33)*vec3(1.15,.83,.78),cheek*.39);
+      c=mix(c,mix(mid,high,.57),bridge*.42);
       c=mix(c,mix(low,mid,.26)*vec3(.94,.90,1.01),socket*.51);
       c=mix(c,mid*vec3(.55,.38,.42),mouth*.56+nose*.39);
       c=mix(c,mix(mid,high,.37)*vec3(1.10,.91,.89),lowerLip*.36);

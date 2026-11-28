@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import RAPIER from '../src/figure/rapier/rapier.mjs';
 import {createShack} from '../src/world/shack.js';
-import {insideShack,atShackDoor,DOOR} from '../src/world/shack-layout.js';
+import {insideShack,atShackDoor,shackStation,DOOR} from '../src/world/shack-layout.js';
 import {freshState} from '../src/economy.js';
 import {Follow} from '../src/figure/camera.js';
 import {Lumberjack} from '../src/game.js';
@@ -45,6 +45,20 @@ test('interior camera stays above the room while preserving mouse heading and sm
 });
 test('inside interaction opens the ledger and preserves walking instead of chopping outside trees',()=>{
  const g=Object.create(Lumberjack.prototype),s=freshState();let opened;
- Object.assign(g,{state:s,home:{contains:()=>true},player:{feet:{x:0,y:0,z:0}},input:{active:true},follow:{look(){}},time:0,started:true,paused:false,held:false,swing:{},lockedTree:{},open:id=>opened=id});
+ Object.assign(g,{state:s,home:{contains:()=>true,station:()=>({key:'ledger'})},player:{feet:{x:0,y:0,z:0}},input:{active:true},follow:{look(){}},time:0,started:true,paused:false,held:false,swing:{},lockedTree:{},open:id=>opened=id});
  const input={move:{x:1,y:0},look:{x:0,y:0},interactPressed:true,device:'keyboard',sprint:true};g.before(.02,input);assert.equal(opened,'ledger');assert.equal(input.move.x,1);assert.equal(input.sprint,false);assert.equal(g.swing,null);assert.equal(g.lockedTree,null);
+});
+
+test('furnishings have separate approach points and the cot moves into the finished bedroom',()=>{
+ const origin={x:17,y:3,z:-22};
+ const at=(x,z,yaw=0,lodge=0,previous)=>shackStation(origin,{x:origin.x+x,y:3.12,z:origin.z+z},yaw,{lodge},previous)?.key;
+ assert.equal(at(-.60,-.18,-Math.PI/2),'bench');
+ assert.equal(at(.65,-.49,Math.PI/2),'stores');
+ assert.equal(at(.57,.81,Math.PI/2),'ledger');
+ assert.equal(at(.04,-.30,Math.PI),'bed');
+ assert.equal(at(.04,-.30,Math.PI,24),undefined);
+ assert.equal(at(.57,-2.13,Math.PI,24),'bed');
+ assert.equal(at(.57,-2.13,Math.PI),undefined);
+ assert.equal(at(-.475,1.80,Math.PI),undefined);
+ assert.equal(at(-.22,-.18,-Math.PI/2,0,'bench'),'bench');
 });

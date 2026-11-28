@@ -41,16 +41,17 @@ function garmentWeights(suit){
 
 export function workClothes(shared,man,paint,hatPalette,clothPalette) {
   const leather=[[.63,.43,.24],[.34,.23,.16],[.18,.15,.13]], lining=[[.90,.80,.58],[.64,.52,.34],[.33,.28,.22]];
-  const palettes=[hatPalette,clothPalette,leather,lining,clothPalette,clothPalette];
-  const finishes=['felt','cloth','leather','cloth','cloth','cloth'];
+  const kerchief=[[.86,.435,.225],[.58,.228,.145],[.27,.135,.15]];
+  const palettes=[hatPalette,clothPalette,leather,lining,clothPalette,clothPalette,kerchief];
+  const finishes=['felt','cloth','leather','cloth','cloth','cloth','cloth'];
   const materials=palettes.map((p,i)=>paint(shared,p,{material:finishes[i]}));
   for(const mat of materials)mat.uniforms.uCloth.value=.85;
-  const hats=[[],[],[]],coats=[[],[],[]],parts=[],up=new THREE.Vector3(0,1,0);
+  const hats=[[],[],[]],coats=[[],[],[]],neckwear=[],parts=[],up=new THREE.Vector3(0,1,0);
   let suit;man.object.traverse(o=>{if(o.isSkinnedMesh&&o.name.includes('casualsuit'))suit=o;});
   const fit=garmentWeights(suit),fabrics=palettes.map((p,i)=>paint(shared,p,{skinned:true,material:finishes[i]}));
   function piece(set,bone,geometry,slot,x,y,z,scale,count=45,tilt=0) {
     const coat=coats.indexOf(set);let m;
-    if(coat>=0){
+    if(coat>=0||set===neckwear){
       geometry.scale(...scale);geometry.rotateZ(tilt);geometry.translate(x,y,z);fit(geometry);
       m=new THREE.SkinnedMesh(geometry,fabrics[slot]);suit.parent.add(m);m.bind(suit.skeleton,suit.bindMatrix);m.frustumCulled=false;
     }else{
@@ -119,6 +120,20 @@ export function workClothes(shared,man,paint,hatPalette,clothPalette) {
     g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setIndex(indices);g.computeVertexNormals();return g;
   }
   const sew=(set,bone,geo,slot,count)=>piece(set,bone,geo,slot,0,0,0,[1,1,1],count);
+  // Folded on the bias, with a pointed bib in front and two ends over the pack.
+  sew(neckwear,chest,panel(4,32,(j,u)=>{
+    const a=u*Math.PI*2,front=Math.max(0,Math.cos(a)),back=Math.max(0,-Math.cos(a));
+    const radius=[.135,.128,.10,.085][j],fold=.005*Math.sin(3*a+.7*j);
+    const dip=[.142,.063,.008,0][j]*(front**4+.44*back**3);
+    return [(radius+fold)*Math.sin(a),[1.529,1.548,1.567,1.584][j]-dip,
+      .015+(radius+fold)*(.87+.75*front*Number(j===0))*Math.cos(a)];
+  }),6,70);
+  piece(neckwear,chest,new THREE.IcosahedronGeometry(1,0),6,.085,1.535,-.080,[.043,.030,.039],8);
+  for(const s of [-1,1])sew(neckwear,chest,panel(3,3,(j,u)=>{
+    const spread=[.022,.026,.001][j];
+    return [.084+j*.021*s+(u-.5)*2*spread,1.535-[0,.054,s<0?.122:.088][j],
+      -.082-.027*j-.015*(1-Math.abs(u*2-1))];
+  }),6,14);
   const rounded=n=>Math.sign(n)*Math.abs(n)**.82;
 
   // Fit the collar, pocket and placket to the actual front of the shirt. Their

@@ -22,7 +22,7 @@ export function looseAim(trees,feet,yaw,pitch=0){
       consider(new THREE.Vector3(tree.x+offset.x,tree.y+.39,tree.z+offset.y),'stump',tree,null);
     }
     for(const part of tree.sections||[]){
-      if(part.body.isKinematic?.())continue;
+      if(part.inFlight||part.body.isKinematic?.())continue;
       const centre=part.body.translation(),bounds=part.skin?.toolBounds;
       const span=bounds?Math.max(bounds.min.length(),bounds.max.length()):part.length*.5+.5;
       if(Math.hypot(centre.x-feet.x,centre.z-feet.z)>reach+span)continue;

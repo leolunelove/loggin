@@ -116,7 +116,6 @@ export class Input {
       sprint: k.has('ShiftLeft') || k.has('ShiftRight'),
       strafe: this.active || k.has('KeyF'),
       jump: this.pressed.has('Space') || this.pressed.has('Jump'),
-      gatherPressed:this.pressed.has('KeyE')||this.pressed.has('Gather'),
       interactPressed:this.pressed.has('KeyE')||this.pressed.has('Interact'),
       chopPressed:this.pressed.has('KeyE')||this.pressed.has('Interact'),
       swingPressed:this.pressed.has('Interact'),
@@ -159,9 +158,8 @@ export class Input {
       }
       if (btn(12)) s.zoom -= 4 * dt;
       if (btn(13)) s.zoom += 4 * dt;
-      this.pad.a = btn(0); this.pad.l3 = btn(10);
-      if(btn(3)&&!this.pad.gather){s.gatherPressed=true;s.device='pad';}
-      this.pad.gather=btn(3);
+      if(btn(3)&&!this.pad.use){s.interactPressed=true;s.device='pad';}
+      this.pad.use=btn(3);this.pad.a = btn(0); this.pad.l3 = btn(10);
       if (btn(2) && !this.pad.swing) s.swingPressed = true;
       this.pad.swing = btn(2);
       if (rx || ry || pl > 0.01 || aim || btn(11) || btn(0) || btn(2) || btn(7)) s.device = 'pad';

@@ -140,12 +140,13 @@ export function createWoodPack(shared,man,{paint,canvasPalette}){
      if(patches[i]){patches[i].userData.found=found;patches[i].visible=found&&patches[i].userData.loaded;}
    }
  }
- let count=0,initialized=false,fullness=0,lastYaw=man.object.rotation.y;
+ let count=0,initialized=false,fullness=0,catchAge=1,lastYaw=man.object.rotation.y;
  const lastPosition=man.object.position.clone();
  return {
   group,axeLoop,paint:painted,logs,setPatches,restAtBench,disposePatches(){for(const p of patches)if(p)p.userData.texture.dispose();},
   setLayer(cut){outerLayer=cut===1?.015:cut===2?.019:0;},
   setCanvas(palette){ painted.setPalette(0,palette); for(const [i,key] of ['uL','uM','uS'].entries())materials[0].uniforms[key].value.setRGB(...palette[i]);materials[0].uniforms.uOwn.value.setRGB(...palette[0]); for(const [i,key] of ['uL2','uM2','uS2'].entries())materials[0].uniforms[key].value.setRGB(...palette[i]);materials[0].uniforms.uOwn2.value.setRGB(...palette[0]); },
+  catchWood(){catchAge=0;},
   setWood(wood){
    count=visibleWoodCount(wood);
    if(!initialized){initialized=true;fullness=count/PACK_LOGS;logs.forEach((log,i)=>{log.amount=i<count?1:0;log.mesh.visible=i<count;log.mesh.scale.setScalar(i<count?1:.001);});}
@@ -158,7 +159,8 @@ export function createWoodPack(shared,man,{paint,canvasPalette}){
    const targetRoll=THREE.MathUtils.clamp(sideways*.009+turn*.06,-.035,.035);
    fullness=THREE.MathUtils.damp(fullness,count/PACK_LOGS,9,dt);
    canvas.rotation.z=THREE.MathUtils.damp(canvas.rotation.z,targetRoll,8,dt);
-   canvas.scale.set(.967+.037*fullness,1.-.014*fullness,.954+.063*fullness);
+   catchAge=Math.min(1,catchAge+dt/.31);const settle=Math.sin(catchAge*Math.PI*2)*Math.pow(1-catchAge,2);
+   canvas.scale.set(.967+.037*fullness+.034*settle,1.-.014*fullness-.047*settle,.954+.063*fullness+.031*settle);
    lastYaw=yaw;lastPosition.copy(position);
    logs.forEach((log,i)=>{
     const target=i<count?1:0;

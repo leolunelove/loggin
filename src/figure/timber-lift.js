@@ -1,77 +1,65 @@
 import * as THREE from 'three';
-import {commitPickup,pickupPoint,withinPickupReach} from '../world/gather.js';
+import {bagCapacity} from '../economy.js';
+import {clearPickupPath,commitPickup,pickupPoint,pickupTarget} from '../world/gather.js';
 import {disposeWoodMesh} from '../world/fallen-tree.js';
 
-const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z),Q=()=>new THREE.Quaternion();
-const smooth=(t,a,b)=>THREE.MathUtils.smoothstep(t,a,b);
-const world=o=>o.getWorldPosition(V());
-export function finishLift(game){
-  const lift=game.lift;if(!lift)return;
-  if(lift.mesh){
-    if(lift.target.part)disposeWoodMesh(lift.mesh);
-    else lift.mesh.removeFromParent(); // fieldwork owns the shared wood geometry
-  }
-  game.lift=null;game.figure.pack.setWood(game.state.carried);
+const UP=new THREE.Vector3(0,1,0);
+function launch(game,target){
+  const stock=target.part||target.field,mesh=target.part?stock.mesh:stock.g;
+  const start=pickupPoint(target),pivot=new THREE.Group();
+  const rest={parent:mesh.parent,position:mesh.position.clone(),rotation:mesh.quaternion.clone(),scale:mesh.scale.clone()};
+  pivot.position.copy(start);mesh.getWorldQuaternion(pivot.quaternion);
+  game.scene.add(pivot);pivot.attach(mesh);
+  stock.inFlight=true;stock.body.setEnabled(false);if(stock.shadow)stock.shadow.visible=false;
+  const origin=pivot.quaternion.clone(),pack=game.figure.pack.group;
+  const rim=pack.localToWorld(new THREE.Vector3(0,.55,0));
+  return {target,stock,mesh,pivot,rest,start,origin,age:0,
+    lastFeet:game.player.feet.clone(),duration:.47+.075*Math.min(3,start.distanceTo(rim)),lastRim:rim,
+    small:Math.min(.70,.63/(stock.length||1.1),.18/(stock.radius||stock.r||.15))};
 }
-export function poseLift(game,dt){
-  const lift=game.lift;if(!lift)return;
-  const t=lift.age=Math.min(1,lift.age+dt/.99),{figure,animator}=game,body=figure.man.object,b=figure.man.bones;
-  const local=(x,y,z)=>body.localToWorld(V(x,y,z));
-  if(!lift.mesh){
-    if(!withinPickupReach(game,lift.target)){finishLift(game);return;}
-    lift.point.copy(pickupPoint(lift.target));
-    if(t>=.46){
-      const mesh=commitPickup(game,lift.target);if(!mesh){finishLift(game);return;}
-      lift.mesh=mesh;lift.start=mesh.position.clone();lift.rotation=mesh.quaternion.clone();
-    }
+function ground(drop){
+  const {stock,mesh,pivot,rest}=drop;
+  rest.parent.add(mesh);mesh.position.copy(rest.position);mesh.quaternion.copy(rest.rotation);mesh.scale.copy(rest.scale);
+  mesh.updateMatrixWorld(true);pivot.removeFromParent();stock.inFlight=false;stock.body.setEnabled(true);
+  if(stock.shadow)stock.shadow.visible=true;
+}
+function fly(game,drop,dt){
+  const {pivot,target,start,origin}=drop,pack=game.figure.pack.group;
+  const rim=pack.localToWorld(new THREE.Vector3(.02,.55,0));
+  if(rim.distanceToSquared(drop.lastRim)>9){ground(drop);return true;}
+  drop.lastRim.copy(rim);
+  if(game.player.feet.distanceToSquared(drop.lastFeet)>.30){
+    if(!clearPickupPath(game,pivot.position,target)){ground(drop);return true;}
+    drop.lastFeet.copy(game.player.feet);
   }
-  const grip=smooth(t,.25,.46)*(1-smooth(t,.86,.99));
-  const bend=smooth(t,.19,.45)*(1-smooth(t,.49,.77));
-  if(bend&&animator.legIK){
-    const feet=['l','r'].map(s=>world(b['foot_'+s]));
-    const depth=THREE.MathUtils.clamp((body.position.y+1.09-lift.point.y)*.42,.03,.34);
-    const pelvis=world(b.pelvis);pelvis.y-=depth*bend;
-    b.pelvis.position.copy(b.pelvis.parent.worldToLocal(pelvis));b.pelvis.updateMatrixWorld(true);
-    const right=V(-1,0,0).applyQuaternion(body.quaternion);
-    for(const bone of ['spine_01','spine_02','spine_03'])animator.rotateWorld(b[bone],right,-.18*bend);
-    for(const [i,side] of ['l','r'].entries())animator.legIK(side,feet[i].sub(world(b['foot_'+side])));
+  const t=Math.min(1,(drop.age+=dt)/drop.duration),pull=THREE.MathUtils.smootherstep(t,.11,1);
+  // First the length lifts off the litter, then its long axis turns into the opening.
+  pivot.position.lerpVectors(start,rim,pull);
+  pivot.position.y+=.86*Math.sin(Math.PI*t)*(1-.30*t);
+  const rimRotation=pack.getWorldQuaternion(new THREE.Quaternion());
+  if(target.field)rimRotation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-Math.PI/2));
+  pivot.quaternion.copy(origin).slerp(rimRotation,THREE.MathUtils.smoothstep(t,.08,.93));
+  pivot.rotateOnWorldAxis(UP,.40*Math.sin(Math.PI*t));
+  const scale=THREE.MathUtils.lerp(1,drop.small,THREE.MathUtils.smoothstep(t,0,.55));
+  pivot.scale.setScalar(scale*(1-.985*THREE.MathUtils.smoothstep(t,.77,1)));
+  if(t<1)return false;
+  ground(drop);
+  const packed=commitPickup(game,target);
+  if(packed){
+    if(target.part)disposeWoodMesh(packed);
+    game.figure.pack.catchWood?.();game.audio.stack(rim,Math.max(1,target.amount));
   }
-  const center=lift.point.clone(),side=V(1,0,0).applyQuaternion(body.quaternion);
-  const axis=lift.target.field?V(0,0,1):V(0,1,0);
-  if(!lift.mesh)axis.applyQuaternion(lift.target.part?lift.target.part.body.rotation():lift.target.field.g.getWorldQuaternion(Q()));
-  if(lift.mesh){
-    const pack=figure.pack.group,cradle=local(.10,1.14,.36),rim=pack.localToWorld(V(.04,.49,0));
-    const up=smooth(t,.46,.68),over=smooth(t,.68,.94);
-    center.copy(lift.start).lerp(cradle,up);
-    if(over){
-      const curve=new THREE.QuadraticBezierCurve3(cradle,local(.51,2.17,.08),rim);
-      center.copy(curve.getPoint(over));
-    }
-    const across=body.quaternion.clone().multiply(Q().setFromAxisAngle(V(0,0,1),-Math.PI*.47));
-    const upright=pack.getWorldQuaternion(Q());
-    if(lift.target.field){const turn=Q().setFromAxisAngle(V(1,0,0),-Math.PI/2);across.multiply(turn);upright.multiply(turn);}
-    lift.mesh.position.copy(center);lift.mesh.quaternion.copy(lift.rotation).slerp(across,up).slerp(upright,over);
-    const carryScale=Math.min(1,.80/(lift.target.part?.length||1.1),.23/(lift.target.part?.radius||lift.target.field?.r||.15));
-    lift.mesh.scale.setScalar(THREE.MathUtils.lerp(1,carryScale,up*.55+over*.45)*(1-smooth(t,.84,.96)));
-    lift.mesh.visible=t<.96;lift.mesh.updateMatrixWorld(true);
-    axis.copy(lift.target.field?V(0,0,1):V(0,1,0)).applyQuaternion(lift.mesh.quaternion);
-    figure.pack.setWood(game.state.carried-(t<.89?lift.target.amount:0));
-    if(t>=.88&&!lift.sounded){
-      lift.sounded=true;game.audio.stack(rim,Math.max(1,lift.target.amount));
-      game.toast(lift.target.amount?'Packed '+lift.target.amount+(lift.target.hard?' hardwood':' timber'):'Cleared a brushwood offcut');
-    }
+  return true;
+}
+export function updateTimberDrops(game,dt,active){
+  const drops=game.timberDrops??=[];
+  if(!active){
+    for(const d of drops)ground(d);
+    drops.length=0;return;
   }
-  if(grip){
-    if(axis.dot(side)<0)axis.negate();
-    const radius=(lift.target.part?.radius||lift.target.field?.r||.15)*(lift.mesh?.scale.x??1);
-    const under=local(0,.83,0).sub(center).projectOnPlane(axis).add(V(0,-.28,0)).projectOnPlane(axis).normalize();
-    const palms=center.clone().addScaledVector(under,radius*.96);
-    const width=Math.min(.235,(lift.target.part?.length||1.1)*.29)*(1-smooth(t,.77,.94));
-    game.unloadAnimation.arm('l',palms.clone().addScaledVector(axis,width),grip);
-    game.unloadAnimation.arm('r',palms.clone().addScaledVector(axis,-width),grip);
-    if(game.stowWeight>.76){
-      figure.pack.axeLoop.getWorldPosition(game.axe.position);figure.pack.axeLoop.getWorldQuaternion(game.axe.quaternion);game.axe.updateMatrixWorld(true);
-    }
-  }
-  if(t>=1)finishLift(game);
+  for(let i=drops.length-1;i>=0;i--)if(fly(game,drops[i],dt))drops.splice(i,1);
+  game.dropScan=(game.dropScan||0)-dt;if(game.dropScan>0)return;game.dropScan=.10;
+  const spare=Math.max(0,bagCapacity(game.state)-game.state.carried-drops.reduce((n,d)=>n+d.target.amount,0));
+  const target=pickupTarget(game,spare);
+  if(target)drops.push(launch(game,target));
 }

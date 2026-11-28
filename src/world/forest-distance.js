@@ -81,14 +81,36 @@ export function silhouettes(shared,trees,lobes){
       vWorld=aTree.xyz+vec3(side.x*position.x*aShape.x,vCard.y*aTree.w,side.y*position.x*aShape.x);
       gl_Position=projectionMatrix*viewMatrix*vec4(vWorld,1.);}`,
     fragmentShader:`${COMMON}\nin vec2 vCard;in vec4 vShape;in vec3 vWorld;in float vCover;out vec4 outC;
-    void main(){vec2 uv=vCard;float seed=vShape.w;float y=(uv.y-vShape.y)/(1.-vShape.y);
-      float grain=texture(tNoise,uv*vec2(3.1,5.)+fract(seed)).r;
-      float center=.12*sin(seed+uv.y*4.);float trunk=abs(uv.x-center*uv.y)/(.034*(1.-uv.y*.65));
-      float canopy=length(vec2((uv.x-center)*1.13,(y-.5)*2.04))+.09*sin(uv.x*12.+seed)+.11*sin(y*15.+seed)+.13*(grain-.5);
-      if((canopy>1.||y<0.)&&(trunk>1.||uv.y>.72))discard;
-      float dither=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715))));if(dither>vCover)discard;
-      vec3 leaf=mix(vec3(.50,.42,.25),vec3(.66,.46,.27),fract(vShape.z*.37));leaf*=.88+.19*y+.13*grain;
-      vec3 c=(canopy<=1.&&y>=0.)?leaf:vec3(.36,.33,.30);outC=vec4(hazed(c,vWorld),1.);}`});
+    float lobe(vec2 uv,vec2 centre,vec2 size){return length((uv-centre)/size);}
+    void main(){
+      vec2 uv=vCard;float seed=vShape.w;
+      vec2 seed2=fract(vec2(seed*.137,seed*.387));
+      float y=(uv.y-vShape.y)/max(.001,1.-vShape.y);
+      float lean=.10*sin(seed+uv.y*3.);
+      vec2 crown=vec2(uv.x-lean,y);
+      float bough=lobe(crown,vec2(.04,.56),vec2(.51,.40));
+      float sideA=lobe(crown,vec2(-.42,.43+.16*seed2.x),vec2(.34,.28));
+      float sideB=lobe(crown,vec2(.43,.39+.20*seed2.y),vec2(.38,.29));
+      float crest=lobe(crown,vec2(-.14+.26*seed2.y,.73),vec2(.29,.27));
+      float tips=min(min(bough,sideA),min(sideB,crest));
+      float grain=texture(tNoise,uv*vec2(3.8,7.4)+seed2).g;
+      float fleck=texture(tNoise,uv*vec2(13.,19.)+seed2.yx).r;
+      float foliage=tips+.26*(grain-.5)+.16*sin(uv.x*20.+y*13.+seed)+.14*(fleck-.5);
+      float trunk=abs(uv.x-lean*uv.y)/max(.006,.031*(1.-uv.y*.79));
+      float fork=abs(abs(uv.x-lean*uv.y)-max(0.,uv.y-.46)*.95)/.014;
+      bool woody=trunk<1.&&uv.y<vShape.y+.14 || fork<1.&&uv.y>.46&&uv.y<min(.82,vShape.y+.21);
+      bool leaves=foliage<1.&&(tips<.70||fleck>.35);
+      if(!leaves&&!woody)discard;
+      float density=leaves?mix(.64,.95,(1.-smoothstep(.40,1.08,foliage))*(.61+.39*grain)):.92;
+      float dither=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715)))+seed2.x);
+      if(dither>vCover*density)discard;
+      float light=clamp(.25+.43*y+.29*grain+.15*uv.x,0.,1.);
+      vec3 shade=mix(vec3(.32,.33,.30),vec3(.38,.31,.28),seed2.x);
+      vec3 sun=mix(vec3(.59,.52,.34),vec3(.68,.47,.31),fract(vShape.z*.37));
+      vec3 c=leaves?mix(shade,sun,light):vec3(.33,.32,.30);
+      float weather=clamp(uRain+(uHazeDensity-.012)*18.,0.,1.);
+      outC=vec4(hazeAt(c,vWorld,mix(.43,.87,weather)),1.);
+    }`});
   const mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;
   return {mesh,set(t,shown){const a=geometry.attributes.aActive,i=t.impostorIndex;if(a.getX(i)!==Number(shown)){a.setX(i,Number(shown));a.needsUpdate=true;}}};
 }

@@ -74,7 +74,10 @@ export function createFrame(renderer, shared, { samples = 4 } = {}) {
           float sunward = max(dot(ray, uSunDir), 0.0);
           float thick = 1.0 - exp(-reach * 0.03);
           // lit air glows toward the sun; shaded air is a touch darker and cooler than the plain mist
-          float streak = 0.75 + 0.5 * texture(tNoise, vec2(dot(world.xz, vec2(uSunDir.z, -uSunDir.x)) * 0.11, world.y * 0.02)).g;
+          // Sample the air column itself. A tree behind it should not change the
+          // phase of its brush texture or stripe the mountains beyond the canopy.
+          vec3 air = uEye + ray * (reach * .56);
+          float streak = .88 + .24 * texture(tNoise, vec2(dot(air.xz, vec2(uSunDir.z, -uSunDir.x)) * .065, air.y * .033)).g;
           vec3 glow = vec3(1.0, 0.86, 0.56) * (0.16 + 0.95 * pow(sunward, 2.5));
           col += glow * (lit - 0.34) * thick * streak * uShafts * uDaylight * (1.-uOvercast) * 0.8;
         }

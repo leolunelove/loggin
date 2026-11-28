@@ -20,25 +20,26 @@ function nearFace(game,target,point=pickupPoint(target)){
   const radial=toHand.addScaledVector(axis,-along).normalize();
   return point.addScaledVector(radial,Math.max(0,(part?.radius||field?.r||0)-.10));
 }
-function visible(game,point,target){
+export function clearPickupPath(game,point,target){
   const from=game.player.feet.clone();from.y+=1.06;
   const direction=point.clone().sub(from),length=direction.length();if(length<.06)return true;
   const ray=new game.RAPIER.Ray(from,direction.normalize());
   const hit=game.physics.castRay(ray,Math.max(0,length-.045),true,game.RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,AXE_GROUPS,game.player.collider,game.heldAxe?.body);
   return !hit||(target.part?hit.collider.fallenPart===target.part:hit.collider.handle===target.field.body?.handle);
 }
-export function pickupTarget(game,sight=null){
-  const feet=game.player.feet,yaw=game.follow.yaw,lookX=Math.sin(yaw),lookZ=Math.cos(yaw);
+export const MAGNET_REACH=2.25;
+export function pickupTarget(game,maxAmount=Infinity){
+  const feet=game.player.feet;
   let best=null,score=Infinity;
   function consider(candidate){
-    if(sight&&(!sight.reachable||(candidate.part?sight.timber?.part!==candidate.part:sight.collider?.fieldSection!==candidate.field)))return;
+    const stock=candidate.part||candidate.field;
+    if(stock.inFlight||candidate.amount>maxAmount||(stock.readyAt??0)>(game.time??0))return;
     const center=pickupPoint(candidate),radius=candidate.part?.radius||candidate.field?.r||0;
-    if(Math.hypot(center.x-feet.x,center.z-feet.z)>2.15+radius)return;
-    const p=nearFace(game,candidate,center),x=p.x-feet.x,z=p.z-feet.z,d=Math.hypot(x,z);
-    const facing=(x*lookX+z*lookZ)/Math.max(d,.001);
-    if(d>1.65||p.y<feet.y-.24||p.y>feet.y+1.52||(d>.68&&facing<.18))return;
-    const rank=d+.43*(1-facing);
-    if(rank>=score||!visible(game,p,candidate))return;
+    if(Math.hypot(center.x-feet.x,center.z-feet.z)>MAGNET_REACH+.5+radius)return;
+    const p=nearFace(game,candidate,center),d=Math.hypot(p.x-feet.x,p.z-feet.z);
+    if(d>MAGNET_REACH||p.y<feet.y-1.15||p.y>feet.y+1.85)return;
+    const rank=d+.20*Math.abs(p.y-feet.y-.6);
+    if(rank>=score||!clearPickupPath(game,p,candidate))return;
     best=candidate;score=rank;
   }
   for(const tree of game.looseTimber||[]){
@@ -53,7 +54,7 @@ export function pickupTarget(game,sight=null){
 export function withinPickupReach(game,target){
   if(target.part?target.part.owner.available(target.part)===null:!target.field.ready)return false;
   const point=nearFace(game,target),feet=game.player.feet;
-  return Math.hypot(point.x-feet.x,point.z-feet.z)<=1.72&&point.y<=feet.y+1.58&&point.y>=feet.y-.28&&visible(game,point,target);
+  return Math.hypot(point.x-feet.x,point.z-feet.z)<=MAGNET_REACH&&point.y<=feet.y+1.85&&point.y>=feet.y-1.15&&clearPickupPath(game,point,target);
 }
 export function commitPickup(game,target){
   const {state}=game,{part,field,amount,hard}=target;
@@ -70,10 +71,7 @@ export function commitPickup(game,target){
   }else{
     const w=state.woodland,bit=1<<field.section;
     if(!field.ready||!(w.looseSections[field.job]&bit))return null;
-    mesh=new THREE.Group();const wood=field.g.clone(true);
-    wood.position.set(0,-field.r,0);wood.quaternion.identity();mesh.add(wood);
-    mesh.position.copy(pickupPoint(target));field.g.getWorldQuaternion(mesh.quaternion);
-    game.scene.add(mesh);w.looseSections[field.job]&=~bit;game.field.sync();
+    mesh=field.g;w.looseSections[field.job]&=~bit;game.field.sync();
   }
   packTimber(state,amount,hard);
   game.shade.refresh();game.renderHud();game.save();

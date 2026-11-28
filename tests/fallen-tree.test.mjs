@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
 import R from '../src/figure/rapier/rapier.mjs';
+import {updateTimberDrops} from '../src/figure/timber-lift.js';
 import {createForest} from '../src/world/forest.js';
 import {FallenTree} from '../src/world/fallen-tree.js';
 import {HINGE} from '../src/world/fallen-wood.js';
@@ -193,4 +194,37 @@ test('free cuts divide upgraded yields exactly and old paid timber stays ineligi
   }
   const old=fixture({mask:2,scores:[1,0,0]});
   try{old.fallen.begin(1.49,false);assert.ok(old.fallen.parts.every(p=>old.fallen.available(p)===null));}finally{old.close();}
+});
+
+test('a finished round follows the moving pack, reserves its space and only pays on arrival',()=>{
+  const {game,fallen,record,close}=fixture(unpaid(12));
+  try{
+    fallen.begin(Math.PI/2,false);const long=fallen.parts[0];
+    fallen.cut(long,worldPoint(long,HINGE+1.30),3);
+    const part=fallen.parts[0],origin=V().copy(part.body.translation()),mesh=part.mesh,parent=mesh.parent;
+    const axis=V(0,1,0).applyQuaternion(part.body.rotation()),near=axis.cross(V(0,1,0)).normalize();
+    const feet=origin.clone().addScaledVector(near,part.radius+.94);feet.y=origin.y-.22;
+    const pack=new THREE.Group();pack.position.copy(feet).y+=.87;game.scene.add(pack);
+    let caught=0,saved=0;
+    Object.assign(game,{player:{feet},figure:{pack:{group:pack,catchWood:()=>caught++}},audio:{stack(){}},
+      looseTimber:[{fallen,sections:fallen.parts,type:0}],state:freshState(),time:2,save:()=>saved++,renderHud(){},shade:{refresh(){}}});
+    game.physics.step();const count=fallen.available(part);assert.ok(count>0);
+    game.state.carried=24;const tick=(active=true)=>{game.time+=1/60;updateTimberDrops(game,1/60,active);};
+    for(let n=0;n<12;n++)tick();
+    assert.equal(game.timberDrops.length,0);assert.equal(mesh.parent,parent);
+    game.state.carried=24-count;
+    for(let n=0;n<12;n++)tick();
+    assert.equal(game.timberDrops[0].mesh,mesh);assert.equal(part.inFlight,true);
+    assert.equal(part.body.isEnabled(),false);assert.equal(part.shadow.visible,false);
+    assert.equal(game.state.carried,24-count);assert.deepEqual(record.harvest.taken,[]);
+    fallen.snapshot();assert.ok(record.pieces.some(row=>row[0]===part.lo&&row[1]===part.hi));
+    tick(false);assert.equal(part.inFlight,false);assert.equal(mesh.parent,parent);assert.equal(part.body.isEnabled(),true);
+    assert.equal(saved,0);assert.deepEqual(record.harvest.taken,[]);
+    for(let n=0;n<14;n++)tick();
+    const flight=game.timberDrops[0];pack.position.x+=.25;feet.x+=.25;tick();
+    assert.ok(flight.lastRim.distanceTo(pack.localToWorld(V(.02,.55,0)))<.001);
+    for(let n=0;n<75;n++)tick();
+    assert.equal(caught,1);assert.equal(saved,1);assert.equal(game.state.carried,24);
+    assert.deepEqual(record.harvest.taken,[[part.lo,part.hi]]);assert.ok(!fallen.parts.includes(part));
+  }finally{close();}
 });

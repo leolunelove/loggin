@@ -1,8 +1,13 @@
 import * as THREE from 'three';
+import {furnishCabin} from './shack-keepsakes.js';
 import {AXE_PROFILES} from '../figure/axes.js';
 
 export function buildShackRoom({box,part}){
  const goods=[],tools=[],rewards=[],boardParts=[];
+ const details=furnishCabin(part);
+ const glass=new THREE.MeshBasicMaterial({color:0x869eac});
+ for(const m of [...details.cot,...details.lodge])if(m.userData.glass)m.material=glass;
+ const windowDay=new THREE.Color(0xabbcc2),windowNight=new THREE.Color(0x415471),windowDusk=new THREE.Color(0xc58d69);
  // The centre stays clear: bench at the left, supply shelves at the right.
  box(.72,.12,1.18,0,[-1.3,.82,-.25],40);
  for(const x of [-1.57,-1.03])for(const z of [-.72,.22])box(.08,.76,.09,1,[x,.38,z],12);
@@ -44,14 +49,24 @@ export function buildShackRoom({box,part}){
  let ctx,texture,previous='',expanded=false;
  if(typeof document!=='undefined'&&document.createElement){const canvas=document.createElement('canvas');canvas.width=640;canvas.height=320;ctx=canvas.getContext('2d');if(ctx){texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const label=part(new THREE.PlaneGeometry(1.22,.61),3,[0,1.55,-1.274],0);boardParts.push(label);label.material=new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide});}}
  const show=(mesh,value)=>{if(mesh.userData.shown===value)return false;mesh.userData.shown=value;return true;};
- return {setState(s){
+ return {light(night,hour){
+  const twilight=Math.max(0,1-Math.min(Math.abs(hour-6),Math.abs(hour-18))/1.65);
+  glass.color.copy(windowDay).lerp(windowNight,night).lerp(windowDusk,.63*twilight);
+ },setState(s){
   let changed=false;const complete=s.lodge>=24;if(complete!==expanded){for(const mesh of boardParts)mesh.position.z+=complete?-2.65:2.65;expanded=complete;changed=true;}const quantities={ordinary:Math.max(0,s.wood-s.hardwood),hardwood:s.hardwood||0,planks:s.planks||0};
   for(const {mesh,key,index}of goods)changed=show(mesh,index<Math.ceil(quantities[key]/(key==='planks'?2:8)))||changed;
   for(const {mesh,tier}of tools)changed=show(mesh,tier<=s.axe)||changed;
   for(const {mesh,key}of rewards)changed=show(mesh,s[key]>=(key==='porch'?12:key==='lodge'?24:40))||changed;
+  for(const mesh of details.porch)changed=show(mesh,s.porch>=12)||changed;
+  for(const mesh of details.cot)changed=show(mesh,!complete)||changed;
+  for(const mesh of details.lodge)changed=show(mesh,complete)||changed;
   for(const mesh of cot)changed=show(mesh,!complete)||changed;changed=show(rug,s.porch>=12)||changed;for(const mesh of room)changed=show(mesh,s.lodge>=24)||changed;
   const key=[s.wood,s.hardwood,s.planks,s.felled,s.shed,s.sawmill,s.porch,s.lodge].join(':');
-  if(ctx&&key!==previous){previous=key;ctx.fillStyle='#253025';ctx.fillRect(0,0,640,320);ctx.fillStyle='#f1dfb8';ctx.textAlign='center';ctx.font='bold 36px Georgia';ctx.fillText('THE AUTUMN CAMP',320,62);ctx.font='26px Georgia';ctx.fillText(`${s.wood} wood · ${s.hardwood||0} hardwood`,320,122);ctx.fillText(`${s.planks||0} planks · ${s.felled} ${s.felled===1?'tree':'trees'} felled`,320,174);ctx.fillStyle='#cfb578';ctx.font='24px Georgia';const built=Number(s.shed>=40)+Number(s.sawmill>=40)+Number(s.porch>=12)+Number(s.lodge>=24);ctx.fillText(`${built} / 4 camp projects complete`,320,245);texture.needsUpdate=true;}
+  if(ctx&&key!==previous){previous=key;ctx.fillStyle='#485248';ctx.fillRect(0,0,640,320);
+   ctx.strokeStyle='#a69c77';ctx.lineWidth=2;ctx.strokeRect(11,11,618,298);
+   ctx.fillStyle='#e9dbb4';ctx.textAlign='center';ctx.font='bold 36px Georgia';ctx.fillText('THE AUTUMN CAMP',320,70);
+   ctx.beginPath();ctx.moveTo(102,90);ctx.lineTo(538,90);ctx.moveTo(214,206);ctx.lineTo(426,206);ctx.stroke();
+   ctx.fillStyle='#f1dfb8';ctx.font='26px Georgia';ctx.fillText(`${s.wood} wood · ${s.hardwood||0} hardwood`,320,134);ctx.fillText(`${s.planks||0} planks · ${s.felled} ${s.felled===1?'tree':'trees'} felled`,320,174);ctx.fillStyle='#cfb578';ctx.font='24px Georgia';const built=Number(s.shed>=40)+Number(s.sawmill>=40)+Number(s.porch>=12)+Number(s.lodge>=24);ctx.fillText(`${built} / 4 camp projects complete`,320,245);texture.needsUpdate=true;}
   return changed;
  }};
 }

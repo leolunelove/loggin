@@ -155,10 +155,12 @@ export function createFieldwork(game,craft) {
     }
     syncSupplies();fieldRack.visible=restored(s.places[1]);dryRack.visible=w.projects.shelter===3;pennant.visible=w.finds.includes('tools');smoke.visible=restored(s.places[2]);
     jobs.forEach((list,i)=>list.forEach((t,n)=>{
+      if(t.inFlight)return;
       t.down=n!==w.sections[i];
       const ready=!!(w.looseSections[i]&(1<<n)),moved=ready!==!!t.ready;
       t.ready=ready;t.g.visible=ready||n>=w.sections[i];t.ring.visible=!ready;
       if(moved){
+        if(ready)t.readyAt=game.time==null?0:game.time+.28;
         const roll=(n%2?-.24:.24)*(ready?1:0),yaw=t.g.rotation.y;
         t.g.position.set(t.x+Math.cos(yaw)*roll,t.y,t.z-Math.sin(yaw)*roll);
         t.g.position.y=heightAt(t.g.position.x,t.g.position.z);t.g.rotation.z=-roll/t.r;

@@ -1,81 +1,60 @@
-// The sky behind the trees: a plain wash first, then broad strokes of it laid over, paler and warmer toward the
-// sun until, at the sun itself, it is nearly bare cream.
 import * as THREE from 'three';
-import { COMMON } from '../oilpaint/common.js';
-import { dabMaterial, dabGeometry, dabMesh } from '../oilpaint/dabs.js';
-import { rng } from './land.js';
+import {COMMON} from '../oilpaint/common.js';
+import {paintedRanges} from './horizon.js';
 
-const SKY = /* glsl */ `
-vec3 skyColour(vec3 v) {
-  float sunward = max(dot(v, uSunDir), 0.0);
-  vec3 low = airColour(v);
-  vec3 high = mix(vec3(0.56, 0.68, 0.84), vec3(0.8, 0.84, 0.82), sunward * sunward);
-  vec3 c = mix(low, high, smoothstep(0.0, 0.75, v.y));
-  c = mix(c, vec3(1.0, 0.95, 0.78), pow(sunward, 24.0) * 0.9);
-  c=mix(c,c*vec3(1.14,.68,.43),uDusk*.65);
-  vec3 night=mix(vec3(.014,.022,.055),vec3(.055,.075,.13),1.-max(v.y,0.));
-  night+=vec3(.06,.07,.075)*pow(max(dot(v,uMoonDir),0.),70.);
-  return mix(mix(night,c,uDaylight),mix(vec3(.025,.035,.06),vec3(.32,.38,.43),uDaylight),uOvercast*.8);
-}
-`;
-
-export function createSky(shared) {
-  const group = new THREE.Group();
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(900, 24, 16), new THREE.ShaderMaterial({
-    glslVersion: THREE.GLSL3,
-    uniforms: shared,
-    side: THREE.BackSide,
-    depthTest: false,
-    depthWrite: false,
-    vertexShader: /* glsl */ `
-      ${COMMON}
-      out vec3 vDir;
-      void main() { vDir = position; gl_Position = projectionMatrix * viewMatrix * vec4(position + cameraPosition, 1.0); }`,
-    fragmentShader: /* glsl */ `
-      ${COMMON}
-      ${SKY}
-      in vec3 vDir;
-      layout(location = 0) out vec4 outC;
-      void main() {
-        vec3 v=normalize(vDir),c=skyColour(v)*.97;
-        vec3 cell=floor(v*640.);float star=step(.9983,hash4(dot(cell,vec3(1.,113.,971.))).x);
-        c+=vec3(.5,.53,.46)*star*smoothstep(.1,.35,v.y)*uNight*(1.-uOvercast);
-        float moon=smoothstep(.99925,.9995,dot(v,uMoonDir));
-        c+=vec3(.65,.7,.58)*moon*uNight;
-        outC=vec4(c,1.);
-      }`,
+export function createSky(shared){
+  const group=new THREE.Group();
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(900,40,24),new THREE.ShaderMaterial({
+    glslVersion:THREE.GLSL3,uniforms:shared,side:THREE.BackSide,depthTest:false,depthWrite:false,
+    vertexShader:`out vec3 vDir;
+      void main(){vDir=position;gl_Position=projectionMatrix*viewMatrix*vec4(position+cameraPosition,1.);}`,
+    fragmentShader:`${COMMON}
+      in vec3 vDir;out vec4 outC;
+      float starField(vec2 chart,float cells,float chance){
+        vec2 uv=chart*cells,tile=floor(uv);
+        vec4 seed=hash4(dot(tile,vec2(17.17,401.43)));
+        vec2 local=fract(uv)-(.16+.68*seed.yz);
+        float width=max(.014,fwidth(uv.x)+fwidth(uv.y))*.48;
+        float radius=.030+.119*pow(seed.w,5.);
+        return step(chance,seed.x)*(1.-smoothstep(max(0.,radius-width),radius+width,length(local)))*(.42+.58*seed.w);
+      }
+      void main(){
+        vec3 v=normalize(vDir);float h=max(v.y,0.);
+        vec2 chart=v.xz/(1.+h);
+        vec2 drift=uTime*.00040*vec2(.34,-.14);
+        vec2 cloudUV=v.xz/(.38+h)*vec2(.89,1.36)+drift;
+        float cloud=texture(tNoise,cloudUV*.68).r;
+        float edge=texture(tNoise,cloudUV*vec2(1.4,3.7)+vec2(.31,.59)).g;
+        float cloudBody=smoothstep(.49-.19*uOvercast,.68-.12*uOvercast,cloud+.15*(edge-.5));
+        float sun=max(0.,dot(v,uSkySun));
+        vec3 low=mix(airColour(v),vec3(1.0,.645,.432),uDusk*(.65+.29*sun));
+        vec3 high=mix(vec3(.40,.57,.735),vec3(.37,.38,.555),uDusk);
+        vec3 day=mix(low,high,smoothstep(-.04,.84,v.y));
+        day+=vec3(.18,.116,.052)*pow(sun,12.)+vec3(.19,.16,.095)*pow(sun,98.);
+        day=mix(day,vec3(.99,.885,.62),smoothstep(.99960,.99978,sun)*.88);
+        vec3 cloudLight=mix(vec3(.83,.835,.80),vec3(.97,.66,.48),uDusk);
+        vec3 under=mix(vec3(.57,.65,.73),vec3(.54,.43,.52),uDusk);
+        vec3 wash=mix(cloudLight,under,smoothstep(.54,.77,cloud));
+        day=mix(day,wash,cloudBody*(.46+.28*(1.-h)));
+        day=mix(day,vec3(.43,.51,.57)*(1.+.19*(1.-h)),uOvercast*.80);
+        vec3 night=mix(vec3(.109,.151,.219),vec3(.029,.043,.11),smoothstep(0.,.91,h));
+        float galactic=abs(dot(v,normalize(vec3(-.36,.48,.80))));
+        float nebula=texture(tNoise,chart*vec2(2.2,3.3)).g*.63+edge*.37;
+        float band=exp(-galactic*galactic*43.)*(.20+.80*smoothstep(.29,.69,nebula))*smoothstep(.02,.38,h);
+        night+=vec3(.105,.093,.151)*band;
+        float stars=starField(chart,92.,.924)+.50*starField(chart+vec2(.23,.10),173.,.95-.12*band);
+        night+=vec3(.91,.92,.83)*stars*smoothstep(.025,.24,h)*(1.-.86*cloudBody)*(1.-uOvercast);
+        float moon=max(0.,dot(v,uMoonDir));float disc=smoothstep(.99955,.99966,moon);
+        vec3 east=normalize(cross(vec3(0.,1.,0.),uMoonDir));vec3 north=cross(uMoonDir,east);
+        vec2 face=vec2(dot(v,east),dot(v,north))*35.;
+        float phase=smoothstep(.06,.24,length(face+vec2(.90,.14))-.18);
+        float mare=texture(tNoise,face*.68+vec2(.12,.40)).r;
+        night+=vec3(.145,.175,.19)*pow(moon,123.)*(1.-.79*cloudBody);
+        night=mix(night,vec3(.80,.84,.76)*(.86+.18*mare)*(.64+.36*phase),disc);
+        night=mix(night,vec3(.089,.111,.165)*(.84+.28*edge),cloudBody*(.56+.40*uOvercast));
+        night=mix(night,vec3(.071,.094,.132),uOvercast*.66);
+        outC=vec4(mix(night,day,uDaylight+.29*uDusk*(1.-uDaylight)),1.);
+      }`
   }));
-  dome.frustumCulled = false;
-  dome.renderOrder = -10;
-  group.add(dome);
-
-  const count = 2600;
-  const rand = rng(515);
-  const dirs = new Float32Array(count * 4);
-  for (let i = 0; i < count; i++) {
-    const a = rand() * Math.PI * 2, y = -0.08 + Math.pow(rand(), 1.4) * 1.08, r = Math.sqrt(Math.max(0, 1 - y * y));
-    dirs.set([Math.cos(a) * r, y, Math.sin(a) * r, rand() * 1000], i * 4);
-  }
-  const strokes = dabMesh(dabGeometry(count, { aDir: [dirs, 4] }), dabMaterial(shared, {
-    head: SKY + /* glsl */ `in vec4 aDir;`,
-    body: /* glsl */ `
-      void makeDab(inout Dab d) {
-        vec4 r = hash4(aDir.w);
-        vec3 v = normalize(aDir.xyz);
-        d.pos = cameraPosition + v * 800.0;
-        // strokes lie level, tipping a little, and swing round the sun
-        vec3 level = normalize(cross(vec3(0.0, 1.0, 0.0), v));
-        vec3 ring = normalize(cross(uSunDir, v) + 1e-4);
-        d.dir = normalize(mix(level, ring, 0.45) + vec3(0.0, (r.x - 0.5) * 0.5, 0.0));
-        d.size = vec2(46.0 + 40.0 * r.y, 150.0 + 130.0 * r.z);
-        vec3 c = skyColour(v);
-        d.c1 = jitter(c, r.yzw, 0.22);
-        d.c2 = jitter(c * 1.05, r.wxy, 0.3);
-        d.seed = aDir.w;
-        d.lift = 0.0;
-      }`,
-    minPx: [10, 20], maxPx: [900, 1800], cells: [0, 8], depthTest: false, depthWrite: false,
-  }), -9);
-  group.add(strokes);
-  return { group };
+  dome.frustumCulled=false;dome.renderOrder=-10;group.add(dome,paintedRanges(shared));return {group};
 }

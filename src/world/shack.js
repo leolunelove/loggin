@@ -1,6 +1,6 @@
 import {dressTimber} from './timber.js';
 import {createCampfire} from './campfire.js';
-import {insideShack,atShackDoor,cabinColliders,DOOR} from './shack-layout.js';
+import {insideShack,atShackDoor,cabinColliders,shackStation,DOOR} from './shack-layout.js';
 import {buildShackRoom} from './shack-room.js';
 import * as THREE from 'three';
 import { paint } from '../figure/figure.js';
@@ -18,7 +18,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  // A level foundation, planted into the same terrain as the player's feet.
  const y=Math.max(...[-1.8,1.8].flatMap(x=>[-1.5,1.5].map(z=>heightAt(site.x+x,site.z+z))));
  group.position.set(site.x,y,site.z);
- const palettes=[PLANK,TIMBER,ROOF,DARK,CUT,WINDOW,[[.85,.88,.80],[.45,.52,.48],[.17,.22,.22]],[[.89,.86,.72],[.57,.59,.46],[.23,.28,.25]]],materials=palettes.map((p,i)=>makePaint(shared,p,{grain:4,board:i<2,material:i===4?'endgrain':null})),parts=[];
+ const palettes=[PLANK,TIMBER,ROOF,DARK,CUT,WINDOW,[[.85,.88,.80],[.45,.52,.48],[.17,.22,.22]],[[.89,.86,.72],[.57,.59,.46],[.23,.28,.25]],[[.75,.37,.23],[.49,.23,.17],[.24,.14,.14]],[[.49,.59,.51],[.27,.39,.36],[.15,.22,.23]],[[.71,.77,.80],[.35,.46,.61],[.17,.23,.33]]],materials=palettes.map((p,i)=>makePaint(shared,p,{grain:4,board:i<2,material:i===4?'endgrain':null})),parts=[];
  for(const m of materials)if(m.uniforms?.uDistanceHaze)m.uniforms.uDistanceHaze.value=.81;
  const colliders=[];let shell=null;const rearDoorParts=[];
  function part(geometry,pal,position,count=35,size=[.1,.32],dir=UP){
@@ -131,7 +131,10 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  for(const x of [-1.8,1.8])for(let i=0;i<3;i++){const m=campBox('lodge',(i+1)*8,.14,2,.84,0,[x,1.15,-1.95-i*.84]);m.userData.shell=x<0?'left':'right';}
  const lodgeRoof=campBox('lodge',24,4.1,.16,3,2,[0,2.35,-2.9]);lodgeRoof.rotation.x=-.10;lodgeRoof.userData.shell='roof';
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x+.05,y:y+.3,z:site.z-.94,hx:.73,hy:.22,hz:.32});
- const room=buildShackRoom({box,part});
+ // Keep tool-sized strokes on the furnishings, especially when the camera comes indoors.
+ const roomPart=(geo,ink,pos,count,size=[.019,.064],dir=ACROSS)=>part(geo,ink,pos,count,size,dir);
+ const roomBox=(w,h,d,ink,pos,count)=>roomPart(new THREE.BoxGeometry(w,h,d),ink,pos,count);
+ const room=buildShackRoom({box:roomBox,part:roomPart});
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x-1.45,y:y+1.16,z:site.z-1.45,hx:.35,hy:1.1,hz:.08},{key:'lodge',stage:24,until:true,x:site.x+.975,y:y+1.16,z:site.z-1.45,hx:.825,hy:1.1,hz:.08});
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x+DOOR.x,y:y+1.15,z:site.z-1.45,hx:.625,hy:1.1,hz:.08});
  campColliders.push({key:'lodge',stage:24,x:site.x,y:y+.06,z:site.z-2.85,hx:1.8,hy:.125,hz:1.3});
@@ -151,50 +154,75 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  const bench={position:benchPosition,yaw:Math.PI,camera:{position:benchPosition.clone().add(new THREE.Vector3(4,2.7,4.9)),target:firePosition.clone().add(new THREE.Vector3(.65,.95,-1.1)),fire:firePosition.clone().add(new THREE.Vector3(0,.93,0)),sitter:benchPosition.clone().add(new THREE.Vector3(0,1.36,0))}};
  parts.forEach(({mesh})=>mesh.userData.shown=mesh.visible);
  group.updateMatrixWorld(true);
- const painted=pinDabs(shared,palettes,parts);painted.update();
+ const painted=pinDabs(shared,palettes,parts,{surface:true});painted.update();
  // Separate static shadow meshes share geometry, avoiding self-shadowing the paint dabs.
  const shadow=new THREE.Group(),black=new THREE.MeshBasicMaterial({side:THREE.DoubleSide});
  for(const {mesh} of parts){const m=new THREE.Mesh(mesh.geometry,black);m.matrixAutoUpdate=false;m.matrix.copy(mesh.matrixWorld);m.visible=mesh.visible;shadow.add(m);}
  const dropoff={x:site.x+rack.x,y:heightAt(site.x+rack.x,site.z+rack.z+1.05),z:site.z+rack.z+1.05};
  colliders.push(...cabinColliders(site,y));
+ colliders.push({x:site.x+1.22,y:y+.45,z:site.z+.91,hx:.36,hy:.43,hz:.22});
  colliders.push({x:site.x-1.3,y:y+.43,z:site.z-.25,hx:.36,hy:.43,hz:.59});
  colliders.push({x:site.x+1.4,y:y+.95,z:site.z-.17,hx:.33,hy:.95,hz:.76});
  colliders.push({x:site.x+rack.x,y:y+.65,z:site.z+rack.z,hx:1.16,hy:.84,hz:.53});
  let previous=-1,cutaway=false,cutMask='',doorAngle=0;
  function syncVisuals(){
-  for(const {mesh}of parts){mesh.visible=(mesh.userData.shown??true)&&!(cutaway&&cutMask.includes(mesh.userData.shell||'!'));}
+  for(const {mesh}of parts){mesh.visible=(mesh.userData.shown??true)&&(!mesh.userData.roomDetail||cutaway)&&!(cutaway&&cutMask.includes(mesh.userData.shell||'!'));}
   group.updateMatrixWorld(true);
   parts.forEach(({mesh},i)=>{shadow.children[i].visible=mesh.visible;shadow.children[i].matrix.copy(mesh.matrixWorld);});painted.update();
  }
 
+ // Two small gold stitches mark the furnishing the action button will use.
+ const stitch=new THREE.Shape();
+ stitch.moveTo(-.059,.026);stitch.lineTo(0,-.018);stitch.lineTo(.059,.026);
+ stitch.lineTo(.048,.043);stitch.lineTo(0,.008);stitch.lineTo(-.048,.043);stitch.closePath();
+ const focusMark=new THREE.Mesh(new THREE.ShapeGeometry(stitch),new THREE.MeshBasicMaterial({color:0xffdc96,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));
+ group.add(focusMark);focusMark.visible=false;
  const lamps=[];
- const lampPositions=[[1.28,1.83,-.6],[-1.35,1.85,1.7],[3.4,1.5,2.1],[mx,2,mz]];
+ const lampPositions=[[1.28,1.83,-.6],[-1.35,1.85,1.7],[3.4,1.5,2.1],[mx,2,mz],[-1.12,.91,-3.44]];
  let haloTexture;
  if(typeof document!=='undefined'){const c=document.createElement('canvas');c.width=c.height=64;const ctx=c.getContext('2d');if(ctx){const gradient=ctx.createRadialGradient(32,32,0,32,32,32);gradient.addColorStop(0,'rgba(255,193,92,.65)');gradient.addColorStop(.2,'rgba(255,156,48,.22)');gradient.addColorStop(1,'rgba(255,138,30,0)');ctx.fillStyle=gradient;ctx.fillRect(0,0,64,64);haloTexture=new THREE.CanvasTexture(c);}}
  const glowMaterial=new THREE.MeshBasicMaterial({color:0xffb95d});
  for(const [i,p]of lampPositions.entries()){
   const core=new THREE.Mesh(new THREE.BoxGeometry(.12,.19,.12),glowMaterial);core.name='camp-lantern-core';core.position.set(...p);group.add(core);
   const frame=new THREE.Mesh(new THREE.BoxGeometry(.23,.035,.23),materials[6]);frame.position.set(p[0],p[1]+.12,p[2]);group.add(frame);
+  if(i===4){core.scale.set(.47,.70,.47);frame.scale.set(.48,.54,.48);frame.position.y-=.03;core.visible=frame.visible=false;}
   let halo;if(haloTexture){halo=new THREE.Sprite(new THREE.SpriteMaterial({map:haloTexture,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:0}));halo.position.copy(core.position);halo.scale.set(1.3,1.3,1);group.add(halo);}lamps.push({core,frame,halo,i});
  }
  return {bench,nearBench(feet,state){return state.fire>=12&&Math.hypot(feet.x-benchPosition.x,feet.z-benchPosition.z)<1.9&&Math.abs(feet.y-benchPosition.y)<1.3;},fire,nearFire(feet){return Math.hypot(feet.x-firePosition.x,feet.z-firePosition.z)<2.35&&Math.abs(feet.y-firePosition.y)<1.3;},group,paint:painted,shadow,dropoff,colliders,campColliders,door:doorHinge,
   updateLighting(night,time,state){
-   const strength=night*(.97+.03*Math.sin(time*3.1));
-   lampPositions.forEach((p,i)=>{const on=i!==3||state.sawmill>=40;shared.uCampLights.value[i].set(site.x+p[0],y+p[1],site.z+p[2],on?strength*(i===0?2.1:1.7):0);lamps[i].core.visible=on&&night>.05;lamps[i].frame.visible=on;if(lamps[i].halo)lamps[i].halo.material.opacity=on?night:0;});
+   room.light(night,state.hour);const strength=night*(.97+.03*Math.sin(time*3.1));
+   lampPositions.forEach((p,i)=>{
+    const built=i===3?state.sawmill>=40:i===4?state.lodge>=24:true;
+    const power=i===0?1.63:i===4?1.21:1.53;
+    shared.uCampLights.value[i===4?11:i].set(site.x+p[0],y+p[1],site.z+p[2],built?strength*power:0);
+    const lamp=lamps[i];lamp.core.visible=built&&night>.05;lamp.frame.visible=built;
+    if(lamp.halo)lamp.halo.material.opacity=built?night:0;
+   });
    shared.uLamp.value.set(site.x+1.28,y+1.83,site.z-.6,night*.6);
   },
   nearDoor(feet){return atShackDoor(group.position,feet);},
+  focus(station,camera,dt){
+   const mat=focusMark.material;
+   mat.opacity+=(Number(!!station)*.91-mat.opacity)*(1-Math.exp(-14*dt));
+   focusMark.visible=cutaway&&mat.opacity>.015;
+   if(station){
+    focusMark.position.set(station.x,station.y+.095,station.z);
+    focusMark.quaternion.copy(camera.quaternion);
+   }
+  },
+  station(feet,yaw,state,previous){return shackStation(group.position,feet,yaw,state,previous);},
   contains(feet,state){return insideShack(group.position,feet,state);},
   updateInterior(dt,feet,camera,state){
    const inside=insideShack(group.position,feet,state),nearDoor=atShackDoor(group.position,feet);
    const reveal=inside||(nearDoor&&Math.abs(feet.x-site.x-DOOR.x)<(cutaway?.95:.77)&&feet.z<site.z+(cutaway?2.5:2.2));
    const dx=camera.position.x-site.x,dz=camera.position.z-site.z;
-   const mask='roof,'+(inside?((dz>=0?'front,':'back,')+(dx>=0?'right':'left')):'');
+   const side=dx>.32?'right':dx<-.32?'left':cutMask.includes('left')?'left':'right';
+   const mask='roof,'+(inside?((dz>=0?'front,':'back,')+side):'');
    const changed=reveal!==cutaway||(reveal&&mask!==cutMask);cutaway=reveal;cutMask=mask;
    const wanted=inside||nearDoor?-Math.PI*.49:0,old=doorAngle;doorAngle=wanted+(doorAngle-wanted)*Math.exp(-9*dt);doorHinge.rotation.y=doorAngle;
    if(changed||Math.abs(old-doorAngle)>.0001)syncVisuals();
 
-   return {inside,reveal,changed:changed||(Math.abs(old-wanted)>.01&&Math.abs(doorAngle-wanted)<=.01),camera:reveal?{center:{x:site.x,y:y+.8,z:site.z-(state.lodge>=24?1.1:0)},distance:state.lodge>=24?7.5:6}:null};
+   return {inside,reveal,changed:changed||(Math.abs(old-wanted)>.01&&Math.abs(doorAngle-wanted)<=.01),camera:reveal?{center:{x:site.x,y:y+.8,z:site.z-(state.lodge>=24?1.1:0)},distance:(state.lodge>=24?7.25:5.7)*Math.max(1,.95/(camera.aspect||1))}:null};
   },
   setProject(amount){let changed=false;for(const mesh of projectParts){const visible=amount>=mesh.userData.projectStage;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}if(changed)syncVisuals();},
   setCamp(state){fire.setState(state.fire||0);let changed=room.setState(state);for(const mesh of benchParts){const visible=state.fire>=12;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}for(const mesh of rearDoorParts){const visible=state.lodge<24;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}for(const {mesh,key,stage} of campParts){const unlocked=key==='sawmill'?state.shed>=40:key==='lodge'?state.porch>=12:state.sawmill>=40;const value=key==='planks'?Math.min(12,state.planks):state[key];const visible=unlocked&&value>=stage;if(mesh.userData.shown!==visible){mesh.userData.shown=visible;changed=true;}}if(changed)syncVisuals();},

@@ -61,6 +61,7 @@ export class FallenTree{
     }
     part.tree=tree;part.owner=this;this.skin(part);
     place(part,p,q);game.scene.add(part.mesh);game.forest.shade.add(part.shadow);
+    part.readyAt=game.time==null?0:game.time+.28;
     this.parts.push(part);this.updateMarks(part);return part;
   }
   skin(part){
@@ -102,7 +103,7 @@ export class FallenTree{
     const next=wood.piece(part.lo,part.hi,game.cutPaint,game.forest.shadeMaterial,this.record.harvest.limbed);
     part.mesh=next.mesh;part.shadow=next.shadow;part.marks=[];part.guides=null;
     this.skin(part);place(part,body.translation(),q);game.scene.add(part.mesh);game.forest.shade.add(part.shadow);
-    this.updateMarks(part);body.wakeUp();part.atRest=false;return true;
+    part.readyAt=game.time==null?0:game.time+.28;this.updateMarks(part);body.wakeUp();part.atRest=false;return true;
   }
   available(part){
     const h=this.record.harvest;
@@ -166,7 +167,7 @@ export class FallenTree{
       place(b,pos,b.body.rotation());
     }
     for(const p of this.parts){
-      if(!p.body.isDynamic())continue;
+      if(p.inFlight||!p.body.isDynamic())continue;
       const asleep=p.body.isSleeping();if(asleep&&p.atRest)continue;
       place(p,p.body.translation(),p.body.rotation());
       if(asleep)settled=true;p.atRest=asleep;
@@ -209,7 +210,8 @@ export class FallenTree{
     part.hits=this.record.kerfs.reduce((n,k)=>k.at>part.lo&&k.at<part.hi&&k.hits<3?Math.max(n,k.hits):n,0);
   }
   cut(part,p,strength){
-    if(!part.body.isDynamic()||part.length<2*MIN_END+.02)return null;
+    if(part.inFlight||!part.body.isDynamic()||part.length<2*MIN_END+.02)return null;
+    if(this.record.harvest&&part.length<=CARRY_LENGTH+.001)return null;
     const at=this.local(part,p),station=THREE.MathUtils.clamp(at.y,part.lo+MIN_END,part.hi-MIN_END);
     const centre=this.wood.centre(station),radius=this.wood.radius(station);
     if(Math.hypot(at.x-centre.x,at.z-centre.z)>radius+.18)return null;

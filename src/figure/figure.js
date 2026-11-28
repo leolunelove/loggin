@@ -47,6 +47,10 @@ void main() {
     if(vBind.y<1.032||vBind.y>top||ax>armhole||(front>.5&&ax<opening))discard;
   #endif
   vec3 Nn = normalize(vN);
+  #ifdef FOREST_FIGURE
+    vec3 facet=cross(dFdx(vWorld),dFdy(vWorld));
+    if(dot(facet,facet)>1e-16){facet=normalize(facet);Nn=normalize(mix(Nn,facet*sign(dot(facet,Nn)),.31));}
+  #endif
   if (!gl_FrontFacing) Nn = -Nn;
   float n = texture(tNoise, vBind.xy * uGrain + vBind.z * 1.7).r;
   float m = texture(tNoise, vBind.yx * uGrain * 0.31 + 0.4).g;
@@ -125,12 +129,12 @@ void main() {
 `;
 
 // A palette is [light, half-tone, shade] and, where a lamp is carried, the thing's own colour for its light to fall on.
-export function paint(shared, [L, M, S, A = L], { skinned = false, lower = null, split = -10, grain = 2.2, quilted = false, stock = false, polish = null, material = null, patch = null, workshirt = false, board = false } = {}) {
+export function paint(shared, [L, M, S, A = L], { skinned = false, lower = null, split = -10, grain = 2.2, quilted = false, stock = false, polish = null, material = null, patch = null, workshirt = false, board = false, figure = false } = {}) {
   const col = (c) => ({ value: new THREE.Color(...c) });
   const [L2, M2, S2, A2 = L2] = lower ?? [L, M, S, A];
   return new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
-    defines:{...(board?{SAWN_WOOD:1}:{}),...(workshirt?{WORK_SHIRT:1}:{}),...(patch?{PACK_PATCH:1}:{}),...(material?{WORKWEAR:1,[material.toUpperCase()]:1}:{}),...(quilted?{QUILTED:1}:{}),...(stock?{TOOL_STOCK:1}:{}),...(polish!=null?{TOOL_STEEL:1}:{})},
+    defines:{...(figure?{FOREST_FIGURE:1}:{}),...(board?{SAWN_WOOD:1}:{}),...(workshirt?{WORK_SHIRT:1}:{}),...(patch?{PACK_PATCH:1}:{}),...(material?{WORKWEAR:1,[material.toUpperCase()]:1}:{}),...(quilted?{QUILTED:1}:{}),...(stock?{TOOL_STOCK:1}:{}),...(polish!=null?{TOOL_STEEL:1}:{})},
     side: THREE.DoubleSide,
     uniforms: { ...shared,uWearWet:shared.uWearWet??shared.uRain??{value:0},...(patch?{tPatch:{value:patch}}:{}),...(material==='eyes'?{uBlink:{value:0},uGaze:{value:0},uLidL:col(L),uLidM:col(M),uLidS:col(S)}:{}),...(material==='hair'?{uHatHem:{value:1.805}}:{}),...(material==='skin'?{uBeard:{value:0},uWhisker:col([.25,.18,.13])}:{}),uDistanceHaze:{value:1},uCloth:{value:skinned?1:0},uTimber:{value:stock&&polish==null?1:0},uPolish:{value:polish??0}, uL: col(L), uM: col(M), uS: col(S), uL2: col(L2), uM2: col(M2), uS2: col(S2), uOwn: col(A), uOwn2: col(A2), uSplit: { value: split }, uGrain: { value: grain } },
     vertexShader: skinned ? /* glsl */ `
@@ -201,23 +205,37 @@ export async function createFigure(sceneShared, onProgress, palettes = {}, appea
   const shared={...sceneShared,uWearWet:{value:0}};
   const { PACK, HAT, SHIRT, TROUSERS, SKIN, BOOTS, HAIR, EYES } = { ...DAY, ...palettes };
   const man = await loadMan({ base: './figure/', onProgress });
+  const figurePaint=(light,palette,options)=>paint(light,palette,{...options,figure:true});
   for (const mesh of man.meshes) {
     const name = mesh.name + ' ' + (mesh.material?.name ?? '');
     if (/eyelash/.test(name)) { mesh.visible = false; continue; }
-    mesh.material = /casualsuit/.test(name) ? paint(shared, SHIRT, { skinned: true, material:'cloth', workshirt:true, lower: TROUSERS, split: 0.98, grain: 2.6 })
-      : /shoes/.test(name) ? paint(shared, BOOTS, { skinned: true,material:'leather' })
-      : /short01|eyebrow/.test(name) ? paint(shared, HAIR, { skinned: true,material:/eyebrow/.test(name)?'brow':'hair' })
-      : /high-poly/.test(name) ? paint(shared, EYES, { skinned: true,material:'eyes' })
-      : paint(shared, SKIN, { skinned: true,material:'skin' });
+    if(/casualsuit/.test(name)){
+      // Give the canvas coat a dropped shoulder and the trousers a wider cuff.
+      // Retain the source rig and the fitted surfaces for the axe and pack.
+      const geo=mesh.geometry.clone(),p=geo.attributes.position,n=geo.attributes.normal;
+      for(let i=0;i<p.count;i++){
+        const x=p.getX(i),y=p.getY(i),z=p.getZ(i),ax=Math.abs(x);
+        const shoulder=THREE.MathUtils.smoothstep(y,1.25,1.43)*(1-THREE.MathUtils.smoothstep(ax,.26,.49));
+        const cuff=(1-THREE.MathUtils.smoothstep(Math.abs(y-.28),.08,.22))*.012;
+        const loft=.022*shoulder+cuff;
+        p.setXYZ(i,x+n.getX(i)*loft,y+n.getY(i)*loft*.27,z+n.getZ(i)*loft);
+      }
+      geo.computeVertexNormals();geo.computeBoundingSphere();mesh.geometry=geo;
+    }
+    mesh.material = /casualsuit/.test(name) ? figurePaint(shared, SHIRT, { skinned: true, material:'cloth', workshirt:true, lower: TROUSERS, split: 0.98, grain: 2.6 })
+      : /shoes/.test(name) ? figurePaint(shared, BOOTS, { skinned: true,material:'leather' })
+      : /short01|eyebrow/.test(name) ? figurePaint(shared, HAIR, { skinned: true,material:/eyebrow/.test(name)?'brow':'hair' })
+      : /high-poly/.test(name) ? figurePaint(shared, EYES, { skinned: true,material:'eyes' })
+      : figurePaint(shared, SKIN, { skinned: true,material:'skin' });
     mesh.layers.enable(1);
     mesh.frustumCulled = false;
   }
   const dabs = new THREE.Group();
 
-  const wardrobe=workClothes(shared,man,paint,HAT,SHIRT);
+  const wardrobe=workClothes(shared,man,figurePaint,HAT,SHIRT);
   dabs.add(wardrobe.mesh);
 
-  const pack=createWoodPack(shared,man,{paint,canvasPalette:palettes.PACK??palettes.CLOAK??PACK});
+  const pack=createWoodPack(shared,man,{paint:figurePaint,canvasPalette:palettes.PACK??palettes.CLOAK??PACK});
   dabs.add(pack.paint.mesh);
 
   // --- paint on the body itself: pins on his clothes, skin, boots and hair ---
@@ -226,7 +244,7 @@ export async function createFigure(sceneShared, onProgress, palettes = {}, appea
   const parts = [];
   const suit = partOf(/casualsuit/), skin = partOf(/generic/), shoes = partOf(/shoes/), hair = partOf(/short01/);
   // he was made standing with his arms straight out: a sleeve runs sideways, everything else runs down
-  if (suit) parts.push({ mesh: suit, count: 410, style: (p,n) => ({ pal: p.y < 0.98 ? 1 : 0, size: [0.024, 0.059], dir: Math.abs(p.x) > 0.2 && p.y > 1.3 ? OUT : new THREE.Vector3(.24*n.z,1,.16*n.x) }) });
+  if (suit) parts.push({ mesh: suit, count: 450, style: (p,n) => ({ pal: p.y < 0.98 ? 1 : 0, size: [0.034, 0.084], dir: Math.abs(p.x) > 0.2 && p.y > 1.3 ? OUT : new THREE.Vector3(.24*n.z,1,.16*n.x) }) });
   // skin only where it shows: the head and neck, and the arms past the sleeves
   if (skin) parts.push({
     mesh: skin, count: 132, accept: (p) => (p.y > 1.52 || Math.abs(p.x) > 0.37) && !(p.y>1.60 && p.y<1.81 && p.z>.032),

@@ -14,3 +14,27 @@ export function cabinColliders(site,y){
   box(DOOR.x,2.4,-1.45,.625,.13,.08),
  ];
 }
+
+
+const fittings=[
+ {key:'bench',label:'Use the workbench',x:-1.21,y:1.01,z:-.17,reach:.97},
+ {key:'ledger',label:'Read the camp ledger',x:1.12,y:1.00,z:.91,reach:.94},
+ {key:'stores',label:'Check the supply shelves',x:1.27,y:1.66,z:-.50,reach:.96},
+ {key:'bed',label:'Rest at the cot',x:.06,y:.52,z:-.90,reach:1}
+];
+const bedroom={...fittings[3],x:.79,y:.63,z:-2.80};
+export function shackStation(origin,feet,yaw,state,previous){
+ if(!insideShack(origin,feet,state))return null;
+ const x=feet.x-origin.x,z=feet.z-origin.z;
+ let best=null,score=Infinity;
+ for(const fitting of fittings){
+  const item=fitting.key==='bed'&&state.lodge>=24?bedroom:fitting;
+  const dx=item.x-x,dz=item.z-z,d=Math.hypot(dx,dz);
+  const facing=(dx*Math.sin(yaw)+dz*Math.cos(yaw))/Math.max(.001,d);
+  const hold=item.key===previous ? .09 : 0;
+  if(d>item.reach+hold||(d>.67&&facing<-.24))continue;
+  const rank=d-.19*facing-hold;
+  if(rank<score){best=item;score=rank;}
+ }
+ return best;
+}

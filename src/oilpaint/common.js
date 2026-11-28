@@ -56,7 +56,8 @@ export function createShared() {
     uTime: { value: 0 },
     uRain:{value:0},uOvercast:{value:0},uDaylight:{value:1},uDusk:{value:0},uNight:{value:0},
     uMoonDir:{value:new THREE.Vector3(.4,.65,-.65).normalize()},
-    uCampLights:{value:Array.from({length:11},()=>new THREE.Vector4(0,0,0,0))},
+    uSkySun:{value:SUN.clone()},
+    uCampLights:{value:Array.from({length:12},()=>new THREE.Vector4(0,0,0,0))},
     uPixel: { value: 0.001 }, // metres one pixel covers at one metre from the eye
     uSunDir: { value: SUN.clone() },
     uWind: { value: new THREE.Vector3(WIND.x, WIND.y, 1) }, // direction on the ground (x, z) and strength
@@ -96,7 +97,8 @@ uniform float uDaylight;
 uniform float uDusk;
 uniform float uNight;
 uniform vec3 uMoonDir;
-uniform vec4 uCampLights[11];
+uniform vec3 uSkySun;
+uniform vec4 uCampLights[12];
 uniform float uRiverPhase;
 float riverGap(vec2 xz){return abs(xz.x-(24.0+sin(xz.y*.035+uRiverPhase)*5.0+sin(xz.y*.08+uRiverPhase)*1.5));}
 uniform float uPixel;
@@ -226,7 +228,7 @@ vec3 hazeFacing(vec3 c, vec3 world, float densityScale, vec3 normal, float direc
   c=mix(moon,daylight,uDaylight);
   c=mix(c,c*vec3(.67,.73,.79),uOvercast*.6);
   float warm=0.;
-  for(int i=0;i<11;i++){
+  for(int i=0;i<12;i++){
     vec3 toward=uCampLights[i].xyz-world;float dist=length(toward);
     float fall=max(0.,1.-dist/6.);
     float facing=.49+.84*max(0.,dot(normal,toward)/max(.001,dist));
