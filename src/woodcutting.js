@@ -49,7 +49,18 @@ export function readSkill(data,legacyFelled=0){
   for(const [id,cut] of Object.entries(data?.cuts||{})){
     if(!/^(?:\d{1,5}|w\d{1,2}-[0-2])$/.test(id)||!cut||!Number.isFinite(cut.hp)||cut.hp<=0)continue;
     if(!['x','y','z','nx','nz'].every(k=>Number.isFinite(cut[k])))continue;
-    skill.cuts[id]={hp:Math.min(36,cut.hp),x:cut.x,y:cut.y,z:cut.z,nx:cut.nx,nz:cut.nz};
+    const saved=skill.cuts[id]={hp:Math.min(36,cut.hp),x:cut.x,y:cut.y,z:cut.z,nx:cut.nx,nz:cut.nz};
+    if(Array.isArray(cut.notches)){
+      const notches=[];
+      for(const n of cut.notches.slice(-40)){
+        if(!n||!['x','y','z','nx','nz','damage'].every(k=>Number.isFinite(n[k]))||n.damage<=0)continue;
+        const length=Math.hypot(n.nx,n.nz);if(length<.01)continue;
+        const record={x:n.x,y:n.y,z:n.z,nx:n.nx/length,nz:n.nz/length,damage:Math.min(1,n.damage)};
+        if(Number.isFinite(n.angle))record.angle=n.angle%Math.PI;
+        notches.push(record);
+      }
+      if(notches.length)saved.notches=notches;
+    }
   }
   for(const [id,split] of Object.entries(data?.splits||{})){
     if(!/^\d{1,5}$/.test(id)||!Number.isFinite(split?.until)||split.until<=Date.now()||!Number.isInteger(split.mask))continue;

@@ -7,6 +7,7 @@ shots/*
 !shots/cabin.jpg
 *.mp4
 !public/changelog/held-axe.mp4
+!public/changelog/directional-cuts.mp4
 *.log
 .env
 .test/

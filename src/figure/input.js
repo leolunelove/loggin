@@ -1,6 +1,8 @@
 // Keyboard, mouse and gamepad, read once a frame into one plain state.
 //   move: {x, y} (x right, y forward, length 0..1), walk, sprint, strafe (held),
 //   jump (pressed this frame), look: {x, y} (radians this frame), zoom (wheel steps this frame)
+import {ANGLE_STEP,wrapCutAngle} from './cut-plane.js';
+
 export class Input {
   constructor(el, { pads = true } = {}) {
     this.el = el;
@@ -8,6 +10,8 @@ export class Input {
     this.keys = new Set();
     this.pressed = new Set();
     this.mouse = { x: 0, y: 0, wheel: 0, left: false, right: false };
+    this.cutAngle=0;
+    this.clickAngle=null;
     this.walkToggle = false;
     this.pad = { a: false, l3: false, sprint: false };
     this.sensitivity = 0.0022;
@@ -23,6 +27,10 @@ export class Input {
       if (e.code === 'Escape' && this.freeLook) { this.release(); return; }
       if (!this.lockable || !this.active) return;
       if (['Space', 'ArrowUp', 'ArrowDown', 'AltLeft', 'AltRight'].includes(e.code)) e.preventDefault();
+      if(this.mouse.right&&(e.code==='KeyZ'||e.code==='KeyC')){
+        this.cutAngle=wrapCutAngle(this.cutAngle+(e.code==='KeyZ'?1:-1)*Math.PI/90);
+        e.preventDefault();
+      }
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
       if (e.code === 'CapsLock' && !e.repeat) this.walkToggle = !this.walkToggle;
@@ -35,7 +43,10 @@ export class Input {
       if (!this.lockable) return;
       // The click that recaptures the mouse only resumes the game. Subsequent clicks swing the axe.
       if (!this.active) { if (e.button === 0) this.capture(); return; }
-      if (e.button === 0) {if(!this.mouse.left)this.pressed.add('Interact');this.mouse.left = true;}
+      if (e.button === 0) {
+        if(!this.mouse.left){this.pressed.add('Interact');this.clickAngle=this.mouse.right?this.cutAngle:null;}
+        this.mouse.left = true;
+      }
       if (e.button === 2) this.mouse.right = true;
     });
     addEventListener('mouseup', (e) => {
@@ -49,14 +60,23 @@ export class Input {
     addEventListener('mousemove', (e) => {
       if (this.active && this.lockable) { this.mouse.x += e.movementX; this.mouse.y += e.movementY; }
     });
-    el.addEventListener('wheel', (e) => { this.mouse.wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
+    el.addEventListener('wheel', (e) => {
+      if(this.active&&this.lockable&&this.mouse.right&&!e.altKey){
+        // Line-mode wheels usually send three lines per notch. Pixel-mode
+        // trackpads send much smaller deltas and can turn the edge continuously.
+        const unit=e.deltaMode===1?3:e.deltaMode===2?1:100;
+        const steps=Math.max(-3,Math.min(3,e.deltaY/unit));
+        this.cutAngle=wrapCutAngle(this.cutAngle-steps*ANGLE_STEP);
+      }else this.mouse.wheel+=Math.sign(e.deltaY);
+      e.preventDefault();
+    }, { passive: false });
   }
 
   get locked() { return document.pointerLockElement === this.el; }
   get active() { return this.locked || this.freeLook; }
 
   clear() {
-    this.keys.clear(); this.pressed.clear();
+    this.keys.clear(); this.pressed.clear(); this.clickAngle=null;
     this.mouse.x = this.mouse.y = this.mouse.wheel = 0;
     this.mouse.left = this.mouse.right = false;
     this.touchMove.x = this.touchMove.y = this.touchLook.x = this.touchLook.y = 0;
@@ -101,13 +121,14 @@ export class Input {
       swingPressed:this.pressed.has('Interact'),
       fieldPressed:this.pressed.has('KeyR'),
       aimHeld: this.active && this.mouse.right,
+      cutAngle:this.cutAngle,clickAngle:this.clickAngle,
       aimPressed: this.pressed.has('KeyQ'),
       look: { x: this.mouse.x * this.sensitivity + this.touchLook.x, y: this.mouse.y * this.sensitivity + this.touchLook.y },
       zoom: this.mouse.wheel,
       device: 'keyboard',
     };
     this.mouse.x = this.mouse.y = this.mouse.wheel = 0;
-    this.pressed.clear();
+    this.pressed.clear();this.clickAngle=null;
     this.touchLook.x = this.touchLook.y = 0;
 
     // gamepad: left stick moves (its tilt sets the speed), right stick looks, L3 sprints,
@@ -131,6 +152,10 @@ export class Input {
       if(aim){s.strafe=true;s.aimHeld=true;}
       if(btn(11)&&!this.pad.lock)s.aimPressed=true;
       this.pad.lock=btn(11);
+      if(aim&&(btn(14)||btn(15))){
+        this.cutAngle=wrapCutAngle(this.cutAngle+((btn(14)?1:0)-(btn(15)?1:0))*dt*Math.PI*.55);
+        s.cutAngle=this.cutAngle;
+      }
       if (btn(12)) s.zoom -= 4 * dt;
       if (btn(13)) s.zoom += 4 * dt;
       this.pad.a = btn(0); this.pad.l3 = btn(10);

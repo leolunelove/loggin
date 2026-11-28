@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {toolInCutPlane} from './cut-plane.js';
 import { swingPose,IMPACT_AT,SWING_VARIANTS } from '../mechanics.js';
 import {LOWER_GRIP,haftAt,toolScale,bladePoint,AXE_PROFILES,headPoint} from './axe-shape.js';
 export {LOWER_GRIP} from './axe-shape.js';
@@ -86,18 +87,25 @@ export class ChopAnimation {
    pose.angle+=low*1.04*smooth((p-.30)/.20)*(1-smooth((p-.58)/.38));
    const crouch=smooth(p/.35)*(1-smooth((p-.59)/.41))*low;
    pose.sink+=.34*crouch;pose.lean+=.49*crouch;
+   if(swing.sight?.cutLine){
+     const waist=THREE.MathUtils.clamp((body.position.y+1.25-swing.contact.y)/.42,0,1);
+     const brace=waist*smooth(p/.33)*(1-smooth((p-.57)/.36));
+     pose.sink+=.13*brace;pose.lean+=.11*brace;
+   }
   }
   if(swing)this.release=0;else this.release=Math.min(1,this.release+dt/.14);
   const releaseWeight=1-smooth(this.release),lean=pose?.lean??(this.last?.lean||0)*releaseWeight,twist=pose?.twist??(this.last?.twist||0)*releaseWeight;
   const bodyQ=body.getWorldQuaternion(new THREE.Quaternion()),forward=new THREE.Vector3(0,0,1).applyQuaternion(bodyQ),right=new THREE.Vector3(-1,0,0).applyQuaternion(bodyQ);
   const sink=pose?.sink??(this.last?.sink||0)*releaseWeight;
   // Settle the hips and bend the knees while preserving the feet already placed on the terrain.
-  const enteringCut=!!swing?.sight?.entry&&swing.sight.reachable;
+  const enteringCut=!!swing?.sight?.cutLine&&swing.sight.reachable;
   if((sink>0||enteringCut)&&animator.legIK){
    const feet=['l','r'].map(side=>point(b[`foot_${side}`]));
    const distance=swing?Math.hypot(swing.contact.x-body.position.x,swing.contact.z-body.position.z):0;
    const reachShift=Math.min(.27,Math.max(0,distance-(enteringCut ? .87 : .93))*(enteringCut ? .92 : .70))*smooth((p-.29)/.20)*(1-smooth((p-.57)/.30));
-   const shift=forward.clone().multiplyScalar(lean*.06+reachShift).addScaledVector(UP,-sink);
+   const shift=forward.clone().multiplyScalar(lean*.06).addScaledVector(UP,-sink);
+   const toward=enteringCut?new THREE.Vector3(swing.contact.x-body.position.x,0,swing.contact.z-body.position.z).normalize():forward;
+   shift.addScaledVector(toward,reachShift);
    for(const [i,side] of ['l','r'].entries()){
     const hip=point(b['thigh_'+side]),knee=point(b['calf_'+side]),foot=feet[i];
     const length=hip.distanceTo(knee)+knee.distanceTo(foot)-.002;
@@ -131,6 +139,28 @@ export class ChopAnimation {
    carryQ.slerp(axeRotation(forward,.38,.24),ready);
    carryPalm.lerp(body.localToWorld(new THREE.Vector3(-.245,1.08,.33)),ready);
   }
+  const plane=swing?.sight||sight;
+  let inward=null,along=null;
+  if(plane?.cutLine){
+   inward=plane.cutFace.clone().negate().normalize();
+   along=plane.cutLine.clone().projectOnPlane(inward).normalize();
+   const naturalPalm=body.localToWorld(new THREE.Vector3(-.18,1.07,.34));
+   const fromHands=(plane.reachable?plane.point:plane.freePoint).clone().sub(naturalPalm);
+   if(along.dot(fromHands)<0)along.negate();
+   // Swing through the marked line from the player's side of a curved trunk.
+   // Rotating the plane about that line keeps the bevel clear of the near cheek.
+   if(plane.tree&&plane.reachable){
+     const fromStance=new THREE.Vector3(plane.point.x-body.position.x,0,plane.point.z-body.position.z);
+     const approach=fromStance.projectOnPlane(along).normalize();
+     if(approach.lengthSq()>.5){
+       const oblique=smooth((.994-inward.dot(approach))/.12);
+       inward.lerp(approach,oblique).normalize();
+     }
+   }
+   if(swing){swing.edgeAlong??=along.clone();along=swing.edgeAlong;}
+   const set=toolInCutPlane(inward,along,.59);
+   carryQ.slerp(set,ready*.50);
+  }
   const carryPosition=carryPalm.clone().addScaledVector(gripAt(carryGrip).applyQuaternion(carryQ),-scale);
   let position=carryPosition.clone(),rotation=carryQ.clone(),leftWeight=ready,slide=.08+.09*ready,gripY=carryGrip,workingGrip=ready,contactEdge=axeBlade(tier);
   if(swing){
@@ -151,8 +181,11 @@ export class ChopAnimation {
      const oblique=smooth((.83-n.dot(aim))/.30);
      if(oblique)contactQ.slerp(axeRotation(n,.45+low*.52,contactPose.roll*.45),oblique);
    }
+   const cutTilt=1.01+.16*longReach+.10*low;
+   if(along)contactQ.copy(toolInCutPlane(inward,along,cutTilt));
    const lowWork=swing.sight?.reachable&&swing.contact.y-body.position.y<.63||swing.t.windthrow||['section','stump'].includes(swing.t.kind)||swing.free&&swing.pitch>.70;
-   if(!swing.free||swing.sight?.reachable||lowWork)contactEdge=workingEdge(tier,contactQ,lowWork?new THREE.Vector3(0,-1,0):aim);
+   if(along)contactEdge=workingEdge(tier,contactQ,inward);
+   else if(!swing.free||swing.sight?.reachable||lowWork)contactEdge=workingEdge(tier,contactQ,lowWork?new THREE.Vector3(0,-1,0):aim);
    const contactPalm=contact.clone().sub(contactEdge.clone().sub(gripAt(LOWER_GRIP)).applyQuaternion(contactQ).multiplyScalar(scale));
    const local=(x,y,z)=>new THREE.Vector3(x,y,z).applyMatrix4(body.matrixWorld);
    const soft=swing.missed||swing.material==='water',through=contactPalm.clone();
@@ -180,7 +213,19 @@ export class ChopAnimation {
     const followThrough=smooth((p-.445)/.055)*(1-smooth((p-.565)/.10));
     position.addScaledVector(lowWork?new THREE.Vector3(0,-1,0):aim,.027*followThrough);
    }
-   if(swing.sight?.reachable&&!swing.hit&&p>.23){
+   if(along&&p>.14){
+    // Cock along the selected plane, drive down its length into the wood, then
+    // lift the edge out on the same side. Actual steel contact arrests the arc.
+    const take=smooth((p-.14)/.19)*(1-smooth((p-.64)/.27));
+    const drive=smooth((p-.368)/.137),sweep=smooth((p-.296)/.164),recover=smooth((p-.55)/.17);
+    const workingQ=toolInCutPlane(inward,along,cutTilt-.54*(1-drive)-.18*recover);
+    rotation.slerp(workingQ,take);
+    const edge=workingEdge(tier,rotation,swing.sight.cutFace.clone().negate());
+    const goal=contact.clone().addScaledVector(inward,-.32+.366*drive-.24*recover)
+      .addScaledVector(along,.31*(1-sweep)-.10*recover)
+      .sub(edge.applyQuaternion(rotation).multiplyScalar(scale));
+    position.lerp(goal,take);
+   }else if(swing.sight?.reachable&&!swing.hit&&p>.23){
     // Set the edge opposite the selected patch before driving it through the final
     // handspan. A high or diagonal wind-up can then finish on the same pencil mark.
     const normal=entry||swing.sight.normal,settle=smooth((p-.23)/.15),drive=smooth((p-.385)/.122);

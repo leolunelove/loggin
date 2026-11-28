@@ -8,6 +8,9 @@ import {createAxes} from '../src/figure/axes.js';
 import {createForest} from '../src/world/forest.js';
 import {plantTrunk,PLAYER_GROUPS,TRUNK_GROUPS} from '../src/world/woodland-physics.js';
 import {NearbyBark} from '../src/world/axe-bark.js';
+import {recordBarkStrike} from '../src/world/bark-cut.js';
+import {readSkill} from '../src/woodcutting.js';
+import {setCutPlane} from '../src/figure/cut-plane.js';
 await R.init();
 const vector=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const identity=new THREE.Quaternion();
@@ -97,6 +100,52 @@ test('the reachable bark collider uses the cut in the visible trunk, then retire
   assert.equal(t.collider.castRay(ray,6,false),coarse);
   nearby.update(feet.clone().add(vector(6)));assert.equal(t.axeBark,null);
   assert.equal(t.collider.collisionGroups(),0xffffffff);world.free();
+});
+test('a marked angle projects onto a sloping face at the same angle seen in the shoulder camera',()=>{
+  const camera=new THREE.PerspectiveCamera(55,16/9,.03,200);
+  const point=vector(.25,1.25,-.48);camera.position.set(.56,1.53,1.72);camera.lookAt(point);camera.updateMatrixWorld(true);
+  for(const normal of [vector(0,0,1),vector(.65,.12,.75).normalize(),vector(-.72,-.15,.68).normalize()]){
+    for(const degrees of [0,15,45,90,135,173]){
+      const angle=degrees*Math.PI/180,sight=setCutPlane({point,normal},camera,angle);
+      assert.ok(Math.abs(sight.cutLine.dot(normal))<1e-6);
+      const a=point.clone().project(camera),b=point.clone().addScaledVector(sight.cutLine,.12).project(camera);
+      const screen=Math.atan2(b.y-a.y,(b.x-a.x)*camera.aspect);
+      assert.ok(Math.abs(Math.cos(screen-angle))>.99999);
+    }
+  }
+});
+test('crossing grooves carve independent physical faces and survive leaving the tree and loading a camp',()=>{
+  const forest=createForest({}),tree=forest.trees.find(t=>t.hero),world=new R.World(vector());
+  tree.collider=plantTrunk(world,R,tree);
+  const nearby=new NearbyBark(world,R,{...forest,colliders:[tree]});
+  const feet=vector(tree.x,tree.y,tree.z+tree.r+1);
+  nearby.update(feet);world.step();
+  const centre=vector(tree.x,tree.y+1.22,feet.z),dir=vector(0,0,-1);
+  const range=(x,y)=>tree.axeBark.castRay(new R.Ray(centre.clone().add(vector(x,y,0)),dir),5,false);
+  const stock=[range(.072,.072),range(.072,-.072),range(0,0)];
+  function strike(sign){
+    const p=centre.clone().addScaledVector(dir,range(0,0));
+    const {records,precise}=recordBarkStrike(tree,p,0,1,vector(1,sign,0).normalize(),.19);
+    const cut={...records.at(-1),notches:records};
+    forest.carveTree(tree,cut,cut.nx,cut.nz,.19*records.length);nearby.recut(tree);world.step();
+    return {cut,precise};
+  }
+  assert.equal(strike(1).precise,false);
+  const firstDepth=range(.072,.072)-stock[0];assert.ok(firstDepth>.036);
+  assert.ok(Math.abs(range(.072,-.072)-stock[1])<.006);
+  assert.equal(strike(-1).precise,false);assert.equal(tree.notches.length,2);
+  assert.ok(range(.072,-.072)-stock[1]>.036);
+  assert.ok(range(.072,.072)-stock[0]>.036);
+  const {cut,precise}=strike(1);assert.equal(precise,true);
+  assert.equal(tree.notches.length,2);assert.ok(range(.072,.072)-stock[0]>firstDepth+.02);
+  const worked=[range(.072,.072),range(.072,-.072),range(0,0)];
+  const compare=()=>{for(const [i,d] of [range(.072,.072),range(.072,-.072),range(0,0)].entries())assert.ok(Math.abs(d-worked[i])<.001);};
+  nearby.update(feet.clone().add(vector(7,0,0)));assert.equal(tree.detailMesh,null);
+  nearby.update(feet);world.step();compare();
+  const saved=readSkill(JSON.parse(JSON.stringify({cuts:{5:{...cut,hp:6}}}))).cuts[5];
+  forest.resetCut(tree);nearby.recut(tree);world.step();assert.ok(Math.abs(range(0,0)-stock[2])<.003);
+  forest.carveTree(tree,saved,saved.nx,saved.nz,.57);nearby.recut(tree);world.step();compare();
+  assert.equal(tree.notches.length,2);world.free();
 });
 test('only an edge presented to the surface after real travel earns a productive hit',()=>{
   const hit={part:{name:'bit'},rotation:identity,normal:vector(-1),velocity:vector(3,-.4,0)};

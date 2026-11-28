@@ -119,7 +119,9 @@ body.rambling :is(#project-status,#controls){opacity:0}#controls,#project-status
 #toast{background:var(--pine);border:1px dashed var(--seam);border-radius:9px;color:var(--cream);font:800 18px var(--display);letter-spacing:.02em}
 #aim-crosshair svg{display:none}
 #aim-crosshair.shoulder{width:25px;height:25px;border:0;border-radius:0;background:none;box-shadow:none}
-#aim-crosshair.shoulder svg{display:block;width:100%;height:100%}
+#aim-crosshair.shoulder.in-reach::after{content:"";position:absolute;left:50%;top:50%;width:48px;height:1.5px;pointer-events:none;transform:translate(-50%,-50%) rotate(var(--cut-turn,0deg));background:linear-gradient(to right,transparent,#f7cf84 12%,#f7cf84 22%,transparent 22% 78%,#f7cf84 78% 88%,transparent);filter:drop-shadow(0 1px 1px #362918)}
+#aim-crosshair.shoulder svg{display:block;width:100%;height:100%;transform:rotate(var(--cut-turn,0deg))}
+.shoulder-view #aim-status{top:auto;bottom:43px;width:max-content;max-width:90vw;padding:3px 8px;border-radius:4px;background:#163a2ee3;font-variant-numeric:tabular-nums;color:#f6e6c5}
 #aim-crosshair.shoulder.in-reach .distant-sight,#aim-crosshair.shoulder:not(.in-reach) .working-sight{display:none}
 .shoulder-view #target{left:50% !important;top:auto !important;bottom:70px;transform:translateX(-50%);pointer-events:none}
 body:has(#mouse-capture:not([hidden])) :is(#action,#target,#field-action,#aim-status,#aim-crosshair,#controls){visibility:hidden}

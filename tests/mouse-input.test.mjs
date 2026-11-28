@@ -30,3 +30,22 @@ assert.equal(input.read(1/60).aimPressed,false);world.dispatchEvent(event('keyup
 world.dispatchEvent(event('mouseup',{button:2}));assert.equal(input.read(1/60).aimHeld,false);
 el.dispatchEvent(event('mousedown',{button:2}));input.release();s=input.read(1/60);
 assert.equal(s.aimHeld,false);assert.equal(s.aimPressed,false,'releasing the cursor clears aiming');
+
+input.capture();el.dispatchEvent(event('mousedown',{button:2}));
+el.dispatchEvent(event('wheel',{deltaMode:1,deltaY:-3}));s=input.read(1/60);
+assert.ok(Math.abs(s.cutAngle-Math.PI/12)<1e-8);assert.equal(s.zoom,0);
+world.dispatchEvent(event('keydown',{code:'KeyZ'}));world.dispatchEvent(event('keyup',{code:'KeyZ'}));
+const chosen=input.read(1/60).cutAngle;assert.ok(Math.abs(chosen-17*Math.PI/180)<1e-8);
+el.dispatchEvent(event('mousedown',{button:0}));
+el.dispatchEvent(event('wheel',{deltaY:-100,deltaMode:0}));
+world.dispatchEvent(event('mouseup',{button:0}));world.dispatchEvent(event('mouseup',{button:2}));
+s=input.read(1/60);assert.equal(s.aimHeld,false);assert.ok(s.swingPressed);
+assert.equal(s.clickAngle,chosen,'the click commits the angle before a later wheel event or release');
+assert.ok(s.cutAngle>chosen);assert.equal(input.read(1/60).clickAngle,null);
+el.dispatchEvent(event('mousedown',{button:2}));el.dispatchEvent(event('wheel',{deltaMode:0,deltaY:100,altKey:true}));
+s=input.read(1/60);assert.equal(s.zoom,1,'Alt and wheel preserve the close-view zoom');
+el.dispatchEvent(event('wheel',{deltaMode:0,deltaY:.5}));const fine=input.read(1/60);
+assert.ok(fine.cutAngle<s.cutAngle&&s.cutAngle-fine.cutAngle<.01,'trackpad deltas make fine turns');
+world.dispatchEvent(event('mouseup',{button:2}));el.dispatchEvent(event('wheel',{deltaY:100,deltaMode:0}));
+assert.equal(input.read(1/60).zoom,1);
+input.release();

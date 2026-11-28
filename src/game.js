@@ -42,7 +42,8 @@ import { readSave, writeSave } from './save.js';
 import { ForestAudio } from './audio.js';
 import { ChopAnimation } from './figure/chop.js';
 import {AxeOwner,HeldAxe,bitesWood} from './figure/held-axe.js';
-import {insideNotch} from './world/bark-cut.js';
+import {recordBarkStrike} from './world/bark-cut.js';
+import {setCutPlane} from './figure/cut-plane.js';
 import {NearbyBark} from './world/axe-bark.js';
 import {woodChip,throwChips,stepChips} from './figure/wood-chips.js';
 import {createAxes,axeIcon} from './figure/axes.js';
@@ -412,12 +413,13 @@ export class Lumberjack {
  }
  before(dt,inp){
   this.nearbyBark?.update(this.player.feet);
-  this.time+=dt;
+  this.time+=dt;this.lastDevice=inp.device;
   inp.playing=this.started&&!this.paused&&!this.sleeping&&!(typeof document!=='undefined'&&document.hidden)&&(!!this.seat||this.touch||this.input.active||inp.device==='pad');
   inp.resting=!!this.seated;inp.packLoad=this.state?Math.min(1,this.state.carried/bagCapacity(this.state)):0;
   inp.blockJump=!inp.playing||!!this.seat||!!this.cart?.towing||!!this.delivery||!!this.swing;
   this.follow.shoulder=false;this.sight=null;
-  const toolOnly=inp.aimHeld||inp.sprint&&(inp.swingPressed||this.held||this.input.mouse?.left);
+  const aimedClick=Number.isFinite(inp.clickAngle);
+  const toolOnly=inp.aimHeld||aimedClick||inp.sprint&&(inp.swingPressed||this.held||this.input.mouse?.left);
   if(this.exploration){
     inp.trailBoost=this.onTrail=this.exploration.onTrail(this.player.feet,this.state)||this.field?.onSteps(this.player.feet);
     inp.provisioned=packedLunch(this.state);
@@ -464,7 +466,14 @@ export class Lumberjack {
   }
   this.fireActionHeld=false;
   this.follow.shoulder=!!(inp.aimHeld&&!inactive&&!this.delivery);
-  if(this.follow.shoulder){this.sight=shoulderSight(this);inp.strafe=true;}
+  let clickSight=null;
+  if((this.follow.shoulder||aimedClick)&&!inactive&&!this.delivery){
+    const surface=shoulderSight(this);
+    if(aimedClick)clickSight=setCutPlane({...surface},this.camera,inp.clickAngle);
+    if(this.follow.shoulder){
+      this.sight=setCutPlane(surface,this.camera,inp.cutAngle??0);inp.strafe=true;
+    }
+  }
   if(!inactive&&inp.aimPressed){
    if(this.lockedTree)this.lockedTree=null;
    else{const t=this.sight?this.sight.tree:pickAimTree(this.field?[...this.forest.trees,...this.field.windthrows()]:this.forest.trees,this.player.feet,this.follow.yaw,this.camera.position);this.lockedTree=t&&this.treeVisible(t)?t:null;}
@@ -479,7 +488,7 @@ export class Lumberjack {
   const pad=[...(navigator.getGamepads?.()||[])].find(p=>p?.connected);
   const padHeld=pad&&this.started&&!this.paused&&(pad.buttons[7]?.value>.3||pad.buttons[2]?.pressed);
   if(this.drawStroke&&(inactive||this.time>this.drawStroke.until))this.drawStroke=null;
-  const sight=this.drawStroke?.sight||this.queuedStroke?.sight||this.sight;
+  const sight=this.drawStroke?.sight||this.queuedStroke?.sight||clickSight||this.sight;
   const near=sight?{tree:sight.tree,distance:sight.distance??Infinity}:this.nearest();this.target=near.tree;this.distance=near.distance;
   const moving=Math.hypot(inp.move.x,inp.move.y)>.1;
   if(this.delivery){
@@ -753,29 +762,30 @@ export class Lumberjack {
   for(const m of [t.stump,t.notch,t.logs,t.logPaint?.mesh])if(m){this.scene.remove(m);m.traverse(o=>o.geometry?.dispose());}
   t.logPaint?.mesh.material.dispose();t.stump=t.notch=t.logs=t.logPaint=null;
  }
- markCut(t,x,y,z,dx,dz){
-  const damage=1-t.hp/TREES[t.type].health;
-  this.forest.carveTree(t,{x,y,z},-dx,-dz,damage);this.nearbyBark?.recut(t);
- }
  hit(t){
   if(!this.workAllowed(t)||!this.workFits(t)||t.down||Math.hypot(this.player.feet.x-t.x,this.player.feet.z-t.z)-t.r>CHOP_REACH+.12)return;
   const before=t.hp,power=strokePower(this.state,t,AXES[this.state.axe].power,this.swing?.heavy);
   t.hp=before<=power+.0001?0:before-power;this.audio.hit(t.type,this.state.axe,this.swing?.contact??t,t.hp<=0,this.swing?.heavy,this.swing?.energy);t.shake=this.time;this.impactUntil=this.time+.14;
   const dx=t.x-this.player.feet.x,dz=t.z-this.player.feet.z,len=Math.hypot(dx,dz)||1;
   const {x,y,z}=this.swing?.contact??chopContact(t,this.player.feet,this.player.visualY??this.player.feet.y);
-  const face=this.swing?.faceNormal,n=Math.hypot(face?.x||0,face?.z||0);
+  const point=new THREE.Vector3(x,y,z);
+  const face=(!t.windthrow&&this.forest.uncutNormal?.(t,point))||this.swing?.faceNormal,n=Math.hypot(face?.x||0,face?.z||0);
   const nx=n>.5?face.x/n:-dx/len,nz=n>.5?face.z/n:-dz/len;
   const book=this.state.woodcutting,previous=book.cuts[t.id];
-  // A strike on the sloping inside face deepens the original mouth. Moving its
-  // origin onto that face would rotate the whole notch on each successive blow.
-  const inCut=!t.windthrow&&insideNotch(t.cut,{x,y,z});
-  const mouth=inCut?{x:t.cut.x,y:t.cut.y,z:t.cut.z,nx:t.cut.nx,nz:t.cut.nz}:{x,y,z,nx,nz};
-  const precise=!!previous&&Math.abs(previous.y-y)<.17&&(inCut||previous.nx*nx+previous.nz*nz>.90);
-  if(t.hp>0)book.cuts[t.id]={hp:t.hp,...mouth};else delete book.cuts[t.id];
+  const maximum=t.maxHp||TREES[t.type].health;
+  let record={x,y,z,nx,nz},precise=!!previous&&Math.abs(previous.y-y)<.17&&previous.nx*nx+previous.nz*nz>.90;
+  if(!t.windthrow){
+    const sight=this.swing?.sight;
+    const notch=recordBarkStrike(t,point,nx,nz,sight?.cutLine,(before-t.hp)/maximum,sight?.screenPlaneNormal);
+    const last=notch.records.at(-1);
+    record={x:last.x,y:last.y,z:last.z,nx:last.nx,nz:last.nz,notches:notch.records};
+    precise=notch.precise;
+    this.forest.carveTree(t,record,last.nx,last.nz,1-t.hp/maximum);this.nearbyBark?.recut(t);
+  }
+  if(t.hp>0)book.cuts[t.id]={hp:t.hp,...record};else delete book.cuts[t.id];
   const experience=awardWork(this.state,{type:t.type,windthrow:!!t.windthrow,maximum:t.maxHp||TREES[t.type].health,
     before,after:t.hp,precise,figured:figuredTree(t)});
   this.updateSkill(experience);
-  if(!t.windthrow)this.markCut(t,mouth.x,mouth.y,mouth.z,-mouth.nx,-mouth.nz);
   if(t.hp>0)this.save();
   const finishing=t.hp<=0;throwChips(this,{x,y,z},nx,nz,finishing?14:7+(this.swing?.variant??0),finishing);
   if(t.windthrow){
@@ -812,6 +822,11 @@ export class Lumberjack {
   this.dayPhase=light.phase;
  }
  update(dt){
+  const selected=this.swing?.sight||this.sight;
+  this.forest.guideCut?.(this.sight&&!this.swing?.hit?selected:null);
+  if(this.sight&&this.reticleAngle!==selected?.screenAngle){
+    this.reticleAngle=selected.screenAngle;$('aim-crosshair').style.setProperty('--cut-turn',-this.reticleAngle+'rad');
+  }
   this.updateDaylight(dt);
   const forecast=this.weatherOverride||weatherAt(this.state);this.weather=forecast;
   const nearPlace=this.exploration.nearest(this.player.feet),weatherHome=nearPlace>=0?this.exploration.sites[nearPlace]:this.home,weatherState=nearPlace>=0?{lodge:0,porch:0,sawmill:0,houseSpec:weatherHome.spec}:this.state;
@@ -913,7 +928,13 @@ export class Lumberjack {
   reticle.hidden=!this.started||this.paused||(!this.sight&&!!this.lockedTree)||this.insideShack||this.indoorPlace>=0||!!this.seat;
   reticle.classList.toggle('shoulder',!!this.sight);reticle.classList.toggle('in-reach',!!this.sight?.reachable);
   document.body.classList.toggle('shoulder-view',!!this.sight);
-  $('aim-status').hidden=!this.started||this.paused||this.insideShack||!!this.seat;$('aim-status').textContent=this.lockedTree&&!this.sight?'Tree locked · Q to release':'';
+  const aimStatus=$('aim-status');
+  aimStatus.hidden=!this.started||this.paused||this.insideShack||!!this.seat;
+  if(this.sight){
+    const degrees=Math.round(THREE.MathUtils.radToDeg(this.swing?.sight?.screenAngle??this.sight.screenAngle??0))%180;
+    const controls=this.lastDevice==='pad'?'D-pad ← →':'Wheel or Z / C';
+    aimStatus.textContent=degrees+'°  ·  '+controls+' to turn';
+  }else aimStatus.textContent=this.lockedTree?'Tree locked · Q to release':'';
   if(this.seat&&this.started&&!this.paused){$('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=!this.seated;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.seated?'Stand up':'Standing up…';$('context').textContent='Take your time · Mouse to look · WASD to stand';return;}
   const local=this.field?.fieldAction(this.player.feet,this.state);
   if(!this.sight&&local&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=local.type==='rack'&&!this.state.carried;$('chop-key').textContent='E';$('action-text').textContent=local.title;$('context').textContent=local.note;return;}

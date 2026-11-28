@@ -13,6 +13,7 @@ export class NearbyBark {
     }
     for(const tree of this.forest.colliders){
       if(tree.down||!tree.collider||this.active.has(tree)||Math.hypot(tree.x-feet.x,tree.z-feet.z)>tree.r+2.6)continue;
+      this.forest.setBarkDetail?.(tree,true);
       const {vertices,indices}=this.forest.barkSurface(tree);
       const desc=this.R.ColliderDesc.trimesh(vertices,indices,this.R.TriMeshFlags.FIX_INTERNAL_EDGES)
         .setTranslation(tree.x,tree.y,tree.z).setCollisionGroups(BARK_GROUPS);
@@ -29,5 +30,6 @@ export class NearbyBark {
     if(!this.active.delete(tree))return;
     this.world.removeCollider(tree.axeBark,false);tree.axeBark=null;
     tree.collider?.setCollisionGroups(0xffffffff);
+    if(!tree.down)this.forest.setBarkDetail?.(tree,false);
   }
 }

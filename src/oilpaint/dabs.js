@@ -23,6 +23,9 @@ out vec3 vC1;
 out vec3 vC2;
 out vec4 vAxis;
 out vec4 vGlaze;
+#ifdef DAB_SURFACE_INK
+out vec4 vInkPosition;
+#endif
 struct Dab {
   vec3 pos;    // where it is pinned
   vec3 dir;    // the way the stroke runs, in the world
@@ -54,6 +57,9 @@ void main() {
   vec2 across, along;
   vec4 vc;
   vGlaze = vec4(0.0);
+  #ifdef DAB_SURFACE_INK
+    vInkPosition = vec4(0.0);
+  #endif
   if (d.lie > 0.5) {
     vec3 Nn = normalize(d.nrm);
     vec3 A = d.dir - Nn * dot(d.dir, Nn);
@@ -65,6 +71,9 @@ void main() {
     if (d.alive < 0.004 || dist < 0.1) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     vec2 half_ = d.size * 0.5 * d.alive;
     vec3 world = P + A * position.y * half_.y + B * position.x * half_.x;
+    #ifdef DAB_SURFACE_INK
+      vInkPosition=vec4(world,1.0);
+    #endif
     if (d.glaze > 0.5) vGlaze = vec4((uFigShadeMat * vec4(world, 1.0)).xyz, 1.0);
     vec3 a = mat3(viewMatrix) * A * half_.y;
     vec3 b = mat3(viewMatrix) * B * half_.x;
@@ -116,13 +125,17 @@ void main() {
 }
 `;
 
-const FRAG = /* glsl */ `
+const FRAG = surfaceInk => /* glsl */ `
 ${COMMON}
 in vec2 vUv;
 in vec3 vC1;
 in vec3 vC2;
 in vec4 vAxis;
 in vec4 vGlaze;
+#ifdef DAB_SURFACE_INK
+in vec4 vInkPosition;
+${surfaceInk}
+#endif
 layout(location = 0) out vec4 outC;
 void main() {
   vec4 t = texture(tBrush, vUv);
@@ -149,16 +162,19 @@ void main() {
     col*=1.+rake*1.25*uImpasto;
     col+=vec3(1.,.97,.9)*pow(max(rake,0.),2.)*1.2*uImpasto;
   #endif
+  #ifdef DAB_SURFACE_INK
+    if(vInkPosition.w>.5)col=inkSurface(col,vInkPosition.xyz,normalize(cross(dFdx(vInkPosition.xyz),dFdy(vInkPosition.xyz))));
+  #endif
   outC = vec4(col, smoothstep(0.3, 0.62, t.g));
 }
 `;
 
-export function dabMaterial(shared, { head = '', body, uniforms = {}, minPx = [5, 9], maxPx = [400, 700], cells = [0, 8], pigment = false, depthTest = true, depthWrite = true } = {}) {
+export function dabMaterial(shared, { head = '', body, uniforms = {}, minPx = [5, 9], maxPx = [400, 700], cells = [0, 8], pigment = false, surfaceInk = '', depthTest = true, depthWrite = true } = {}) {
   return new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
-    defines:pigment?{SURFACE_PIGMENT:1}:{},
+    defines:{...(pigment?{SURFACE_PIGMENT:1}:{}),...(surfaceInk?{DAB_SURFACE_INK:1}:{})},
     vertexShader: VERT(head, body),
-    fragmentShader: FRAG,
+    fragmentShader: FRAG(surfaceInk),
     uniforms: {
       ...shared,
       uMinPx: { value: new THREE.Vector2(...minPx) },

@@ -12,7 +12,8 @@ import { COMMON } from '../oilpaint/common.js';
 import { dabMaterial, dabGeometry, dabMesh } from '../oilpaint/dabs.js';
 import { heightAt, wayDist, clearingAt, noise, rng, CLEARING, START } from './land.js';
 import { homeSite } from './home-site.js';
-import { cutShape,cutSample } from './bark-cut.js';
+import {prepareNotch,deepestCut,cutSample} from './bark-cut.js';
+import {cutSurface} from './cut-surface.js';
 
 const BEECH = 0, BIRCH = 1, OAK = 2, MAPLE = 3;
 
@@ -28,6 +29,22 @@ vec3 bark(int k, vec3 P, vec3 Nn, float r, float foot) {
   return c;
 }
 `;
+
+const CUT_GUIDE = /* glsl */ `
+uniform vec4 uGuideCentre; uniform vec4 uGuideFrame; uniform float uGuideLength;
+vec3 inkSurface(vec3 colour,vec3 position,vec3 normal){
+  if(uGuideLength<=0.)return colour;
+  vec3 d=position-uGuideCentre.xyz;vec2 n=uGuideFrame.xy,axis=uGuideFrame.zw;
+  vec2 plane=vec2(dot(d.xz,vec2(n.y,-n.x)),d.y);
+  float along=abs(dot(plane,axis)),across=abs(dot(plane,vec2(-axis.y,axis.x)));
+  float aa=clamp(fwidth(across),.0007,.009);
+  float cap=1.-smoothstep(uGuideLength-.009,uGuideLength,along);
+  float face=(1.-smoothstep(.12,.18,abs(dot(d.xz,n))))*smoothstep(-.12,.38,dot(normal.xz,n));
+  float line=(1.-smoothstep(.004-aa*.45,.004+aa,across))*cap*face;
+  float outline=(1.-smoothstep(.007,.009+aa,across))*cap*face;
+  float chalk=.74+.25*smoothstep(.055,.12,along);
+  return mix(mix(colour,colour*.39,outline*.74),vec3(1.,.86,.54),line*chalk);
+}`;
 
 const LEAF = /* glsl */ `
 const vec3 LEAF_L[5] = vec3[5](vec3(1.0, 0.8, 0.2), vec3(1.0, 0.57, 0.12), vec3(0.94, 0.26, 0.09), vec3(0.86, 0.82, 0.24), vec3(1.0, 0.9, 0.36));
@@ -263,20 +280,24 @@ export function createForest(shared) {
   woodGeometry.setAttribute('aData', new THREE.Float32BufferAttribute(wood.data, 3));
   woodGeometry.setAttribute('aRing',new THREE.Float32BufferAttribute(wood.ring,2));
   woodGeometry.setAttribute('aCut',new THREE.Float32BufferAttribute(new Float32Array(wood.position.length/3),1));
+  woodGeometry.setAttribute('aCutFace',new THREE.Float32BufferAttribute(new Float32Array(wood.position.length/3),1));
   woodGeometry.setIndex(wood.index);
+  const guideCentre=new THREE.Vector4(),guideFrame=new THREE.Vector4(),guideLength={value:0};
+  const guideUniforms={uGuideCentre:{value:guideCentre},uGuideFrame:{value:guideFrame},uGuideLength:guideLength};
   const woodMaterial = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
-    uniforms: shared,
+    uniforms:{...shared,...guideUniforms},
     vertexShader: /* glsl */ `
       ${COMMON}
-      in vec3 aData; in float aCut; in vec2 aRing;
-      out vec3 vWorld; out vec3 vN; out vec3 vData; out float vCut; out vec2 vRing;
-      void main() { vRing=aRing;vWorld = position; vN = normal; vData = aData; vCut=aCut; gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0); }`,
+      in vec3 aData; in float aCut; in float aCutFace; in vec2 aRing;
+      out vec3 vWorld; out vec3 vN; out vec3 vData; out float vCut; out float vCutFace; out vec2 vRing;
+      void main() { vRing=aRing;vWorld = (modelMatrix*vec4(position,1.)).xyz; vN = mat3(modelMatrix)*normal; vData = aData; vCut=aCut; vCutFace=aCutFace; gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0); }`,
     fragmentShader: /* glsl */ `
       ${COMMON}
       ${BARK}
       ${RANGE_GLSL}
-      in vec3 vWorld; in vec3 vN; in vec3 vData; in float vCut; in vec2 vRing;
+      in vec3 vWorld; in vec3 vN; in vec3 vData; in float vCut; in float vCutFace; in vec2 vRing;
+      ${CUT_GUIDE}
       layout(location = 0) out vec4 outC;
       void main() {
         float detail=woodDetail(length(vWorld.xz-cameraPosition.xz));
@@ -310,10 +331,14 @@ export function createForest(shared) {
         }
         float cutLit=max(.28,sunAt(vWorld+Nn*.025)*clamp(dot(Nn,uSunDir)*.8+.4,0.0,1.0));
         vec3 exposed=paint3(vec3(.98,.8,.48),vec3(.63,.43,.24),vec3(.27,.19,.14),cutLit,grain);
-        exposed*=.94+.06*texture(tNoise,vWorld.xz*12.0+vWorld.y*1.2).r;
-        c=mix(c,exposed,smoothstep(.01,.45,vCut));
-        float lip=smoothstep(.008,.045,vCut)*(1.-smoothstep(.06,.21,vCut));
-        c=mix(c,mix(BARK_S[kind],exposed,.21),lip*.40);
+        // The two hewn faces catch different amounts of sky even under the canopy.
+        float fibres=texture(tNoise,vec2(azimuth*105.+seed,h*2.7)).g;
+        exposed*=mix(.64,1.28,smoothstep(-.8,.8,vCutFace))*(.88+.18*fibres);
+        exposed*=1.-.17*smoothstep(.78,1.,vCut);
+        c=mix(c,exposed,smoothstep(.025,.26,vCut+(.5-fibres)*.034));
+        float lip=smoothstep(.006,.035,vCut)*(1.-smoothstep(.055,.17,vCut));
+        c=mix(c,mix(BARK_S[kind],exposed,.16),lip*.5);
+        if(abs(vData.y-uGuideCentre.w)<.001)c=inkSurface(c,vWorld,Nn);
         outC = vec4(hazed(c, vWorld), 1.0);
       }`,
   });
@@ -330,6 +355,7 @@ export function createForest(shared) {
   const barkVisible=new Float32Array(nb).fill(1),bole=new Float32Array(nb);
   for(const [first,end,radius] of trunkMarks)bole.fill(radius,first,end);
   const barkMesh = dabMesh(dabGeometry(nb, { aPos: [bp, 3], aDir: [bd, 3], aNrm: [bn, 3], aData: [bx, 4], aVisible:[barkVisible,1], aBole:[bole,1] }), dabMaterial(shared, {
+    uniforms:guideUniforms,surfaceInk:CUT_GUIDE,
     head: BARK + RANGE_GLSL + /* glsl */ `in vec3 aPos; in vec3 aDir; in vec3 aNrm; in vec4 aData; in float aVisible; in float aBole;`,
     body: /* glsl */ `
       void makeDab(inout Dab d) {
@@ -459,6 +485,10 @@ export function createForest(shared) {
     }
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(dz, 0, -dx).normalize(), angle);
     const origin = new THREE.Vector3(t.x, t.y + (scale===1?.38:0), t.z), v = new THREE.Vector3();
+    if(t.detailMesh){
+      const mesh=t.detailMesh;mesh.visible=!hidden;mesh.quaternion.copy(q);mesh.scale.setScalar(scale);
+      mesh.position.set(t.x,t.y,t.z).sub(origin).multiplyScalar(scale).applyQuaternion(q).add(origin);mesh.position.y-=sink;
+    }
     for (const {attr, name, start, end, data} of t.original) {
       const point = name === 'position' || name === 'aPos';
       for (let i = start; i < end; i++) {
@@ -481,6 +511,9 @@ export function createForest(shared) {
     barkTiles.sync(...t.ranges.bark);leafTiles.sync(...t.ranges.leaf);far.set(t,!hidden&&scale>.84&&Math.abs(angle)<.07);
   }
   function barkSurface(t){
+    if(t.detailMesh){
+      const g=t.detailMesh.geometry;return {vertices:g.attributes.position.array,indices:g.index.array};
+    }
     const {sides,count}=t.toolRings,vertices=new Float32Array(count*sides*3),indices=new Uint32Array((count-1)*sides*6);
     const pos=woodGeometry.attributes.position,start=t.ranges.wood[0];
     for(let i=0;i<count*sides;i++){
@@ -493,28 +526,68 @@ export function createForest(shared) {
     }
     return {vertices,indices};
   }
+  function uncutNormal(t,point){
+    // A bevel can touch the lip of an earlier V. Lay the next groove into the
+    // original trunk face, even when the collision normal belongs to that lip.
+    if(!t.uncut)return null;
+    const stock=t.uncut[0],{sides,count}=t.toolRings,triangle=new THREE.Triangle(),nearest=new THREE.Vector3(),normal=new THREE.Vector3();
+    let distance=Infinity;
+    const sample=(a,b,c)=>{
+      triangle.a.fromArray(stock,a*3);triangle.b.fromArray(stock,b*3);triangle.c.fromArray(stock,c*3);
+      triangle.closestPointToPoint(point,nearest);const d=nearest.distanceToSquared(point);
+      if(d<distance){distance=d;triangle.getNormal(normal);}
+    };
+    for(let row=0;row<count-1;row++)for(let side=0;side<sides;side++){
+      const a=row*sides+side,b=row*sides+(side+1)%sides;
+      sample(a,b,a+sides);sample(b,b+sides,a+sides);
+    }
+    if(normal.x*(point.x-t.x)+normal.z*(point.z-t.z)<0)normal.negate();
+    return normal;
+  }
+  function setBarkDetail(t,active){
+    t.detailActive=active;
+    if(!t.cut&&!t.detailMesh)return;
+    const {sides,count}=t.toolRings,length=(count-1)*sides*6;
+    const index=t.woodTile.mesh.geometry.index,start=t.tileIndex;
+    if(active){
+      const geometry=cutSurface(t,woodGeometry,t.uncut[0],t.uncut[1]);
+      if(t.detailMesh){t.detailMesh.geometry.dispose();t.detailMesh.geometry=geometry;}
+      else{
+        t.detailMesh=new THREE.Mesh(geometry,woodMaterial);t.detailMesh.position.set(t.x,t.y,t.z);group.add(t.detailMesh);
+        // The complete original bole remains available for shadows and distant views.
+        index.array.fill(t.ranges.wood[0],start,start+length);
+      }
+    }else if(t.detailMesh){
+      group.remove(t.detailMesh);t.detailMesh.geometry.dispose();t.detailMesh=null;
+      index.array.set(woodGeometry.index.array.subarray(t.indexStart,t.indexStart+length),start);
+    }else return;
+    index.addUpdateRange(start,length);index.needsUpdate=true;
+  }
   function carveTree(t,contact,nx,nz,damage){
     poseTree(t,0,1,0);
     if(!t.uncut)t.uncut=t.original.map(o=>o.data.slice());
     t.original.forEach((o,i)=>o.data.set(t.uncut[i]));
-    const cut={...cutShape(t.r,damage,t.type===OAK||t.type===MAPLE),...contact,nx,nz,radius:t.r};
-    const pos=t.original.find(o=>o.attr===woodGeometry.attributes.position),normal=t.original.find(o=>o.attr===woodGeometry.attributes.normal);
-    const marks=woodGeometry.attributes.aCut;
+    const records=contact.notches?.length?contact.notches:[{x:contact.x,y:contact.y,z:contact.z,nx,nz,angle:contact.angle,damage}];
+    t.notches=records.map(r=>prepareNotch(r,t.r,t.type===OAK||t.type===MAPLE));t.cut=t.notches.at(-1);
+    const pos=t.original[0],normal=t.original[1],marks=woodGeometry.attributes.aCut,faces=woodGeometry.attributes.aCutFace;
     for(let i=0;i<pos.data.length;i+=3){
-      const p=pos.data,s=cutSample(p[i],p[i+1],p[i+2],cut);
-      marks.setX(pos.start+i/3,s.depth>0?1:0);
-      if(s.depth<=0)continue;
-      p[i]-=nx*s.depth;p[i+2]-=nz*s.depth;
-      const n=new THREE.Vector3(nx,-Math.sign(s.h)*cut.depth/cut.height*s.along,nz).normalize();
-      normal.data.set(n.toArray(),i);
+      const p=pos.data,s=deepestCut(p[i],p[i+1],p[i+2],t.notches);
+      marks.setX(pos.start+i/3,s?s.depth/s.cut.depth:0);
+      faces.setX(pos.start+i/3,s?THREE.MathUtils.clamp(-s.h/.011,-1,1):0);
+      if(!s)continue;
+      const c=s.cut;p[i]-=c.nx*s.depth;p[i+2]-=c.nz*s.depth;
+      v.fromArray(normal.data,i);v.x+=c.nz*s.sideSlope;v.y+=s.riseSlope;v.z-=c.nx*s.sideSlope;
+      v.normalize().toArray(normal.data,i);
     }
     const bark=t.original.find(o=>o.attr===barkMesh.geometry.attributes.aPos);
     for(let i=0;i<bark.data.length;i+=3){
-      const j=bark.start+i/3,p=bark.data,s=cutSample(p[i],p[i+1],p[i+2],{...cut,height:cut.height+Math.min(.45,bx[j*4+3]*.36),width:cut.width+bx[j*4+1]*.35});
-      barkVisible[j]=s.depth>0?0:1;
+      const j=bark.start+i/3,p=bark.data;
+      const split=t.notches.some(c=>cutSample(p[i],p[i+1],p[i+2],{...c,height:c.height+Math.min(.45,bx[j*4+3]*.36),width:c.width+bx[j*4+1]*.35}).depth>0);
+      barkVisible[j]=split?0:1;
     }
-    marks.needsUpdate=true;barkMesh.geometry.attributes.aVisible.needsUpdate=true;
-    t.cut=cut;poseTree(t,0,1,0);return cut;
+    marks.needsUpdate=faces.needsUpdate=true;barkMesh.geometry.attributes.aVisible.needsUpdate=true;
+    if(t.detailActive||t.axeBark)setBarkDetail(t,true);
+    poseTree(t,0,1,0);return t.cut;
   }
   function resetCut(t){
     if(!t.uncut)return;
@@ -522,7 +595,18 @@ export function createForest(shared) {
     for(let i=t.ranges.wood[0];i<t.ranges.wood[1];i++)woodGeometry.attributes.aCut.setX(i,0);
     for(let i=t.ranges.bark[0];i<t.ranges.bark[1];i++)barkVisible[i]=1;
     woodGeometry.attributes.aCut.needsUpdate=true;barkMesh.geometry.attributes.aVisible.needsUpdate=true;
-    t.uncut=null;t.cut=null;poseTree(t,0,1,0);
+    setBarkDetail(t,false);t.uncut=null;t.cut=null;t.notches=null;poseTree(t,0,1,0);
+  }
+  function guideCut(sight){
+    const tree=sight?.tree,line=sight?.cutLine;
+    if(!tree||tree.windthrow||!sight.reachable||!line){guideLength.value=0;return;}
+    const face=sight.cutFace,n=Math.hypot(face.x,face.z);
+    if(n<.20){guideLength.value=0;return;}
+    const nx=face.x/n,nz=face.z/n;
+    const angle=Math.atan2(line.y,line.x*nz-line.z*nx);
+    guideFrame.set(nx,nz,Math.cos(angle),Math.sin(angle));
+    guideCentre.set(sight.point.x,sight.point.y,sight.point.z,tree.seed);
+    guideLength.value=Math.min(.19,Math.max(.11,tree.r*1.02));
   }
   const brushLayers=[['leaf',leafMesh,leafTiles],['bark',barkMesh,barkTiles]].map(([kind,mesh,tiles])=>{
     const attr=mesh.geometry.attributes.aPos,first=brushStart[kind];
@@ -538,5 +622,5 @@ export function createForest(shared) {
       tiles.sync(a,b,['aPos']);
     }
   });
-  return { barkSurface,updateDistance,clearBrush:brush.clear,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
+  return { barkSurface,uncutNormal,setBarkDetail,guideCut,updateDistance,clearBrush:brush.clear,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
 }

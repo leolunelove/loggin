@@ -18,7 +18,7 @@ Oak and maple are hardwood: build the woodshed and equip the felling axe to harv
 
 Jumping and sprinting draw from the stamina bar above the bag. A full load takes more effort and shortens the jump. Walking, standing and resting by the fire restore stamina. Progress and preferences stay in this browser. Existing Woodsmoke saves migrate into an isolated camp save so older open builds cannot overwrite new progression; moving to another hostname starts a separate browser save.
 
-Closing the workbench with its close button or U returns control to the forest. Escape releases the mouse. Tap for one stroke or hold for a run of swings. Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Hold the right mouse button for an over-the-shoulder view. Place the sight on a spot within axe reach and left-click to work it. Release to recover your walking view. Press Q to lock or release a tree. Felling, range and menus also release the lock.
+Closing the workbench with its close button or U returns control to the forest. Escape releases the mouse. Tap for one stroke or hold for a run of swings. Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Hold the right mouse button for an over-the-shoulder view. Aim at a patch of bark. Scroll to rotate the guide or use Z / C for a fine adjustment, then left-click. The two-handed swing follows the selected line. Crossing strokes leave separate grooves. Following one line deepens it, and the cuts stay on the tree when you return. Release to recover your walking view. Press Q to lock or release a tree. Felling, range and menus also release the lock.
 
 Felling a tree pays its wood into your bag once. Loose sections roll when nudged and part at the cut after three ordinary starter-axe hits. A heavy stroke or a stronger axe cuts faster. Bark, brush, soil, water and the handcart each respond to the blade.
 
@@ -81,7 +81,9 @@ New camps roll a random seed for terrain, tree layout and a winding, shallow riv
 | Left mouse | Swing the axe while moving. Hold to repeat. |
 | E | Work a nearby tree or use the camp interaction |
 | E / left mouse at rack | Start unloading |
-| Hold right mouse / left trigger | Aim over the shoulder; scroll to set the close-view distance |
+| Hold right mouse / left trigger | Aim over the shoulder |
+| Wheel or Z / C while aiming | Rotate the cutting angle. On a gamepad, use D-pad left / right while holding the left trigger. |
+| Alt + wheel while aiming | Adjust the close-view distance |
 | Q / right stick click | Lock or release a tree |
 | R | Manage the nearby handcart, or reserve/release an eligible tree near a home |
 | Shift + left mouse | Heavier stroke, effective on hardwood and fallen logs |

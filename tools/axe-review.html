@@ -4,17 +4,19 @@
 <label>Axe <select id="tier"><option>Hand axe</option><option>Felling axe</option><option>Steel axe</option><option>Splitting axe</option><option>Forester’s axe</option></select></label>
 <label>Stroke <select id="form"><option>Natural</option><option>Overhead</option><option>Diagonal</option><option>Compact</option><option>Backhand</option><option>Low hew</option></select></label><label>Rate <select id="rate"><option>30</option><option selected>60</option><option>120</option></select></label>
 <button id="standing">Cut a standing tree</button><button id="wall">Cut beside the shack</button><button id="rail">Swing through a rail</button><button id="ground">Strike the ground</button><button id="carry">Turn into a post</button>
+<label>Cut angle <select id="cutAngle"><option value="0">Horizontal</option><option value="45">45° rising</option><option value="90">Vertical</option><option value="135">45° falling</option></select></label>
 <button id="shoulderHigh">Sight upper bark</button><button id="shoulderLow">Sight lower bark</button><button id="precise">Cut at the sight</button><button id="lookout">Release the shoulder view</button><button id="saveShoulder">Save shoulder frame</button>
 <button id="free">Swing in open space</button><button id="stow">Stow on the pack</button><button id="draw">Draw into a cut</button><button id="close">Frame the axe</button><button id="wide">Frame the woodcutter</button><button id="advance">Advance one frame</button>
-</header><output aria-live="polite">Loading the forest…</output><iframe title="Playable forest" src="/?capture&amp;nopad&amp;woodlandReview"></iframe>
+</header><output aria-live="polite">Loading the forest…</output><iframe title="Playable forest" src="/?capture&amp;nopad&amp;woodlandReview&amp;reviewSeed=740281"></iframe>
 <script type="module">
 const $=id=>document.getElementById(id),frame=document.querySelector('iframe'),out=document.querySelector('output');
 let lab,g,h,board,wood,metrics,lastLabel='',aim,focus,hitFrame,clearing;
+const shoulder=()=>({...neutral(),aimHeld:true,cutAngle:Number($('cutAngle').value)*Math.PI/180});
 const neutral=()=>({move:{x:0,y:0},look:{x:0,y:0},zoom:0,walk:false,device:'pad'}),rate=()=>Number($('rate').value);
 const mm=n=>Math.round(n*1000),v=(x=0,y=0,z=0)=>new lab.THREE.Vector3(x,y,z);
 const ready=setInterval(()=>{
   lab=frame.contentWindow.lab;if(!lab?.ready)return;clearInterval(ready);g=lab.game;h=g.heldAxe;
-  g.started=true;lab.input.override=neutral;
+  g.started=true;g.save=()=>{};lab.input.override=neutral;
   frame.contentDocument.getElementById('intro').hidden=true;frame.contentDocument.getElementById('mouse-capture').hidden=true;
   g.state.carried=g.state.carriedHardwood=0;g.state.shed=40;g.state.axe=0;g.state.speed=0;g.renderHud();
   g.state.hour=15;g.weatherOverride={rain:0,mist:0,overcast:.12,label:'Clear'};
@@ -128,25 +130,31 @@ function sightView(pitch){
   clear();sightTree=tree();if(!sightTree)return;
   const t=sightTree;g.state.axeStowed=false;g.stowWeight=0;
   visit(t.x,t.z+t.r+.96,t.x,t.z,pitch);
-  lab.input.override=()=>({...neutral(),aimHeld:true});lab.step(1/60,95,false);g.updatePrompt();
+  lab.input.override=shoulder;lab.step(1/60,95,false);g.updatePrompt();
   sightRead();
 }
 function sightRead(extra=''){
   const s=g.sight,p=s?.point;
   out.textContent=(g.follow.shoulder?'Over the shoulder':'Walking view')+' · camera '+g.follow.distance.toFixed(2)+' m · FOV '+lab.camera.fov.toFixed(1)+'° · '+(p?(s.tree?'bark':'surface')+' '+(p.y-lab.player.feet.y).toFixed(2)+' m high · '+(s.reachable?'in reach':'out of reach'):'free look')+extra;
 }
+$('cutAngle').onchange=()=>{
+  if(!g.sight)sightView(.08);
+  lab.input.override=shoulder;lab.step(1/60,75,false);g.updatePrompt();sightRead(' · selected '+$('cutAngle').value+'°');
+};
 $('shoulderHigh').onclick=()=>sightView(-.10);
 $('shoulderLow').onclick=()=>sightView(.29);
 $('precise').onclick=()=>{
   if(!g.sight)sightView(.03);
+  lab.input.override=shoulder;lab.step(1/60,65,false);
   const before=g.sight?.point?.clone(),xp=g.state.woodcutting.xp;
-  lab.input.override=()=>({...neutral(),aimHeld:true,swingPressed:true,chopPressed:true});
-  lab.step(1/60,1,false);lab.input.override=()=>({...neutral(),aimHeld:true});
+  lab.input.override=()=>({...shoulder(),swingPressed:true,chopPressed:true});
+  lab.step(1/60,1,false);lab.input.override=shoulder;
   let s=g.swing;if(s&&$('form').selectedIndex)s.variant=$('form').selectedIndex-1;
   for(let i=0;i<62;i++){lab.step(1/60,1,false);s=g.swing||s;if(s?.hit)break;}
   const contact=g.chopAnimation.metrics.contact;
   const face=contact?' · '+contact.part.name+' · '+(-contact.velocity.dot(contact.normal)).toFixed(2)+' m/s inward · flat '+Math.abs(v(0,0,1).applyQuaternion(contact.rotation).dot(contact.normal)).toFixed(2):'';
-  sightRead(' · form '+s?.variant+' · '+(s?.material||'air')+face+' · travel '+Math.round((s?.travel||0)*100)+' cm'+' · '+(g.state.woodcutting.xp-xp)+' XP'+(s?.bite&&before?' · actual / aim '+s.bite.point.y.toFixed(2)+' / '+before.y.toFixed(2)+' m · error '+Math.round(s.bite.point.distanceTo(before)*100)+' cm':''));
+  const cuts=s?.sight?.tree?.notches||[];
+  sightRead(' · cut '+Math.round((s?.sight?.screenAngle??0)*180/Math.PI)+'° · grooves '+cuts.length+' · form '+s?.variant+' · '+(s?.material||'air')+face+' · travel '+Math.round((s?.travel||0)*100)+' cm'+' · '+(g.state.woodcutting.xp-xp)+' XP'+(s?.bite&&before?' · actual / aim '+s.bite.point.y.toFixed(2)+' / '+before.y.toFixed(2)+' m · error '+Math.round(s.bite.point.distanceTo(before)*100)+' cm':''));
 };
 $('saveShoulder').onclick=async()=>{
   if(!g.sight)sightView(.03);
@@ -156,6 +164,8 @@ $('saveShoulder').onclick=async()=>{
   const ctx=canvas.getContext('2d');ctx.drawImage(source,0,0);
   const reticle=frame.contentDocument.getElementById('aim-crosshair'),svg=reticle.querySelector('svg').cloneNode(true);
   svg.querySelector(g.sight?.reachable?'.distant-sight':'.working-sight').remove();
+  const angle=g.swing?.sight?.screenAngle??g.sight?.screenAngle??0;
+  svg.querySelector('g').setAttribute('transform','rotate('+(-angle*180/Math.PI)+' 12.5 12.5)');
   const icon=new Image();icon.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));await icon.decode();
   const size=reticle.offsetWidth*canvas.width/source.clientWidth;
   ctx.drawImage(icon,(canvas.width-size)/2,(canvas.height-size)/2,size,size);

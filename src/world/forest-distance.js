@@ -49,7 +49,8 @@ export function tileTrunks(source,trees){
   for(const t of trees){
     const k=key(t.x,t.z);
     if(!tiles.has(k))tiles.set(k,{...bound(t.x,t.z),indices:[]});
-    const list=tiles.get(k).indices;for(let i=t.indexStart;i<t.indexEnd;i++)list.push(g.index.array[i]);
+    t.woodTile=tiles.get(k);const list=t.woodTile.indices;t.tileIndex=list.length;
+    for(let i=t.indexStart;i<t.indexEnd;i++)list.push(g.index.array[i]);
   }
   for(const t of tiles.values()){
     const geom=new THREE.BufferGeometry();for(const [n,a] of Object.entries(g.attributes))geom.setAttribute(n,a);

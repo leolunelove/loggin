@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {insideNotch} from './bark-cut.js';
+import {notchAt} from './bark-cut.js';
 import { CHOP_REACH } from '../mechanics.js';
 import {riverCenter,riverDistance} from './river.js';
 import {AXE_GROUPS} from './woodland-physics.js';
@@ -50,10 +50,10 @@ export function shoulderSight(game){
   const tree=collider.standingTree||game.field?.windthrows().find(t=>t.body?.handle===collider.handle);
   const normal=new THREE.Vector3().copy(hit.normal);if(normal.dot(direction)>0)normal.negate();
   const sight={point,normal,freePoint,distance,reachable,collider,tree:tree&&!tree.down?tree:null};
-  const inCut=!tree?.windthrow&&insideNotch(tree?.cut,point);
+  const inCut=!tree?.windthrow&&notchAt(tree,point);
   if(reachable&&sight.tree&&!tree.windthrow){
     // The camera can see around a bole farther than the player's hands can.
-    const face=inCut?tree.cut:{nx:normal.x,nz:normal.z};
+    const face=inCut||{nx:normal.x,nz:normal.z};
     const length=Math.hypot(face.nx,face.nz);
     if(length>.4&&distance>.12){
       const alignment=(face.nx*(feet.x-point.x)+face.nz*(feet.z-point.z))/(length*distance);
@@ -66,6 +66,7 @@ export function shoulderSight(game){
     // the player's side while keeping the exact place the sight picked.
     const towardFeet=new THREE.Vector3(feet.x-point.x,0,feet.z-point.z).normalize();
     sight.entry=towardFeet;
+    sight.mouthNormal=new THREE.Vector3(inCut.nx,0,inCut.nz).normalize();
   }
   if(!reachable||tree)return sight;
   for(const trunk of game.looseTimber||[]){

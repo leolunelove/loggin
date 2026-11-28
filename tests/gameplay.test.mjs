@@ -191,6 +191,40 @@ test('shoulder aim works two distinct patches of bark with real axe contact for 
  }
  assert.deepEqual(bad,[]);
 });
+test('shoulder strikes carry the selected plane through physical contact at varied rates',()=>{
+ const bad=[];
+ for(const fps of [30,60,120])for(const height of [.94,1.36])for(const degrees of [0,30,45,75,90,115,135,160]){
+  const g=sightRig(height,2,fps),cutAngle=degrees*Math.PI/180,aim={...frame(),aimHeld:true,cutAngle};
+  g.step(.35,aim);const mark=g.sight.point.clone();
+  g.step(1/fps,{...aim,swingPressed:true,chopPressed:true,clickAngle:cutAngle});
+  g.step(1.2,{...frame(),aimHeld:true,cutAngle:(cutAngle+.7)%Math.PI});
+  const s=g.observedSwing,contact=s?.bite;
+  const plane=contact&&new THREE.Vector3(0,0,1).applyQuaternion(contact.rotation);
+  const realLine=plane&&plane.cross(s.sight.cutFace).normalize();
+  const match=realLine?Math.abs(realLine.dot(s.sight.cutLine)):0;
+  const error=contact?contact.point.distanceTo(mark):Infinity;
+  if(s?.sight.screenAngle!==cutAngle||g.hits.length!==1||error>.105||match<.94)
+    bad.push([fps,height,degrees,s?.material,Math.round(error*100),Math.round(THREE.MathUtils.radToDeg(Math.acos(Math.min(1,match))))]);
+  g.physics.free();
+ }
+ assert.deepEqual(bad,[]);
+});
+
+test('a slender trunk accepts four marked angles when the shoulder camera sees its rounded side',()=>{
+ for(const degrees of [0,45,90,135]){
+  const g=sightRig(1.22,2),t=g.forest.trees[0],cutAngle=degrees*Math.PI/180;
+  t.r=.16;t.x=-.09;t.z=-1.177;t.collider.setShape(new R.Cylinder(1.55,t.r));
+  t.collider.setTranslation({x:t.x,y:1.45,z:t.z});g.physics.step();
+  g.camera.position.set(.46,1.53,1.65);g.camera.lookAt(.02,1.22,-1.06);g.camera.updateMatrixWorld(true);
+  const aim={...frame(),aimHeld:true,cutAngle};g.step(.4,aim);
+  assert.ok(g.sight.reachable);assert.ok(g.sight.normal.x>.6);
+  const mark=g.sight.point.clone();
+  g.step(1/60,{...aim,swingPressed:true,chopPressed:true,clickAngle:cutAngle});g.step(1.16,frame());
+  const hit=g.observedSwing;assert.equal(hit.material,'bark',degrees+'°');
+  assert.ok(hit.bite.point.distanceTo(mark)<.10,degrees+'°');
+  g.physics.free();
+ }
+});
 test('the shoulder sight gives a step-around cue for an oblique patch visible past a trunk',()=>{
  const g=sightRig(1.12),tree=g.forest.trees[0],aim={...frame(),aimHeld:true};
  g.step(.12,aim);assert.ok(g.sight.reachable);
