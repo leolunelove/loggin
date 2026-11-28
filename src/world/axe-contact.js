@@ -5,7 +5,7 @@ import {riverCenter,riverDistance} from './river.js';
 import {AXE_GROUPS} from './woodland-physics.js';
 
 const up=new THREE.Vector3(0,1,0),reach=CHOP_REACH;
-// The assist finds the surface of the cylinder, even when the player is by its end.
+// Find the near working surface of the bole, including its taper and lean.
 export function looseAim(trees,feet,yaw,pitch=0){
   const dx=Math.sin(yaw),dz=Math.cos(yaw);
   const aim=new THREE.Vector3(feet.x+dx*.91,feet.y+.37,feet.z+dz*.91);
@@ -22,12 +22,26 @@ export function looseAim(trees,feet,yaw,pitch=0){
       consider(new THREE.Vector3(tree.x+offset.x,tree.y+.39,tree.z+offset.y),'stump',tree,null);
     }
     for(const part of tree.sections||[]){
+      if(part.body.isKinematic?.())continue;
       const centre=part.body.translation();if(Math.hypot(centre.x-feet.x,centre.z-feet.z)>reach+part.length*.5+.5)continue;
+      if(part.owner){
+        const {wood}=part.owner,q=part.body.rotation();
+        const station=THREE.MathUtils.clamp(part.owner.local(part,aim).y,part.lo+.12,part.hi-.12);
+        const p=wood.centre(station).sub(part.rest).applyQuaternion(q).add(centre);
+        const axis=up.clone().applyQuaternion(q),top=up.clone().projectOnPlane(axis).normalize();
+        p.addScaledVector(top,wood.radius(station)*.94);
+        consider(p,'section',tree,part);
+        continue;
+      }
       const axis=up.clone().applyQuaternion(part.body.rotation()),c=new THREE.Vector3().copy(centre);
       const along=THREE.MathUtils.clamp(aim.clone().sub(c).dot(axis),-part.length*.46,part.length*.46);
       const p=c.addScaledVector(axis,along);p.y+=part.radius*.91;
       consider(p,'section',tree,part);
     }
+  }
+  if(best?.part){
+    const body=best.part.body;
+    best.local=best.point.clone().sub(body.translation()).applyQuaternion(new THREE.Quaternion().copy(body.rotation()).invert());
   }
   return best;
 }
@@ -71,7 +85,7 @@ export function shoulderSight(game){
   if(!reachable||tree)return sight;
   for(const trunk of game.looseTimber||[]){
     const stump=trunk.stumpCollider?.handle===collider.handle;
-    const part=stump?null:trunk.sections?.find(p=>p.body.collider(0).handle===collider.handle);
+    const part=!stump&&collider.fallenPart?.tree===trunk?collider.fallenPart:null;
     if(!part&&!stump)continue;
     sight.timber={kind:stump?'stump':'section',tree:trunk,part,point,x:point.x,y:point.y,z:point.z,r:.12,type:trunk.type};
     if(part){const body=part.body;sight.body=body;sight.local=point.clone().sub(body.translation()).applyQuaternion(new THREE.Quaternion().copy(body.rotation()).invert());}

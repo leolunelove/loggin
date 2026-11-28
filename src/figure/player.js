@@ -78,6 +78,10 @@ export class Player {
 
   // --- what he wants, from the input ---------------------------------------------------------
   intent(input, camYaw) {
+    if(input.workStep){
+      const {x,z}=input.workStep,speed=Math.hypot(x,z);
+      return {dir:new THREE.Vector3(x,0,z).normalize(),dirYaw:Math.atan2(x,z),mag:Math.min(1,speed/1.5),scale:1,speed};
+    }
     const m = input.move, mag = Math.min(1, Math.hypot(m.x, m.y));
     const f = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
     const r = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));

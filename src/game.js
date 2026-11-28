@@ -3,7 +3,7 @@ import {skillsPage} from './woodcutting-ui.js';
 import {facesWork,looseAim,openAim,waterContact,nudgeSection,shoulderSight} from './world/axe-contact.js';
 import {Endurance} from './effort.js';
 import {PATCH_FILES} from './exploration.js';
-import {plantTrunk,fallingTrunk,placeSection,sectionBody} from './world/woodland-physics.js';
+import {plantTrunk} from './world/woodland-physics.js';
 import {campObjective,chooseBearing} from './camp-guidance.js';
 import {woodcraft} from './world/woodcraft.js';
 import {createHandcart} from './world/handcart.js';
@@ -22,7 +22,8 @@ import {WORLD,randomSeed} from './world/seed.js';
 import {newCamp,SAVE_KEY} from './save.js';
 import * as THREE from 'three';
 import { paint } from './figure/figure.js';
-import { pinDabs } from './oilpaint/pins.js';
+import {FallenTree} from './world/fallen-tree.js';
+import {workStance,stepIntoStance} from './figure/work-stance.js';
 import { AXES, TREES, upgradeCost, purchase, swingDuration, rewardFor, depositWood, bagCapacity, isHardwood, canHarvest, } from './economy.js';
 import { atWoodRack,homeDistance } from './world/home-site.js';
 const $ = id => document.getElementById(id);
@@ -79,7 +80,7 @@ export class Lumberjack {
     if(this.state.down[i]){
       t.down=true;t.regrow=this.state.down[i];forest.poseTree(t,0,0,1,true);
       if(t.collider){physics.removeCollider(t.collider,true);t.collider=null;}
-      this.makeStump(t);this.makeLogs(t,Math.sin(t.seed),Math.cos(t.seed));
+      this.makeStump(t);this.makeFallenTree(t,t.seed,false);
     }else{
       const cut=this.state.woodcutting.cuts[i];
       if(cut&&cut.hp<t.hp){
@@ -99,6 +100,7 @@ export class Lumberjack {
  save(){
   if(this.resetting||this.externalSaveChange)return;
   if(this.player?.endurance)this.state.stamina=this.player.endurance.value;
+  for(const t of this.looseTimber||[])t.fallen?.snapshot();
   const ok=writeSave(this.storage,this.state);this.saveStatus=ok?'saved':'unavailable';
   this.updateSaveNote();
   if(!ok&&!this.saveWarned){this.toast('Progress cannot be saved in this browser.');this.saveWarned=true;}
@@ -541,7 +543,10 @@ export class Lumberjack {
   }
   if(this.swing){
     this.drawStroke=null;
-    const s=this.swing;inp.blockJump=true;inp.walk=true;inp.sprint=false;s.age+=dt;s.poseProgress=Math.min(1,s.age/s.duration);
+    const s=this.swing;inp.blockJump=true;inp.walk=true;inp.sprint=false;
+    if(s.stance===undefined)s.stance=workStance(this,s);
+    const stepping=stepIntoStance(s.stance,this.player,inp,dt);
+    s.age=stepping?Math.min(s.age+dt,.075*s.duration):s.age+dt;s.poseProgress=Math.min(1,s.age/s.duration);
     const work=s.sight?.point||s.t;
     inp.facingYaw=s.free?s.yaw:Math.atan2(work.x-this.player.feet.x,work.z-this.player.feet.z);
     if(s.age>=s.duration*.33&&!s.swished){s.swished=true;this.audio?.brushSound?.('air',this.player.feet,s.heavy?.46:.32);}
@@ -581,7 +586,9 @@ export class Lumberjack {
     return p;
   }
   if(s.t.kind==='air')return openAim(feet,s.yaw,s.pitch).point;
-  const p=s.t.point.clone(),dx=p.x-feet.x,dz=p.z-feet.z,d=Math.hypot(dx,dz);
+  const body=s.t.part?.body;
+  const p=s.t.local&&body?.isValid()?s.t.local.clone().applyQuaternion(body.rotation()).add(body.translation()):s.t.point.clone();
+  const dx=p.x-feet.x,dz=p.z-feet.z,d=Math.hypot(dx,dz);
   if(d>CHOP_REACH){p.x=feet.x+dx/d*CHOP_REACH;p.z=feet.z+dz/d*CHOP_REACH;}
   return p;
  }
@@ -608,10 +615,9 @@ export class Lumberjack {
   s.faceNormal=hit.normal;
   s.contact=p;
   const standing=hit.collider.standingTree||this.forest.trees.find(tr=>tr.collider?.handle===handle);
-  const falling=this.falling?.find(f=>f.t.fallBody?.collider(0).handle===handle);
   const windthrow=this.field?.windthrows().find(tr=>tr.body?.handle===handle);
-  if(standing||windthrow||falling){
-    const tree=standing||windthrow||falling.t;this.impactUntil=this.time+.14;s.material='bark';
+  if(standing||windthrow){
+    const tree=standing||windthrow;this.impactUntil=this.time+.14;s.material='bark';
     if(this.workAllowed(tree)&&this.workFits(tree)&&!tree.down){this.hit(tree);return;}
     this.audio.hit(tree.type,this.state.axe,p,false,s.heavy,s.energy);
     if(!tree.down)tree.shake=this.time;
@@ -621,15 +627,16 @@ export class Lumberjack {
     if(tree.stumpCollider?.handle===handle){
       s.material='stump';this.audio.stack(p,7);this.edgeChips(p,yaw,5);this.impactUntil=this.time+.14;return;
     }
-    const part=tree.sections?.find(log=>log.body.collider(0).handle===handle);
-    if(!part)continue;
+    const part=hit.collider.fallenPart;if(!part||part.tree!==tree)continue;
     s.material='section';this.impactUntil=this.time+.14;this.audio.hit(tree.type,this.state.axe,p,false,s.heavy,s.energy);
-    this.edgeChips(p,yaw,s.heavy?9:6);nudgeSection(part,p,yaw,s.heavy,this.state.axe,hit.velocity);
-    part.hits+=s.heavy||this.state.axe>=2?2:1;
-    const work=logCut(this.state,tree,part);
-    if(part.hits>=3&&part.length>1.1)this.splitSection(tree,part,p,yaw);
-    else this.scoreSection(part,p);
-    if(work){this.updateSkill(work);this.save();}
+    this.edgeChips(p,yaw,s.heavy?9:6);if(!part.body.isDynamic())return;
+    nudgeSection(part,p,yaw,s.heavy,this.state.axe,hit.velocity);
+    const cut=tree.fallen.cut(part,p,s.heavy||this.state.axe>=2?2:1);
+    if(cut){
+      const work=logCut(this.state,tree,cut);if(work)this.updateSkill(work);
+      tree.regrow=Math.max(tree.regrow,Date.now()+30000);tree.fallen.record.until=this.state.down[tree.id]=tree.regrow;
+      this.shade.refresh();this.save();
+    }
     return;
   }
   const cartMaterial=this.cart?.strike?.(hit.collider,p,s.heavy);
@@ -645,32 +652,6 @@ export class Lumberjack {
   ring.rotation.x=-Math.PI/2;ring.position.copy(p);ring.position.y+=.025;ring.scale.setScalar(.045);
   this.scene.add(ring);(this.ripples??=[]).push({ring,age:0});
  }
- scoreSection(part,p){
-  const mesh=part.mesh;if(mesh.children.length>=4)return;
-  const local=mesh.worldToLocal(p.clone()),mark=new THREE.Mesh(new THREE.TorusGeometry(part.radius*.985,.012,4,14,2.1),this.cutPaint);
-  mark.rotation.order='YXZ';mark.rotation.x=Math.PI/2;mark.rotation.y=Math.atan2(local.x,local.z)+.45;
-  mark.position.y=THREE.MathUtils.clamp(local.y,-part.length*.44,part.length*.44);mesh.add(mark);
- }
- splitSection(tree,part,p,yaw){
-  const centre=new THREE.Vector3().copy(part.body.translation()),q=new THREE.Quaternion().copy(part.body.rotation());
-  const axis=UP.clone().applyQuaternion(q),half=part.length/2;
-  const cut=THREE.MathUtils.clamp(p.clone().sub(centre).dot(axis),-half*.31,half*.31);
-  const velocity=part.body.linvel(),spin=part.body.angvel(),index=tree.sections.indexOf(part),pieces=[];
-  for(const [start,end] of [[-half,cut],[cut,half]]){
-    const length=end-start-.014,r=part.radius;
-    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(r*.96,r,length,9),[this.woodPaint,this.cutPaint,this.cutPaint]);
-    mesh.position.copy(centre).addScaledVector(axis,(start+end)/2);mesh.quaternion.copy(q);tree.logs.add(mesh);
-    const body=sectionBody(this.physics,this.RAPIER,mesh,r,length,0,0,false),side=start<cut?-1:1;
-    body.setLinvel({x:velocity.x+axis.x*side*.22,y:velocity.y+.10,z:velocity.z+axis.z*side*.22},true);body.setAngvel(spin,true);
-    pieces.push({body,mesh,radius:r,length,hits:0});
-  }
-  this.physics.removeRigidBody(part.body);tree.logs.remove(part.mesh);part.mesh.traverse(o=>o.geometry?.dispose());
-  tree.sections.splice(index,1,...pieces);
-  this.scene.remove(tree.logPaint.mesh);tree.logPaint.mesh.geometry.dispose();tree.logPaint.mesh.material.dispose();
-  tree.logs.updateMatrixWorld(true);
-  tree.logPaint=pinDabs(this.shared,[WOOD],tree.sections.map(({mesh,length})=>({mesh,count:Math.round(length*43),style:()=>({pal:0,size:[.05,.15],dir:UP})})));
-  this.scene.add(tree.logPaint.mesh);tree.logPaint.update();this.audio.sample('trunk-crack',{gain:.38,rate:1.32,position:p});
- }
  pose(dt=1/60){
   const s=this.swing;
   if(s&&!s.hit)s.contact=this.swingPoint(s);
@@ -683,7 +664,7 @@ export class Lumberjack {
   this.stowWeight=THREE.MathUtils.clamp(this.stowWeight+(packed?dt/.38:-dt/.29),0,1);
   const guards=()=>this.axeOwner.guards(this.figure.man,this.figure.pack,this.figure.headwear??this.figure.hat);
   if(seated)this.heldAxe.stow();
-  this.chopAnimation.update(dt,s,this.state.axe,seated?null:this.heldAxe,guards,{weight:this.stowWeight,loop:this.figure.pack.axeLoop},this.sight);
+  this.chopAnimation.update(dt,s,this.state.axe,seated?null:this.heldAxe,guards,{weight:this.stowWeight,loop:this.figure.pack.axeLoop},this.sight,this.player);
   const {contact,blade}=this.chopAnimation.metrics;
   const driving=s&&!s.hit&&s.poseProgress>=.34&&s.poseProgress<=.59;
   if(driving&&s.lastEdge){
@@ -722,45 +703,32 @@ export class Lumberjack {
   if(t.stump)return;const g=new THREE.CylinderGeometry(t.r*.92,t.r*1.25,.44,10);const m=new THREE.Mesh(g,[this.woodPaint,this.cutPaint,this.woodPaint]);m.position.set(t.x,t.y+.18,t.z);this.scene.add(m);t.stump=m;
   t.stumpCollider=this.physics.createCollider(this.RAPIER.ColliderDesc.cylinder(.21,t.r*1.08).setTranslation(t.x,t.y+.18,t.z));
  }
- makeLogs(t,dx,dz,live=false){
-  if(t.logs)return;
-  t.logs=new THREE.Group();const parts=[];t.sections=[];
-  for(let i=0;i<3;i++){
-    const r=Math.max(.09,t.r*(.75-i*.07)),length=1.4+i*.22;
-    const x=t.x+dx*(1.2+i*1.5)+dz*(i-1)*.3,z=t.z+dz*(1.2+i*1.5)-dx*(i-1)*.3;
-    const saved=this.state.woodcutting.splits[t.id];
-    const divided=saved?.until===t.regrow&&!!(saved.mask&(1<<i));
-    const size=divided?(length-.028)/2:length;
-    for(const offset of divided?[-length*.25,length*.25]:[0]){
-      const mesh=new THREE.Mesh(new THREE.CylinderGeometry(r*.88,r,size,9),[this.woodPaint,this.cutPaint,this.cutPaint]);
-      placeSection(mesh,x+dx*offset,z+dz*offset,dx,dz,size,r,this.heightAt,live);
-      const body=sectionBody(this.physics,this.RAPIER,mesh,r,size,dx,dz,live);
-      t.sections.push({mesh,body,radius:r,length:size,hits:!divided&&saved?.until===t.regrow?(saved.scores?.[i]||0):0,sourceIndex:divided?null:i});
-      t.logs.add(mesh);parts.push({mesh,count:divided?35:70,style:()=>({pal:0,size:[.06,.18],dir:UP})});
-    }
+ makeFallenTree(t,bearing,live,notches){
+  const splits=this.state.woodcutting.splits,record=splits[t.id]?.until===t.regrow?splits[t.id]:(splits[t.id]={until:t.regrow,mask:0});
+  record.bearing??=bearing;
+  if(notches?.length)record.notches=notches;
+  if(!t.cut&&record.notches?.length){
+    const mark=record.notches.at(-1);this.forest.carveTree(t,{...mark,notches:record.notches},mark.nx,mark.nz,1);
   }
-  this.looseTimber.add(t);this.scene.add(t.logs);t.logs.updateMatrixWorld(true);
-  t.logPaint=pinDabs(this.shared,[WOOD],parts);t.logPaint.update();this.scene.add(t.logPaint.mesh);
+  const source=this.forest.fallenWood(t);
+  this.forest.poseTree(t,0,1,0,true);
+  const direction=record.bearing,dx=Math.sin(direction),dz=Math.cos(direction);
+  const plan=createTreeFall(t,dx,dz,this.heightAt);
+  t.fallen=new FallenTree(this,t,source,record);t.fallen.begin(live?0:plan.contactAngle,live);
+  this.looseTimber.add(t);
+  if(live)this.falling.push({t,age:0,dx,dz,plan,sound:this.audio.beginFall(t)});
  }
  updateTimber(){
-  for(const tree of this.looseTimber){
-    let moved=false;
-    for(const part of tree.sections){
-      const {mesh,body}=part,sleeping=body.isSleeping();if(sleeping&&part.atRest)continue;
-      part.atRest=sleeping;
-      const p=body.translation(),q=body.rotation();
-      mesh.position.copy(p);mesh.quaternion.copy(q);moved=true;
-    }
-    if(moved){tree.logs.updateMatrixWorld(true);tree.logPaint.update();}
-  }
+  let settled=false;
+  for(const tree of this.looseTimber)if(tree.fallen.sync())settled=true;
+  if(settled){this.shade.refresh();this.save();}
  }
  clearRemains(t){
-  if(t.fallBody){this.physics.removeRigidBody(t.fallBody);t.fallBody=null;}
+  if(t.fallen){t.fallen.dispose();t.fallen=null;t.sections=null;this.looseTimber.delete(t);}
   if(t.stumpCollider){this.physics.removeCollider(t.stumpCollider,true);t.stumpCollider=null;}
-  if(t.sections){for(const {body} of t.sections)this.physics.removeRigidBody(body);this.looseTimber.delete(t);t.sections=null;}
   delete this.state.woodcutting.splits[t.id];this.field?.clearGrowth(t);this.forest.resetCut(t);
-  for(const m of [t.stump,t.notch,t.logs,t.logPaint?.mesh])if(m){this.scene.remove(m);m.traverse(o=>o.geometry?.dispose());}
-  t.logPaint?.mesh.material.dispose();t.stump=t.notch=t.logs=t.logPaint=null;
+  for(const m of [t.stump,t.notch])if(m){this.scene.remove(m);m.traverse(o=>o.geometry?.dispose());}
+  t.stump=t.notch=null;
  }
  hit(t){
   if(!this.workAllowed(t)||!this.workFits(t)||t.down||Math.hypot(this.player.feet.x-t.x,this.player.feet.z-t.z)-t.r>CHOP_REACH+.12)return;
@@ -799,7 +767,7 @@ export class Lumberjack {
     this.nearbyBark?.remove(t);
     if(t.collider){this.physics.removeCollider(t.collider,true);t.collider=null;}
     if(t.notch){this.scene.remove(t.notch);t.notch.geometry.dispose();t.notch=null;}
-    this.makeStump(t);t.fallBody=fallingTrunk(this.physics,this.RAPIER,t);this.falling.push({t,age:0,dx:dx/len,dz:dz/len,plan:createTreeFall(t,dx/len,dz/len,this.heightAt),sound:this.audio.beginFall(t)});
+    this.makeStump(t);this.makeFallenTree(t,Math.atan2(dx,dz),true,record.notches);
     const p=new THREE.Vector3(t.x,t.y+2,t.z).project(this.camera),el=document.createElement('div');el.className='reward';el.textContent=`+${reward} ${isHardwood(t.type)?'hardwood':'wood'}`;el.style.left=(p.x*.5+.5)*innerWidth+'px';el.style.top=(-p.y*.5+.5)*innerHeight+'px';document.body.appendChild(el);setTimeout(()=>el.remove(),1600);
     this.renderHud();this.save();if(!this.hinted){this.hinted=true;this.toast(this.state.destination==null?'Follow the bearing to stack your timber.':'Stack the timber at a wood rack or a restored home.');}
   }
@@ -871,19 +839,14 @@ export class Lumberjack {
   this.updateTimber();
   for(let i=this.falling.length-1;i>=0;i--){
     const f=this.falling[i];if(f.t.routeCleared){this.audio.updateFall(f.sound,1);this.falling.splice(i,1);continue;}f.age+=dt;const pose=treeFallPose(f.plan,f.age);
-    this.forest.poseTree(f.t,pose.angle,f.dx,f.dz,pose.hidden,pose.sink);
-    if(f.t.fallBody){
-      const s=Math.sin(pose.angle/2);
-      f.t.fallBody.setNextKinematicRotation({x:f.dz*s,y:0,z:-f.dx*s,w:Math.cos(pose.angle/2)});
-      if(pose.landed){this.physics.removeRigidBody(f.t.fallBody);f.t.fallBody=null;}
-    }
+    f.t.fallen.fall(pose.angle,pose.landed);
     this.audio.updateFall(f.sound,pose.progress);
-    if(pose.landed&&!f.thud){
-      f.thud=true;this.makeLogs(f.t,f.dx,f.dz,true);this.audio.land(f.sound);this.shade.refresh();
+    if(pose.landed){
+      this.audio.land(f.sound);this.shade.refresh();
       const x=f.t.x+f.dx*f.t.h*.66,z=f.t.z+f.dz*f.t.h*.66;
       this.leafKick?.scatter(x,this.heightAt(x,z)+.65,z,{x:f.dx*4,z:f.dz*4},16);
+      this.falling.splice(i,1);
     }
-    if(pose.hidden){this.shade.refresh();this.falling.splice(i,1);}
   }
   for(const t of this.forest.trees){
     if(t.shake&&!t.down){const age=this.time-t.shake;if(age<.3)this.forest.poseTree(t,Math.sin(age*40)*.004*(1-age/.3),1,0);else{this.forest.poseTree(t,0,1,0);t.shake=0;}}
@@ -958,8 +921,8 @@ export class Lumberjack {
   const timber=this.sight?this.sight.timber:!this.lockedTree&&this.started&&!this.paused?looseAim(this.looseTimber||[],this.player.feet,this.follow.yaw,this.follow.pitch):null;
   if(timber&&(!aimed||this.follow.pitch>.30||Math.hypot(timber.x-this.player.feet.x,timber.z-this.player.feet.z)<this.distance)){
     $('target').hidden=true;$('action').hidden=false;$('chop-key').textContent=this.touch?'Tap':'LMB';
-    $('action-text').textContent=timber.kind==='stump'?'Strike stump':timber.part.length>1.1?'Hew fallen log':'Nudge log';
-    $('context').textContent=timber.kind==='stump'?'Old end grain':timber.part.length<=1.1?'Strike an end to turn it':timber.part.hits?'Cut started · Strike the notch again':'Strike to cut · Shift for a heavier blow';
+    $('action-text').textContent=timber.kind==='stump'?'Strike stump':timber.part.length>=.92?'Buck fallen trunk':'Nudge log';
+    $('context').textContent=timber.kind==='stump'?'Old end grain':timber.part.length<.92?'Strike an end to turn it':timber.part.hits?'Strike the same notch to part the trunk':'Cut across the trunk · Shift for a heavier blow';
     return;
   }
   const visible=this.started&&!this.paused&&aimed&&!t.down;$('target').hidden=!visible;

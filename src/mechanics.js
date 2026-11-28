@@ -93,6 +93,13 @@ export function trunkGroundGap(tree,angle,dx,dz,heightAt){
     const x=tree.x+dx*length*Math.sin(angle),z=tree.z+dz*length*Math.sin(angle);
     gap=Math.min(gap,tree.y+.38+length*Math.cos(angle)-radius*Math.sin(angle)-heightAt(x,z));
   }
+  // Structural boughs can touch a slope before the tip of the bole does.
+  for(const limb of tree.limbs||[])for(let j=0;j<limb.joints.length;j++){
+    const [x,y,z,r]=limb.joints[j];if(r<.035)continue;
+    const along=x*dx+z*dz,h=y-.38,c=Math.cos(angle),s=Math.sin(angle);
+    const advance=along*(c-1)+h*s;
+    gap=Math.min(gap,tree.y+.38+h*c-along*s-r-heightAt(tree.x+x+dx*advance,tree.z+z+dz*advance));
+  }
   return gap;
 }
 export function createTreeFall(tree,dx,dz,heightAt){
@@ -102,6 +109,6 @@ export function createTreeFall(tree,dx,dz,heightAt){
   return {contactAngle:hi,duration:Math.max(1.35,Math.min(2.15,1.35+(tree.h-15)*.025+tree.r*.2))};
 }
 export function treeFallPose(plan,age){
-  const progress=clamp(age/plan.duration),settle=smooth((age-plan.duration-.55)/.8);
-  return {progress,angle:plan.contactAngle*progress**2.2,landed:progress>=1,sink:settle*8,hidden:age>=plan.duration+1.4};
+  const progress=clamp(age/plan.duration);
+  return {progress,angle:plan.contactAngle*progress**2.2,landed:progress>=1};
 }

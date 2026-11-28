@@ -20,7 +20,9 @@ Jumping and sprinting draw from the stamina bar above the bag. A full load takes
 
 Closing the workbench with its close button or U returns control to the forest. Escape releases the mouse. Tap for one stroke or hold for a run of swings. Swings follow through while you move. A stroke only damages its tree when still in reach at contact; retreating produces a miss. Hold the right mouse button for an over-the-shoulder view. Aim at a patch of bark. Scroll to rotate the guide or use Z / C for a fine adjustment, then left-click. The two-handed swing follows the selected line. Crossing strokes leave separate grooves. Following one line deepens it, and the cuts stay on the tree when you return. Release to recover your walking view. Press Q to lock or release a tree. Felling, range and menus also release the lock.
 
-Felling a tree pays its wood into your bag once. Loose sections roll when nudged and part at the cut after three ordinary starter-axe hits. A heavy stroke or a stronger axe cuts faster. Bark, brush, soil, water and the handcart each respond to the blade.
+Felling a tree pays its wood into your bag once. The birch, beech, maple or oak tips from its stump with its branches, leaves and bark cuts still attached. Work the same spot on the fallen trunk to part it after three clean starter-axe hits. A heavy stroke or a stronger axe cuts faster. The two lengths can roll independently and keep their cuts and positions when you save.
+
+Start a stroke close to a trunk and the woodcutter will ease back or sideways if the footing allows. Keep moving with WASD to choose your own footing. In a tight pocket he slides his hands up the handle for a short stroke. When running he holds the axe across his body with both hands.
 
 **Settings → What’s new · Changelog** contains illustrated field notes with screenshots of the game.
 

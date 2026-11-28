@@ -6,6 +6,7 @@ import {riverDistance} from './river.js';
 // dabs. Trees close to the way are painted in full, those behind them with fewer, larger touches, and the furthest
 // are little more than a pole and a few blots, which is all the mist lets through.
 import * as THREE from 'three';
+import {FallenWood} from './fallen-wood.js';
 import {brushContacts} from './brush-contact.js';
 import {trunkHull} from './woodland-physics.js';
 import { COMMON } from '../oilpaint/common.js';
@@ -130,7 +131,7 @@ export function createForest(shared) {
   const v = new THREE.Vector3();
 
   for (const t of trees) {
-    t.indexStart=wood.index.length;
+    t.indexStart=wood.index.length;t.limbs=[];t.leafBunches=[];
     t.ranges = { wood: [wood.position.length / 3], bark: [barkDabs.length / 13], leaf: [leafDabs.length / 10], lobes: [lobes.length / 4] };
     const full = t.tier === 0, some = t.tier === 1;
     const top = t.h * (t.type === BIRCH ? 0.95 : 0.8);
@@ -152,6 +153,7 @@ export function createForest(shared) {
     // Keep the reachable rings of the rendered bole, including the first ring above a raised axe.
     const lastRing=pts.findIndex(p=>p.y>t.y+3.65);
     t.toolRings={sides,count:lastRing<0?pts.length:lastRing+1};
+    t.bole={sides,rings,top};
     // the trunk's middle and radius at a height above its foot
     const trunkAt = (y, outP) => {
       let i = 0;
@@ -186,7 +188,9 @@ export function createForest(shared) {
           lp.push(new THREE.Vector3().addScaledVector(p0, w * w).addScaledVector(p1, 2 * w * u).addScaledVector(p2, u * u));
           lr.push(Math.max(0.035, r0 * (t.hero ? 0.62 : 0.5) * (1 - 0.82 * u)));
         }
-        tube(wood, lp, lr, 6, t.type, t.seed + i);
+        const limb={at:from,first:wood.position.length/3,firstBark:barkDabs.length/13};
+        tube(wood, lp, lr, 6, t.type, t.seed + i);limb.end=wood.position.length/3;
+        limb.joints=lp.map((p,j)=>[p.x-t.x,p.y-t.y,p.z-t.z,lr[j]]);t.limbs.push(limb);
         // dark strokes for the limb and the branches off it
         for (let k = 0; k < (t.hero ? 12 : 6); k++) {
           const u = 0.15 + rand() * 0.8, seg = Math.min(4, Math.floor(u * 5));
@@ -196,11 +200,12 @@ export function createForest(shared) {
           if (twig) { dir.add(v.set(rand() - 0.5, rand() * 0.6, rand() - 0.5).multiplyScalar(1.5)).normalize(); at.addScaledVector(dir, 0.8); }
           barkDabs.push(at.x, at.y, at.z, dir.x, dir.y, dir.z, -dir.z, 0.3, dir.x, rand() * 1000, twig ? 0.09 : lr[seg] * 2.4, t.type, twig ? 1.7 + rand() * 1.5 : 1.6);
         }
+        limb.endBark=barkDabs.length/13;
         for (const u of t.hero ? [0.5, 0.68, 0.86, 1.02] : [0.7, 1.0]) {
           const w = 1 - u;
           const c = new THREE.Vector3().addScaledVector(p0, w * w).addScaledVector(p1, 2 * w * u).addScaledVector(p2, u * u);
           c.add(v.set(rand() - 0.5, rand() * 0.9, rand() - 0.5).multiplyScalar(1.6));
-          treeLobes.push([c.x, c.y, c.z, (t.hero ? 2.3 : 1.25) + rand() * 1.0 + t.r * 0.6]);
+          treeLobes.push([c.x, c.y, c.z, (t.hero ? 2.3 : 1.25) + rand() * 1.0 + t.r * 0.6,from]);
         }
       }
       for (let i = 0; i < (t.hero ? 8 : 3); i++) treeLobes.push([crown.x + (rand() - 0.5) * spread * 0.9, t.y + t.h * (t.hero ? 0.92 : 0.96) + (rand() - 0.5) * 3, crown.z + (rand() - 0.5) * spread * 0.9, 1.5 + rand() * (t.hero ? 1.6 : 0.9)]);
@@ -213,7 +218,8 @@ export function createForest(shared) {
     }
     const perLobe = full ? (t.hero ? 150 : 54) : some ? 20 : 11;
     const touch = full ? (t.hero ? 0.2 : 0.27) : 0.4;
-    for (const [lx, ly, lz, lr] of treeLobes) {
+    for (const [lx, ly, lz, lr,at=top] of treeLobes) {
+      const bunch={at,first:leafDabs.length/10,lobe:[lx-t.x,ly-t.y,lz-t.z,lr]};t.leafBunches.push(bunch);
       lobes.push(lx, ly, lz, lr);
       const away = v.set(lx - crown.x, ly - crown.y, lz - crown.z).normalize().clone();
       for (let k = 0; k < perLobe; k++) {
@@ -227,6 +233,7 @@ export function createForest(shared) {
       }
       // the dark of the inside of the lobe, laid first
       for (let k = 0; k < 2; k++) leafDabs.push(lx + (rand() - 0.5) * lr * 0.5, ly - lr * 0.15 * k, lz + (rand() - 0.5) * lr * 0.5, 0, -1, 0, rand() * 1000, lr * 1.25, t.family, 1);
+      bunch.end=leafDabs.length/10;
     }
 
     // --- bark ---
@@ -359,30 +366,31 @@ export function createForest(shared) {
     head: BARK + RANGE_GLSL + /* glsl */ `in vec3 aPos; in vec3 aDir; in vec3 aNrm; in vec4 aData; in float aVisible; in float aBole;`,
     body: /* glsl */ `
       void makeDab(inout Dab d) {
-        d.alive=woodDetail(length(aPos.xz-cameraPosition.xz));if(aVisible<.5||d.alive<.004){d.alive=0.0;return;}
+        vec3 root=(modelMatrix*vec4(aPos,1.)).xyz;vec3 axis=mat3(modelMatrix)*aDir;vec3 face=mat3(modelMatrix)*aNrm;
+        d.alive=woodDetail(length(root.xz-cameraPosition.xz));if(aVisible<.5||d.alive<.004){d.alive=0.0;return;}
         vec4 r = hash4(aData.x);
         int k = int(aData.z + 0.5);
-        vec3 Nn = normalize(aNrm);
-        float foot = aPos.y - heightAt(aPos.xz);
-        vec3 c = bark(k, aPos, Nn, r.x, foot);
-        d.dir = aDir;
+        vec3 Nn = normalize(face);
+        float foot = root.y - heightAt(root.xz);
+        vec3 c = bark(k, root, Nn, r.x, foot);
+        d.dir = axis;
         // a birch is banded across; here and there one of its black scars
-        if (k == 1) { d.dir = cross(aDir, Nn); if (r.y < 0.16) c = vec3(0.13, 0.11, 0.15); }
+        if (k == 1) { d.dir = cross(axis, Nn); if (r.y < 0.16) c = vec3(0.13, 0.11, 0.15); }
         // moss on the cold side, low down
-        if (k != 1 && foot < 2.2 && r.z < 0.3 * (1.0 - foot / 2.2) + 0.1 * max(-dot(Nn, uSunDir), 0.0)) c = mix(c, vec3(0.34, 0.4, 0.14) * (0.5 + 0.9 * sunAt(aPos + Nn * 0.3)), 0.8);
+        if (k != 1 && foot < 2.2 && r.z < 0.3 * (1.0 - foot / 2.2) + 0.1 * max(-dot(Nn, uSunDir), 0.0)) c = mix(c, vec3(0.34, 0.4, 0.14) * (0.5 + 0.9 * sunAt(root + Nn * 0.3)), 0.8);
         // lichen, and the cold light of the sky on the shaded side
         if (r.w < 0.1) c = mix(c, vec3(0.56, 0.58, 0.4) * (0.45 + 0.6 * dot(c, vec3(0.6))), 0.7);
         else if (r.w > 0.9 && dot(Nn, uSunDir) < 0.0) c = mix(c, vec3(0.3, 0.33, 0.48), 0.6);
         c = jitter(c, r.yzw, 0.7);
         d.turnabout = 1.0;
-        d.pos = aPos;
+        d.pos = root;
         d.size = vec2(aData.y, aData.w);
-        d.c1 = hazed(c, aPos);
-        d.c2 = hazed(jitter(c * 1.2 + vec3(0.02, 0.02, 0.05), r.wxy, 0.6), aPos);
+        d.c1 = hazed(c, root);
+        d.c2 = hazed(jitter(c * 1.2 + vec3(0.02, 0.02, 0.05), r.wxy, 0.6), root);
         d.seed = aData.x;
         d.lift = 0.5;
         if(aBole>0.){
-          vec3 eye=cameraPosition-aPos;
+          vec3 eye=cameraPosition-root;
           float facing=dot(Nn,normalize(eye));
           if(facing<=0.){d.alive=0.;return;}
           float near=1.-smoothstep(3.,14.,length(eye));
@@ -406,21 +414,22 @@ export function createForest(shared) {
     head: LEAF + RANGE_GLSL + /* glsl */ `in vec3 aPos; in vec3 aNrm; in vec4 aData;`,
     body: /* glsl */ `
       void makeDab(inout Dab d) {
+        vec3 root=(modelMatrix*vec4(aPos,1.)).xyz;vec3 face=mat3(modelMatrix)*aNrm;
         vec4 r = hash4(aData.x);
         vec4 q = hash4(aData.x + 271.3);
-        vec3 toEye = cameraPosition - aPos;
+        vec3 toEye = cameraPosition - root;
         float dist = length(toEye);
         // far crowns are fewer, larger touches
         float keep = mix(1.0, 0.3, smoothstep(35.0, 106.0, dist));
         // (they leave and come back by growing, never at a stroke)
         d.alive = aData.w > 0.5 ? 1.0 : smoothstep(0.0, 1.0, (keep - q.w) / 0.12);
         d.alive*=woodDetail(length(toEye.xz));if (d.alive <= 0.0) return;
-        float gust = gustAt(aPos.xz);
-        vec3 P = aPos;
+        float gust = gustAt(root.xz);
+        vec3 P = root;
         float high = clamp((P.y - heightAt(P.xz)) / 20.0, 0.1, 1.0);
         P.xz += uWind.xy * (gust * 0.5 + sin(uTime * (1.1 + r.x) + r.y * 30.0) * (0.05 + 0.16 * gust)) * high;
         P.y += sin(uTime * (1.7 + r.z) + r.w * 30.0) * (0.03 + 0.1 * gust) * high;
-        vec3 Nn = aNrm;
+        vec3 Nn = face;
         vec3 view = -toEye / dist;
         int k = int(aData.z + 0.5);
         vec3 c;
@@ -622,5 +631,10 @@ export function createForest(shared) {
       tiles.sync(a,b,['aPos']);
     }
   });
-  return { barkSurface,uncutNormal,setBarkDetail,guideCut,updateDistance,clearBrush:brush.clear,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
+  function fallenWood(t){
+    poseTree(t,0,1,0);
+    if(t.cut&&!t.detailMesh)setBarkDetail(t,true);
+    return new FallenWood(t,woodMesh,barkMesh,leafMesh);
+  }
+  return { fallenWood,shadeMaterial:black,barkSurface,uncutNormal,setBarkDetail,guideCut,updateDistance,clearBrush:brush.clear,touchBrush:brush.update,strikeBrush:brush.strike,brushPlants,group, shade, colliders, trees, poseTree, carveTree,resetCut, home, counts: { trees: trees.length, bark: nb, leaves: nl } };
 }

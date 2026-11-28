@@ -37,6 +37,18 @@ const orders={
   maple:{title:'Maple for the mill',verb:'Fell maple',base:3,bonus:46,type:3},
   oak:{title:'Oak for the rafters',verb:'Fell old oak',base:2,bonus:68,type:2},
 };
+function readNotches(value){
+  if(!Array.isArray(value))return [];
+  const notches=[];
+  for(const n of value.slice(-40)){
+    if(!n||!['x','y','z','nx','nz','damage'].every(k=>Number.isFinite(n[k]))||n.damage<=0)continue;
+    const length=Math.hypot(n.nx,n.nz);if(length<.01)continue;
+    const record={x:n.x,y:n.y,z:n.z,nx:n.nx/length,nz:n.nz/length,damage:Math.min(1,n.damage)};
+    if(Number.isFinite(n.angle))record.angle=n.angle%Math.PI;
+    notches.push(record);
+  }
+  return notches;
+}
 export function readSkill(data,legacyFelled=0){
   const legacy=count(data?data.legacy:legacyFelled);
   const skill={xp:data?count(data.xp):Math.min(1e12,legacy*26),legacy,strokes:count(data?.strokes),bucked:count(data?.bucked),orders:count(data?.orders),
@@ -50,22 +62,18 @@ export function readSkill(data,legacyFelled=0){
     if(!/^(?:\d{1,5}|w\d{1,2}-[0-2])$/.test(id)||!cut||!Number.isFinite(cut.hp)||cut.hp<=0)continue;
     if(!['x','y','z','nx','nz'].every(k=>Number.isFinite(cut[k])))continue;
     const saved=skill.cuts[id]={hp:Math.min(36,cut.hp),x:cut.x,y:cut.y,z:cut.z,nx:cut.nx,nz:cut.nz};
-    if(Array.isArray(cut.notches)){
-      const notches=[];
-      for(const n of cut.notches.slice(-40)){
-        if(!n||!['x','y','z','nx','nz','damage'].every(k=>Number.isFinite(n[k]))||n.damage<=0)continue;
-        const length=Math.hypot(n.nx,n.nz);if(length<.01)continue;
-        const record={x:n.x,y:n.y,z:n.z,nx:n.nx/length,nz:n.nz/length,damage:Math.min(1,n.damage)};
-        if(Number.isFinite(n.angle))record.angle=n.angle%Math.PI;
-        notches.push(record);
-      }
-      if(notches.length)saved.notches=notches;
-    }
+    const notches=readNotches(cut.notches);if(notches.length)saved.notches=notches;
   }
   for(const [id,split] of Object.entries(data?.splits||{})){
     if(!/^\d{1,5}$/.test(id)||!Number.isFinite(split?.until)||split.until<=Date.now()||!Number.isInteger(split.mask))continue;
     const record=skill.splits[id]={until:split.until,mask:split.mask&7};
     if(Array.isArray(split.scores))record.scores=[0,1,2].map(i=>Math.min(2,count(split.scores[i])));
+    if(Number.isFinite(split.bearing))record.bearing=split.bearing%(Math.PI*2);
+    const notches=readNotches(split.notches);if(notches.length)record.notches=notches;
+    if(Array.isArray(split.kerfs))record.kerfs=split.kerfs.slice(0,128).filter(k=>k&&Number.isFinite(k.at)&&k.at>.38&&k.at<100&&Number.isFinite(k.azimuth)&&[1,2,3].includes(k.hits))
+      .map(({at,hits,azimuth})=>({at,hits,azimuth}));
+    if(Array.isArray(split.pieces))record.pieces=split.pieces.slice(0,128).filter(a=>Array.isArray(a)&&(a.length===9||a.length===15)&&a.every(Number.isFinite)
+      &&a[0]<a[1]&&Math.hypot(...a.slice(5,9))>.5).map(a=>a.slice());
   }
   return skill;
 }

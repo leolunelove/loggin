@@ -75,16 +75,22 @@ function handRotation(axeQ){
 }
 
 export class ChopAnimation {
- constructor(man,animator,axe){Object.assign(this,{man,animator,axe});this.release=1;this.last=null;this.metrics={};this.brace=0;this.sightHold=0;this.shoulderOffsets=[];}
- update(dt,swing,tier,held=null,guards=[],stow=null,sight=null){
+ constructor(man,animator,axe){Object.assign(this,{man,animator,axe});this.release=1;this.last=null;this.metrics={};this.brace=0;this.sightHold=0;this.runHold=0;this.turnLoad=0;this.brakeLoad=0;this.shoulderOffsets=[];}
+ update(dt,swing,tier,held=null,guards=[],stow=null,sight=null,motion=null){
   const {man,animator,axe}=this,body=man.object,b=man.bones,scale=toolScale(tier);
   for(const s of this.shoulderOffsets)if(s.bone.position.distanceToSquared(s.applied)<1e-12){s.bone.position.copy(s.base);s.bone.updateMatrixWorld(true);}
   this.shoulderOffsets.length=0;
   const variant=SWING_VARIANTS[swing?.variant]||SWING_VARIANTS[0];
   const p=swing?(swing.poseProgress??swing.age/swing.duration):0,pose=swing?swingPose(p,swing.variant,swing.finishing):null;
   const low=pose?THREE.MathUtils.clamp((body.position.y+1.05-swing.contact.y)/.86,0,1):0;
+  const compact=swing?.stance?.compact||0;
   if(pose){
    pose.angle+=low*1.04*smooth((p-.30)/.20)*(1-smooth((p-.58)/.38));
+   if(compact){
+     const gather=smooth(p/.19)*(1-smooth((p-.34)/.15))*compact;
+     pose.angle=THREE.MathUtils.lerp(pose.angle,.16,gather*.78);
+     pose.roll*=1-.45*gather;pose.twist*=1-.35*gather;pose.sink+=.065*gather;
+   }
    const crouch=smooth(p/.35)*(1-smooth((p-.59)/.41))*low;
    pose.sink+=.34*crouch;pose.lean+=.49*crouch;
    if(swing.sight?.cutLine){
@@ -93,7 +99,7 @@ export class ChopAnimation {
      pose.sink+=.13*brace;pose.lean+=.11*brace;
    }
   }
-  if(swing)this.release=0;else this.release=Math.min(1,this.release+dt/.14);
+  if(swing)this.release=0;else this.release=Math.min(1,this.release+dt/(.16+.012*tier));
   const releaseWeight=1-smooth(this.release),lean=pose?.lean??(this.last?.lean||0)*releaseWeight,twist=pose?.twist??(this.last?.twist||0)*releaseWeight;
   const bodyQ=body.getWorldQuaternion(new THREE.Quaternion()),forward=new THREE.Vector3(0,0,1).applyQuaternion(bodyQ),right=new THREE.Vector3(-1,0,0).applyQuaternion(bodyQ);
   const sink=pose?.sink??(this.last?.sink||0)*releaseWeight;
@@ -127,6 +133,23 @@ export class ChopAnimation {
   if(!held?.last)this.brace=0;
   this.brace=THREE.MathUtils.damp(this.brace,brushing?1:0,brushing?13:4,dt);
   const carryPalm=palm.clone();
+  const speed=motion?.actualSpeed??motion?.speed??0;
+  this.runHold=THREE.MathUtils.damp(this.runHold,stow?.weight>.15?0:smooth((speed-1.15)/1.75),10,dt);
+  this.turnLoad=THREE.MathUtils.damp(this.turnLoad,THREE.MathUtils.clamp(motion?.turnRate||0,-4,4),6,dt);
+  this.brakeLoad=THREE.MathUtils.damp(this.brakeLoad,THREE.MathUtils.clamp(motion?.accelF||0,-6,6),5,dt);
+  const running=this.runHold;
+  if(running>.001){
+    // The rear hand carries the weight at the hip. The lead hand catches the
+    // shaft across the body so the sprint cycle cannot whip the head around.
+    const heft=1+tier*.075,shaft=right.clone().multiplyScalar(-.72).addScaledVector(forward,.54).addScaledVector(UP,.45).normalize();
+    const lead=forward.clone().addScaledVector(UP,-.38).projectOnPlane(shaft).normalize();
+    const q=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(lead,shaft,lead.clone().cross(shaft)));
+    q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP,-this.turnLoad*.035*heft));
+    q.premultiply(new THREE.Quaternion().setFromAxisAngle(right,this.brakeLoad*.009*heft));
+    const chest=point(b.spine_03).sub(body.position),bob=THREE.MathUtils.clamp(chest.y-1.3,-.10,.12);
+    const carry=body.localToWorld(new THREE.Vector3(-.225,1.065+bob*.25,.31-this.brakeLoad*.004));
+    carryPalm.lerp(carry,running);carryQ.slerp(q,running);
+  }
   if(this.brace>.01){
    // Gather the tool upright, in front of the shoulder, when walking it into a post.
    carryQ.slerp(axeRotation(forward,.20,.13),this.brace);
@@ -134,7 +157,7 @@ export class ChopAnimation {
   }
   this.sightHold=THREE.MathUtils.damp(this.sightHold,(sight||swing?.sight)&&!(stow?.weight>.04)?1:0,12,dt);
   if(this.sightHold<.001)this.sightHold=0;
-  const ready=this.sightHold,carryGrip=THREE.MathUtils.lerp(CARRY_GRIP,-.19,ready);
+  const ready=this.sightHold,grasp=running+(1-running)*ready,wrist=.52+.48*grasp,carryGrip=THREE.MathUtils.lerp(CARRY_GRIP,-.19,grasp);
   if(ready){
    carryQ.slerp(axeRotation(forward,.38,.24),ready);
    carryPalm.lerp(body.localToWorld(new THREE.Vector3(-.245,1.08,.33)),ready);
@@ -162,7 +185,7 @@ export class ChopAnimation {
    carryQ.slerp(set,ready*.50);
   }
   const carryPosition=carryPalm.clone().addScaledVector(gripAt(carryGrip).applyQuaternion(carryQ),-scale);
-  let position=carryPosition.clone(),rotation=carryQ.clone(),leftWeight=ready,slide=.08+.09*ready,gripY=carryGrip,workingGrip=ready,contactEdge=axeBlade(tier);
+  let position=carryPosition.clone(),rotation=carryQ.clone(),leftWeight=grasp,slide=THREE.MathUtils.lerp(.08+.215*running,.17,ready),gripY=carryGrip,workingGrip=wrist,contactEdge=axeBlade(tier);
   if(swing){
    const mark=swing.sight?swing.contact:swing.t;
    const aim=swing.free?new THREE.Vector3(Math.sin(swing.yaw),0,Math.cos(swing.yaw)):new THREE.Vector3(mark.x-body.position.x,0,mark.z-body.position.z).normalize();
@@ -191,13 +214,15 @@ export class ChopAnimation {
    const soft=swing.missed||swing.material==='water',through=contactPalm.clone();
    if(soft)through.addScaledVector(right,variant.name==='Backhand'?-.16:.16).addScaledVector(UP,-.13);
    const recoil=through.clone().addScaledVector(aim,-variant.pull*(swing.finishing?1.22:1)).addScaledVector(UP,soft?-.04:.035);
-   const keys=[[0,carryPalm],[.16,local(...variant.ready)],[.34,local(...variant.load)],[.5,contactPalm],[.55,through],[.73,recoil],[1,carryPalm]];
+   const load=local(...variant.load);
+   if(compact)load.lerp(local(-.19,1.38,.29),compact*.85);
+   const keys=[[0,carryPalm],[.16,local(...variant.ready)],[.34,load],[.5,contactPalm],[.55,through],[.73,recoil],[1,carryPalm]];
    let a=keys[0],c=keys[1];for(let i=1;i<keys.length;i++){c=keys[i];if(p<=c[0])break;a=c;}
    let k=smooth((p-a[0])/(c[0]-a[0]||1));if(a[0]===.34)k=((p-.34)/.16)**2;
    // Match the walking carry orientation exactly at the end of recovery.
    rotation.slerp(carryQ,smooth((p-.73)/.27));
    const strokeGrip=smooth(p/.16)*(1-smooth((p-.78)/.22));
-   workingGrip=ready+(1-ready)*strokeGrip;
+   workingGrip=wrist+(1-wrist)*strokeGrip;
    gripY=THREE.MathUtils.lerp(carryGrip,LOWER_GRIP,strokeGrip);
    position=a[1].clone().lerp(c[1],k).addScaledVector(gripAt(gripY).applyQuaternion(rotation),-scale);
    if(!swing.free&&!swing.t.windthrow&&p>.15&&p<.5){
@@ -235,12 +260,28 @@ export class ChopAnimation {
       .addScaledVector(UP,.027*(1-drive)).sub(edge.applyQuaternion(rotation).multiplyScalar(scale));
     position.lerp(goal,settle);
    }
-   slide=THREE.MathUtils.lerp(.17,pose.slide,1-ready*(1-strokeGrip));leftWeight=ready+(1-ready)*smooth(p/.16)*(1-smooth((p-.78)/.2));
+   // When neither a step nor a full wind-up fits, choke up on the handle
+   // and drive the bit through a short arc in front of the chest.
+   const gap=Math.hypot(contact.x-body.position.x,contact.z-body.position.z);
+   const close=compact*smooth((.77-gap)/.31)*strokeGrip;
+   if(close&&(!swing.free||swing.sight?.reachable||lowWork)){
+    const into=inward|| (lowWork?new THREE.Vector3(0,-1,0):aim);
+    const across=along|| (lowWork?aim:UP);
+    const gather=smooth((p-.08)/.19)*(1-smooth((p-.60)/.26))*close;
+    const drive=smooth((p-.37)/.14),withdraw=smooth((p-.54)/.18);
+    const shortQ=toolInCutPlane(into,across,.54+.20*drive-.18*withdraw);
+    rotation.slerp(shortQ,gather);
+    const edge=workingEdge(tier,rotation,into);
+    const short=contact.clone().addScaledVector(into,-.16+.207*drive-.15*withdraw)
+      .addScaledVector(across,.105*(1-drive)).sub(edge.applyQuaternion(rotation).multiplyScalar(scale));
+    position.lerp(short,gather);gripY=THREE.MathUtils.lerp(gripY,.055,gather);
+   }
+   slide=THREE.MathUtils.lerp(.17+.125*running*(1-ready),pose.slide,1-grasp*(1-strokeGrip));leftWeight=grasp+(1-grasp)*smooth(p/.16)*(1-smooth((p-.78)/.2));
   }else if(this.last&&this.release<1){
    position.copy(this.last.position).applyMatrix4(body.matrixWorld).lerp(carryPosition,smooth(this.release));
    rotation.copy(bodyQ).multiply(this.last.rotation).slerp(carryQ,smooth(this.release));
-   leftWeight=THREE.MathUtils.lerp(ready,this.last.leftWeight,releaseWeight);slide=THREE.MathUtils.lerp(.08+.09*ready,this.last.slide,releaseWeight);
-   workingGrip=THREE.MathUtils.lerp(ready,this.last.workingGrip,releaseWeight);gripY=THREE.MathUtils.lerp(carryGrip,this.last.gripY,releaseWeight);
+   leftWeight=THREE.MathUtils.lerp(grasp,this.last.leftWeight,releaseWeight);slide=THREE.MathUtils.lerp(slide,this.last.slide,releaseWeight);
+   workingGrip=THREE.MathUtils.lerp(wrist,this.last.workingGrip,releaseWeight);gripY=THREE.MathUtils.lerp(carryGrip,this.last.gripY,releaseWeight);
   }
   axe.position.copy(position);axe.quaternion.copy(rotation);axe.scale.setScalar(scale);axe.updateMatrixWorld(true);
   // Fit the free backswing to both arms. Camera-driven shoulder posture can change their

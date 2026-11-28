@@ -178,7 +178,10 @@ export class HeldAxe {
         for(const dx of [-span.x,0,span.x])for(const dz of [-span.z,0,span.z])top=Math.max(top,this.heightAt(mid.x+dx,mid.z+dz));
         obstacle.floor=top+.20;
       }
-      if(obstacle.floor==null){
+      if(c.toolBounds){
+        const box=c.toolBounds.clone().applyMatrix4(new THREE.Matrix4().compose(v().copy(c.translation()),quat().copy(c.rotation()),v().setScalar(1)));
+        obstacle.bounds={low:box.min,high:box.max};
+      }else if(obstacle.floor==null){
         const fixed=!c.parent()||c.parent().isFixed();
         let bounds=fixed&&this.staticBounds.get(c);
         if(!bounds||bounds.cut!==c.standingTree?.cut){
@@ -325,13 +328,16 @@ export class HeldAxe {
     const owner=this.playerCollider?.parent()?.translation();
     const teleported=owner&&this.lastOwner&&this.lastOwner.distanceTo(owner)>2.8;
     const goal=frame(position,rotation),snap=!this.last||teleported;
+    const stride=owner&&this.lastOwner&&!snap?v().copy(owner).sub(this.lastOwner):ZERO;
     if(owner)(this.lastOwner??=v()).copy(owner);
     let current=snap?frame(position,rotation):frame(this.last.p,this.last.q);
     const obstacles=this.nearby(current,goal,guards);
     this.contact=null;
     fitReach(goal,options.hands);
     if(!snap&&options.grip){
-      const desiredPalm=at(goal,options.grip),oldPalm=at(current,options.grip);
+      // Limit motion of the hands relative to the woodcutter. At a sprint
+      // the body itself travels farther per step than an arm should swing.
+      const desiredPalm=at(goal,options.grip),oldPalm=at(current,options.grip).add(stride);
       const angle=current.q.angleTo(goal.q),turn=(options.driving?58:options.working?24:11)*dt;
       if(angle>turn)goal.q.copy(current.q).slerp(rotation,turn/angle);
       desiredPalm.sub(oldPalm).clampLength(0,(options.driving?16:options.working?9:5)*dt).add(oldPalm);
