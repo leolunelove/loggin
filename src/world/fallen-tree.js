@@ -50,7 +50,7 @@ export class FallenTree{
       for(let j=0;j<10;j++){const a=j*Math.PI/5;hull.push(centre.x+radius*Math.cos(a),centre.y,centre.z+radius*Math.sin(a));}
     }
     const attach=desc=>{const c=game.physics.createCollider(desc,part.body);c.fallenPart=part;return c;};
-    attach(R.ColliderDesc.convexHull(new Float32Array(hull)).setCollisionGroups(TRUNK_GROUPS)
+    part.trunk=attach(R.ColliderDesc.convexHull(new Float32Array(hull)).setCollisionGroups(TRUNK_GROUPS)
       .setFriction(.86).setRestitution(.065).setDensity(430));
     part.limbs=new Map();
     for(const limb of wood.limbs){

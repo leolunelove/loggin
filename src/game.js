@@ -20,6 +20,8 @@ import {createWeather} from './world/weather.js';
 import {seatedPose} from './figure/sit.js';
 import {cabinActivity,guideCabinWalk,advanceCabin,nearestGuestBed} from './world/cabin-activity.js';
 import {bedBeats,bedPoint} from './bed-motion.js';
+import {crossingPose,vaultPalm} from './figure/crossing-pose.js';
+import {TIMBER_COMMIT_PHASE} from './figure/timber-crossing.js';
 import {TrailContact} from './figure/trail-contact.js';
 import {pressPillow} from './world/bed-pillow.js';
 import {cabinPose} from './figure/cabin-pose.js';
@@ -505,6 +507,11 @@ export class Lumberjack {
   this.follow.shoulder=false;this.sight=null;
   const aimedClick=Number.isFinite(inp.clickAngle);
   const toolOnly=inp.aimHeld||aimedClick||inp.sprint&&(inp.swingPressed||this.held||this.input.mouse?.left);
+  if(this.player?.crossing?.phase>=TIMBER_COMMIT_PHASE){
+    this.held=false;inp.blockJump=true;
+    if(inp.playing)this.follow.look(inp.look,dt);
+    inp.look={x:0,y:0};return;
+  }
   if(this.exploration){
     inp.trailBoost=this.onTrail=this.exploration.onTrail(this.player.feet,this.state)||this.field?.onSteps(this.player.feet);
     inp.provisioned=packedLunch(this.state);
@@ -764,9 +771,11 @@ export class Lumberjack {
   this.stowWeight=THREE.MathUtils.clamp(this.stowWeight+(packed?dt/.38:-dt/.29),0,1);
   const guards=()=>this.axeOwner.guards(this.figure.man,this.figure.pack,this.figure.headwear??this.figure.hat);
   const furnished=!!this.cabin&&this.cabin.stage!=='walk';
-  const free=!!inp?.playing&&!s&&!this.sight&&!inp.aimHeld&&!this.drawStroke&&!this.seat&&!this.cabin&&!this.delivery&&!this.cart?.towing&&this.player.grounded;
+  const crossing=this.player.crossing;
+  const free=!!inp?.playing&&!crossing&&!s&&!this.sight&&!inp.aimHeld&&!this.drawStroke&&!this.seat&&!this.cabin&&!this.delivery&&!this.cart?.towing&&this.player.grounded;
   this.trailContact?.sense(dt,this.player,this.forest,this.insideShack||this.indoorPlace>=0,free,!!inp&&Math.hypot(inp.move.x,inp.move.y)>.12);
   this.trailContact?.posture(this.figure.man,this.animator);
+  if(crossing)crossingPose(crossing,this.figure.man,this.animator);
   if(seated||furnished)this.heldAxe.stow();
   this.chopAnimation.update(dt,s,this.state.axe,seated||furnished?null:this.heldAxe,guards,{weight:this.stowWeight,loop:this.figure.pack.axeLoop},this.sight,this.player);
   const {contact,blade}=this.chopAnimation.metrics;
@@ -809,6 +818,7 @@ export class Lumberjack {
     }
   }
   this.trailContact?.hand(dt,this.figure.man,this.animator,this.chopAnimation.metrics);
+  if(crossing)vaultPalm(crossing,this.figure.man,this.animator);
   this.cabinQuilt?.update(this.cabin,this.figure.man.bones);
   this.cart?.pose();this.axePaint.update();
   if(this.seat&&!this.seated&&this.seatWeight===0){this.seat=null;this.syncCapture();}
@@ -956,6 +966,7 @@ export class Lumberjack {
   if(this.started&&this.home.fire)this.audio.updateFire(this.home.fire.position,this.state.fire>=12&&!document.hidden,this.insideShack);
   stepChips(this,dt);
   for(const event of this.player.events.splice(0)){
+    if(event.kind==='timberPalm'&&this.started)this.audio.boardStep(event.point,.12);
     if(event.kind!=='land'||event.impact<.1||!this.started)continue;
     this.audio.brushSound('ground',this.player.feet,.25+.5*event.impact);
     if(!this.insideShack&&this.indoorPlace<0)this.leafKick?.scatter(this.player.feet.x,this.player.feet.y+.05,this.player.feet.z,this.player.vel,Math.round(4+event.impact*6));

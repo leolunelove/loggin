@@ -112,6 +112,7 @@ export class Input {
     if (len > 1) { x /= len; y /= len; }
     const s = {
       move: { x: x || this.touchMove.x, y: y || this.touchMove.y },
+      analogMove: !x && !y && (this.touchMove.x !== 0 || this.touchMove.y !== 0),
       walk: this.walkToggle !== (k.has('AltLeft') || k.has('AltRight')),
       sprint: k.has('ShiftLeft') || k.has('ShiftRight'),
       strafe: this.active || k.has('KeyF'),

@@ -11,6 +11,7 @@ shots/*
 !public/changelog/shack-at-rest.mp4
 !public/changelog/turning-in-and-waking.mp4
 !public/changelog/woodland-walk.mp4
+!public/changelog/over-the-timber.mp4
 *.log
 .env
 .test/

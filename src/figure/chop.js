@@ -162,6 +162,13 @@ export class ChopAnimation {
    carryQ.slerp(axeRotation(forward,.38,.24),ready);
    carryPalm.lerp(body.localToWorld(new THREE.Vector3(-.245,1.08,.33)),ready);
   }
+  const crossing=motion?.crossing;
+  const vault=crossing?.kind==='vault'&&!swing?smooth(crossing.phase/.19)*(1-smooth((crossing.phase-.78)/.22)):0;
+  if(vault){
+   const carry=point(b.upperarm_r).addScaledVector(right,.095).addScaledVector(forward,-.11);
+   carry.y-=.30;
+   carryPalm.lerp(carry,vault);carryQ.slerp(axeRotation(forward,2.82,-.35),vault);
+  }
   const plane=swing?.sight||sight;
   let inward=null,along=null;
   if(plane?.cutLine){
@@ -185,7 +192,7 @@ export class ChopAnimation {
    carryQ.slerp(set,ready*.50);
   }
   const carryPosition=carryPalm.clone().addScaledVector(gripAt(carryGrip).applyQuaternion(carryQ),-scale);
-  let position=carryPosition.clone(),rotation=carryQ.clone(),leftWeight=grasp,slide=THREE.MathUtils.lerp(.08+.215*running,.17,ready),gripY=carryGrip,workingGrip=wrist,contactEdge=axeBlade(tier);
+  let position=carryPosition.clone(),rotation=carryQ.clone(),leftWeight=grasp*(1-vault),slide=THREE.MathUtils.lerp(.08+.215*running,.17,ready),gripY=carryGrip,workingGrip=wrist,contactEdge=axeBlade(tier);
   if(swing){
    const mark=swing.sight?swing.contact:swing.t;
    const aim=swing.free?new THREE.Vector3(Math.sin(swing.yaw),0,Math.cos(swing.yaw)):new THREE.Vector3(mark.x-body.position.x,0,mark.z-body.position.z).normalize();

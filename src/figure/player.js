@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { rootAt } from './man.js';
 import { Endurance } from '../effort.js';
+import {findCrossing,advanceCrossing} from './timber-crossing.js';
 import {AXE_GROUPS,PLAYER_GROUPS} from '../world/woodland-physics.js';
 
 const damp = (a, b, rate, dt) => b + (a - b) * Math.exp(-rate * dt);
@@ -53,6 +54,7 @@ export class Player {
     this.moveAngle = 0;
     this.strafe = false;
     this.events = [];
+    this.crossing=null;this.crossCheck=0;this.crossSettle=0;
     this.endurance=new Endurance();this.jumpBuffer=0;this.coyote=0;this.load=0;this.actualSpeed=0;
   }
 
@@ -97,13 +99,13 @@ export class Player {
     const r = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));
     const dir = f.multiplyScalar(m.y).addScaledVector(r, m.x);
     if (dir.lengthSq() > 1e-6) dir.normalize();
-    const S = this.anim.setup.speeds;
+    const S = this.anim.setup.speeds, analog = input.device === 'pad' || input.analogMove;
     let speed;
     if (mag < 0.05) speed = 0;
     else if (input.walk) speed = S.walk * Math.min(1, mag * 1.4);
-    else if (input.device === 'pad' && mag < 0.6) speed = S.walk * (mag / 0.6);
+    else if (analog && mag < 0.6) speed = S.walk * (mag / 0.6);
     else if (input.sprint && (!input.strafe || m.y > 0.7)) speed = S.sprint;
-    else speed = input.device === 'pad' ? THREE.MathUtils.lerp(S.walk, S.run, (mag - 0.6) / 0.4) : S.run;
+    else speed = analog ? THREE.MathUtils.lerp(S.walk, S.run, (mag - 0.6) / 0.4) : S.run;
     const scale=(input.trailBoost?1.25:1)*(input.provisioned&&input.sprint?1.16:1);
     return { dir, mag, scale, speed:input.cartSpeed?Math.min(speed,input.cartSpeed):speed*scale, dirYaw: Math.atan2(dir.x, dir.z) };
   }
@@ -118,6 +120,29 @@ export class Player {
     if(active)this.endurance.update(dt,{sprinting:sprint&&this.grounded&&this.actualSpeed>1.65,moving:walking,load,lunch:input.provisioned,resting:input.resting});
     if(this.endurance.exhausted)input={...input,sprint:false};
     const want=this.intent(input,camYaw);
+    this.crossCheck=Math.max(0,this.crossCheck-dt);
+    if(input.allowTimber&&!this.crossing&&!this.crossCheck&&this.grounded&&want.mag>.12&&!input.jump&&
+      (this.mode==='move'||this.mode==='start')){
+      this.crossCheck=.06;
+      this.crossing=findCrossing(this,want,input.walk);
+      if(this.crossing){
+        this.crossController??=this.world.createCharacterController(.016);
+        if(A.state.kind!=='loco')A.enter(A.locoState({strafe:false}),.12);
+        this.mode='crossing';this.jumpBuffer=0;this.blocked=0;
+      }
+    }
+    if(this.crossing){
+      const result=advanceCrossing(this,this.crossing,dt,want,active,input.allowTimber&&!input.jump);
+      if(!result)return;
+      this.crossing=null;this.crossCheck=.20;this.mode='move';this.strafe=!!input.strafe;
+      this.anim.lock=null;this.anim.lockOff=null;this.lastYaw=this.yaw;this.prevSpeed=this.speed;
+      A.enter(A.locoState({strafe:this.strafe}),.13);
+      if(result!=='landed'){
+        // Upward clearance belongs to the capsule, not a jump impulse.
+        this.vel.y=clamp(this.vel.y,-1.4,0);this.crossSettle=.20;
+      }
+      if(result!=='cancel')return;
+    }
     if(input.roomWalk&&this.mode!=='jump'&&this.mode!=='air'){
       if(this.mode!=='move'||this.strafe)A.enter(A.locoState({strafe:false}),.13);
       this.mode='move';this.strafe=false;this.jumpBuffer=0;this.moveAngle=0;this.lastInputMag=want.mag;
@@ -383,23 +408,13 @@ export class Player {
     if (!(this.grounded && !airborne)) this.vel.y -= (this.vel.y < 0 ? t.fallGravity : t.gravity) * dt;
     this.vel.y = Math.max(this.vel.y, -40);
     const d = { x: this.vel.x * dt, y: this.vel.y * dt, z: this.vel.z * dt };
-    this.heldAxe?.limitTravel(d);
-    this.world.timestep=Math.max(.0001,dt);
-    this.kcc.computeColliderMovement(this.collider, d, undefined, PLAYER_GROUPS);
-    const mv = this.kcc.computedMovement();
-    const was = this.grounded;
+    const was = this.grounded,mv=this.moveCapsule(dt,d,this.kcc);
     this.grounded = this.kcc.computedGrounded();
     if (this.vel.y > 0 && mv.y < d.y * 0.5) this.vel.y = 0; // head hit something
-    const p = this.body.translation();
-    this.body.setNextKinematicTranslation({ x: p.x + mv.x, y: p.y + mv.y, z: p.z + mv.z });
-    this.world.step();
-    this.prevFeet.copy(this.feet);
-    this.feet.set(p.x + mv.x, p.y + mv.y - this.halfHeight() - t.radius - 0.02, p.z + mv.z);
     this.launchGrace=Math.max(0,(this.launchGrace||0)-dt);
     if(this.grounded&&airborne&&this.vel.y>0&&this.launchGrace>0)this.grounded=false;
     if (!this.grounded) { this.airTime += dt; this.lastFallSpeed = -this.vel.y; } else if (!was || this.airTime) { this.airTime = 0; }
     // actual horizontal speed, for the blend (walls slow him down)
-    this.actualSpeed=Math.hypot(mv.x,mv.z)/Math.max(dt,1e-4);
     if(!rootMotion&&dt>0){this.vel.x=mv.x/dt;this.vel.z=mv.z/dt;}
     const moved3 = Math.hypot(mv.x, mv.y, mv.z) / Math.max(dt, 1e-4);
     this.blocked = !rootMotion && this.mode === 'move' && this.grounded && moved3 < this.speed * 0.6 - 0.2 ? (this.blocked ?? 0) + 1 : 0;
@@ -412,12 +427,30 @@ export class Player {
     this.lastYaw = this.yaw;
   }
 
+  moveCapsule(dt,delta,controller){
+    this.heldAxe?.limitTravel(delta);this.world.timestep=Math.max(.0001,dt);
+    controller.computeColliderMovement(this.collider,delta,undefined,PLAYER_GROUPS);
+    const mv=controller.computedMovement(),p=this.body.translation();
+    this.body.setNextKinematicTranslation({x:p.x+mv.x,y:p.y+mv.y,z:p.z+mv.z});this.world.step();
+    this.prevFeet.copy(this.feet);
+    this.feet.set(p.x+mv.x,p.y+mv.y-this.halfHeight()-this.t.radius-.02,p.z+mv.z);
+    this.actualSpeed=Math.hypot(mv.x,mv.z)/Math.max(dt,.0001);
+    return mv;
+  }
+
   /** The visual root: where the clips' floor goes. Follows steps softly, slopes exactly. */
   visualRoot(dt) {
+    const a=this.crossing;
+    if(a){
+      const t=a.distance/a.length;
+      this.visualY=THREE.MathUtils.lerp(a.start.y,a.end.y,t)+.065*Math.sin(Math.PI*t)**2;
+      return new THREE.Vector3(this.feet.x,this.visualY,this.feet.z);
+    }
     const g = this.ground(this.feet.x, this.feet.z, this.feet.y + 0.5, 1.2);
     let y = this.feet.y;
     if (g && this.grounded) y = Math.min(this.feet.y + 0.02, g.y);
-    if (!this.grounded) this.visualY = y;
+    this.crossSettle=Math.max(0,this.crossSettle-dt);
+    if (!this.grounded&&!this.crossSettle) this.visualY = y;
     else this.visualY = y > this.visualY ? damp(this.visualY, y, 14, dt) : damp(this.visualY, y, 20, dt);
     return new THREE.Vector3(this.feet.x, this.visualY, this.feet.z);
   }

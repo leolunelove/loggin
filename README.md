@@ -34,9 +34,15 @@ Level 2 starts at 92 XP, level 10 at 1,382, level 50 at 42,041 and level 99 at 8
 
 Even the Forester’s axe takes three cuts to fell a birch and at least six heavy cuts for an old oak. The opening hand axe takes five landed cuts on birch. Empty swings and knocks on stumps leave your XP where it is.
 
-## Walk into your shack
+## Moving through the woods
+
+Hold **Alt** while moving to walk, or toggle walking with **Caps Lock**. Walk into a settled trunk to step across one boot at a time. At a run or sprint, he plants his left palm on the bark, swings his knees through and lands with the axe in his right hand. A light push on the stick walks and a full push runs.
+
+Approach from either side, straight on or at an angle. A low section with a clear landing works on trees you fell and on windthrows along the trail. Turn away before takeoff to break off the approach. **Space** still gives you a manual jump.
 
 Walk close to a tree or doorframe and he turns his shoulder to pass. A free palm meets the bark or timber and releases as you walk on. With the axe drawn, his axe hand keeps its grip. Eye-high saplings bend as he ducks through them, and a rising step changes his balance and the clearance of his leading boot. These gestures follow your movement automatically.
+
+## Walk into your shack
 
 Approach any front doorway and the door swings open. Walk through with WASD as the roof opens and the camera eases overhead. WASD and the left stick follow the room on screen. Release to stop beside a furnishing. Scroll the wheel indoors to frame a closer or wider view. Cross the threshold on your way out and the view settles back behind your character.
 

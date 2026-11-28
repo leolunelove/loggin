@@ -151,6 +151,7 @@ function air(x, y, z, out) {
 }
 
 function respawn() {
+  player.crossing=null;player.crossCheck=0;player.crossSettle=0;
   const half = player.halfHeight();
   player.body.setTranslation({ x: spawn.x, y: spawn.y + player.t.radius + half + 0.05, z: spawn.z }, true);
   physics.propagateModifiedBodyPositionsToColliders();
@@ -166,6 +167,8 @@ function tick(dt,draw=true) {
   time += dt;
   const inp = input.read(dt);
   game.before(dt, inp);
+  inp.allowTimber=inp.playing&&!inp.roomWalk&&!inp.cartSpeed&&!inp.blockJump&&!inp.aimHeld&&!inp.interactPressed&&
+    !game.sight&&!game.lockedTree&&!game.drawStroke&&!game.swing&&!game.delivery&&!game.cabin&&!game.seat;
   player.update(dt, inp, follow.movementYaw);
   // the wood has no wall: far from the way he is turned gently back, and under the world he starts again
   if (player.feet.y < heightAt(player.feet.x, player.feet.z) - 6 || wayDist(player.feet.x, player.feet.z) > 78) respawn();
@@ -182,7 +185,7 @@ function tick(dt,draw=true) {
   animator.armClearance(dt);
   if (player.mode === 'move' && !player.strafe) animator.leanInto(dt, player.turnRate, player.speed, player.accelF);
   else animator.leanInto(dt, 0, 0, 0);
-  const onGround = player.grounded && player.mode !== 'jump' && player.mode !== 'air';
+  const onGround = player.grounded && !player.crossing && player.mode !== 'jump' && player.mode !== 'air';
   animator.placeFeet(dt, (x, z, from) => player.ground(x, z, from, 1.4), root.y, onGround ? 1 : 0);
   man.object.updateMatrixWorld(true);
   game.pose(dt,inp);
@@ -214,6 +217,7 @@ window.lab = {
   setInput(fn) { input.override = fn; },
   /** Puts him at (x, z) on the ground, facing (fx, fz), with the eye behind him. */
   teleport(x, z, fx, fz) {
+    player.crossing=null;player.crossCheck=0;player.crossSettle=0;
     const y = heightAt(x, z), half = player.halfHeight();
     player.body.setTranslation({ x, y: y + player.t.radius + half + 0.05, z }, true);
     physics.propagateModifiedBodyPositionsToColliders();

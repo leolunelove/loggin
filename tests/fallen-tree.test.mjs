@@ -5,6 +5,8 @@ import R from '../src/figure/rapier/rapier.mjs';
 import {updateTimberDrops} from '../src/figure/timber-lift.js';
 import {createForest} from '../src/world/forest.js';
 import {FallenTree} from '../src/world/fallen-tree.js';
+import {Player} from '../src/figure/player.js';
+import {findCrossing} from '../src/figure/timber-crossing.js';
 import {HINGE} from '../src/world/fallen-wood.js';
 import {readSkill} from '../src/woodcutting.js';
 import {freshState,sanitize,depositWood} from '../src/economy.js';
@@ -17,11 +19,11 @@ const forest=createForest({}),tree=forest.trees.find(t=>t.hero);
 const mark={x:tree.x,y:tree.y+1.17,z:tree.z+tree.r,nx:0,nz:1,angle:.6,damage:.4};
 forest.carveTree(tree,{...mark,notches:[mark]},0,1,.4);
 const wood=forest.fallenWood(tree);
-function fixture(extra={}){
+function fixture(extra={},treeModel=tree,woodModel=wood){
   const physics=new R.World(V(0,-9.81,0)),scene=new THREE.Scene();
   const game={RAPIER:R,physics,scene,forest,cutPaint:new THREE.MeshBasicMaterial()};
   const record={until:Date.now()+90000,bearing:.32,mask:0,...extra};
-  const fallen=new FallenTree(game,tree,wood,record);
+  const fallen=new FallenTree(game,treeModel,woodModel,record);
   return {game,record,fallen,close(){fallen.dispose();physics.free();game.cutPaint.dispose();}};
 }
 function worldPoint(part,at,radial=0){
@@ -47,6 +49,36 @@ test('the carved bole, crown, paint, shadows and body survive the hinge and the 
     assert.ok(part.body.numColliders()>2);assert.equal(part.body.collider(part.body.numColliders()-1).fallenPart,part);
   }finally{close();}
   assert.equal(game.scene.children.length,0);
+});
+
+test('traversal uses the settled bole at the approached station, skips moving or carried wood and survives a reload',()=>{
+  const birch=forest.trees.find(t=>t.type===1),birchWood=forest.fallenWood(birch);
+  const {fallen,game,record,close}=fixture({},birch,birchWood);
+  function approach(f){
+    const world=f.game.physics,[part]=f.parts,station=part.lo+.95;
+    const centre=f.worldPoint(part,f.wood.centre(station)),radius=f.wood.radius(station);
+    world.createCollider(R.ColliderDesc.cuboid(6,.1,6).setTranslation(centre.x,centre.y-radius-.1,centre.z));
+    const spawn=centre.clone().add(V(0,-radius,-1.10)),want={dir:V(0,0,1),mag:1,speed:4};
+    const player=new Player({RAPIER:R,world,spawn,animator:{phase:.15}});
+    world.step();return ()=>findCrossing(player,want,false);
+  }
+  try{
+    fallen.begin(0,true);const [part]=fallen.parts;
+    fallen.fall(1.5,true);
+    part.body.setRotation(new THREE.Quaternion().setFromAxisAngle(V(0,0,1),-Math.PI/2),true);
+    part.body.setLinvel(V(),true);part.body.setAngvel(V(),true);part.body.sleep();
+    const plan=approach(fallen),first=plan();assert.equal(first?.kind,'vault');
+    assert.equal(first.collider,part.trunk);assert.ok(first.palm.distanceTo(part.skin.projectPoint(first.palm,false).point)<.005);
+    part.body.setLinvel(V(.8,0,0),true);assert.equal(plan(),null);
+    part.body.setLinvel(V(),true);part.body.sleep();part.inFlight=true;assert.equal(plan(),null);part.inFlight=false;
+    fallen.snapshot();
+    const restored=fixture(JSON.parse(JSON.stringify(record)),birch,birchWood);
+    try{
+      restored.fallen.begin(1.5,false);const next=approach(restored.fallen)();
+      assert.equal(next?.kind,'vault');assert.ok(next.palm.distanceTo(first.palm)<.008);
+    }finally{restored.close();}
+    assert.equal(game.physics.getCollider(first.collider.handle),part.trunk);
+  }finally{close();}
 });
 
 test('bucking follows the marked wood, keeps its crown on the far length and resumes the same motion from a save',()=>{
