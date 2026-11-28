@@ -185,3 +185,15 @@ dialog progress::-webkit-progress-bar{background:#506e5d}dialog progress::-webki
 .book-unlocks summary{padding:7px 0;cursor:pointer;font:800 16px var(--display);color:var(--honey)}.book-unlocks p{display:grid;gap:2px;margin:0;padding:7px 0;border-top:1px solid #7891773d;font:12px/1.45 var(--body)}.book-unlocks p.earned b{color:var(--honey)}
 @media(max-width:620px){#skill-hud{top:59px;right:13px;padding:7px 10px;gap:4px 9px}#skill-hud span,#skill-hud strong{font-size:13px}#skill-hud kbd{display:none}#xp-drop{top:98px;right:13px;font-size:13px}.journal-nav button{padding:6px 8px}}
 @media(prefers-reduced-motion:reduce){#skill-meter::-webkit-progress-value{transition:none}}
+
+/* Keep the furnishing and both hands visible while its real menu is open. */
+.cabin-activity :is(#hud,#controls,#aim-crosshair,#home-marker,#mouse-capture,#field-action,#action,#target,#aim-status){visibility:hidden}
+dialog[data-cabin][open]{
+  position:fixed;inset:0 max(16px,2.4vw) 0 auto;margin:auto 0;width:clamp(305px,32vw,445px);
+  max-height:calc(100dvh - 44px);padding:clamp(16px,2vw,26px);overscroll-behavior:contain;
+}
+dialog[data-cabin]::backdrop{background:linear-gradient(90deg,transparent 28%,#15251e0c 49%,#0c1a1557);backdrop-filter:none}
+@media(max-aspect-ratio:115/100){
+  dialog[data-cabin][open]{inset:auto max(9px,3vw) max(9px,env(safe-area-inset-bottom)) max(9px,3vw);width:auto;max-height:43dvh;margin:0;padding:15px 19px}
+  dialog[data-cabin]::backdrop{background:linear-gradient(0deg,#11241a4a,transparent 63%)}
+}

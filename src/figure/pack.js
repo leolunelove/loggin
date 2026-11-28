@@ -111,9 +111,10 @@ export function createWoodPack(shared,man,{paint,canvasPalette}){
    group.position.copy(homePosition);group.quaternion.copy(homeRotation);
    if(seat&&weight>0){
      const yaw=seat.yaw;
-     restPoint.set(-.62*Math.cos(yaw)-.039*Math.sin(yaw),.565,.62*Math.sin(yaw)-.039*Math.cos(yaw)).add(seat.position);
+     if(seat.packPosition)restPoint.copy(seat.packPosition);
+     else restPoint.set(-.62*Math.cos(yaw)-.039*Math.sin(yaw),.565,.62*Math.sin(yaw)-.039*Math.cos(yaw)).add(seat.position);
      group.parent.worldToLocal(restPoint);
-     restRotation.setFromEuler(restEuler.set(-.045,yaw+.43,-.045,'YXZ'));
+     restRotation.setFromEuler(restEuler.set(-.045,seat.packYaw??yaw+.43,-.045,'YXZ'));
      group.parent.getWorldQuaternion(parentRotation).invert();
      group.position.lerp(restPoint,weight);
      // The lift clears the bench edge while the straps slide off the shoulders.

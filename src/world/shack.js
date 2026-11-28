@@ -73,6 +73,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  box(.36,.82,.4,1,[.82,3.28,-.58],35,[.08,.16]);box(.48,.1,.52,3,[.82,3.71,-.58],15);
  shell=null;
  // Open outdoor rack at the right of the shack, with every cut end facing the clearing.
+ shell='yard';
  const rack={x:2.86,z:1.05};
  for(const x of [rack.x-1.08,rack.x+1.08]){
   box(.11,1.55,.12,1,[x,.65,rack.z-.38],30,[.07,.24]);
@@ -100,6 +101,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  const shedRoof=projectBox(2.8,.16,2.95,2,[-3.7,2.5,0],40);shedRoof.rotation.x=.12;
  for(let i=0;i<9;i++){const log=part(new THREE.CylinderGeometry(.14,.16,1.7,8),1,[-4.35+(i%3)*.5,.45+Math.floor(i/3)*.3,0],25);log.rotation.x=Math.PI/2;log.userData.projectStage=40;projectParts.push(log);}
  projectParts.forEach(m=>m.visible=m.userData.projectStage===0);
+ shell=null;
  const campParts=[],plankStack=[],campColliders=[];
  const campBox=(key,stage,w,h,d,pal,position)=>{const mesh=box(w,h,d,pal,position,32);campParts.push({mesh,key,stage});mesh.visible=false;return mesh;};
  // The hardwood sawmill grows from a staked plot to a timber frame, a work bed and a covered cutting station.
@@ -130,11 +132,11 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  for(let i=0;i<6;i++){const m=campBox('lodge',(i+1)*4,.58,2,.14,0,[-1.5+i*.6,1.15,-4.1]);m.userData.shell='back';}
  for(const x of [-1.8,1.8])for(let i=0;i<3;i++){const m=campBox('lodge',(i+1)*8,.14,2,.84,0,[x,1.15,-1.95-i*.84]);m.userData.shell=x<0?'left':'right';}
  const lodgeRoof=campBox('lodge',24,4.1,.16,3,2,[0,2.35,-2.9]);lodgeRoof.rotation.x=-.10;lodgeRoof.userData.shell='roof';
- campColliders.push({key:'lodge',stage:24,until:true,x:site.x+.05,y:y+.3,z:site.z-.94,hx:.73,hy:.22,hz:.32});
+ campColliders.push({key:'lodge',stage:24,until:true,x:site.x+.02,y:y+.3,z:site.z-.94,hx:.96,hy:.22,hz:.32});
  // Keep tool-sized strokes on the furnishings, especially when the camera comes indoors.
  const roomPart=(geo,ink,pos,count,size=[.019,.064],dir=ACROSS)=>part(geo,ink,pos,count,size,dir);
  const roomBox=(w,h,d,ink,pos,count)=>roomPart(new THREE.BoxGeometry(w,h,d),ink,pos,count);
- const room=buildShackRoom({box:roomBox,part:roomPart});
+ const room=buildShackRoom({box:roomBox,part:roomPart,root:group});
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x-1.45,y:y+1.16,z:site.z-1.45,hx:.35,hy:1.1,hz:.08},{key:'lodge',stage:24,until:true,x:site.x+.975,y:y+1.16,z:site.z-1.45,hx:.825,hy:1.1,hz:.08});
  campColliders.push({key:'lodge',stage:24,until:true,x:site.x+DOOR.x,y:y+1.15,z:site.z-1.45,hx:.625,hy:1.1,hz:.08});
  campColliders.push({key:'lodge',stage:24,x:site.x,y:y+.06,z:site.z-2.85,hx:1.8,hy:.125,hz:1.3});
@@ -152,7 +154,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  for(const dy of [.82,1.05])benchBox(1.9,.16,.1,0,0,dy,.28);
  campColliders.push({key:'fire',stage:12,x:benchPosition.x,y:benchPosition.y+.55,z:benchPosition.z,hx:.96,hy:.55,hz:.33});
  const bench={position:benchPosition,yaw:Math.PI,camera:{position:benchPosition.clone().add(new THREE.Vector3(4,2.7,4.9)),target:firePosition.clone().add(new THREE.Vector3(.65,.95,-1.1)),fire:firePosition.clone().add(new THREE.Vector3(0,.93,0)),sitter:benchPosition.clone().add(new THREE.Vector3(0,1.36,0))}};
- parts.forEach(({mesh})=>mesh.userData.shown=mesh.visible);
+ parts.forEach(part=>{part.mesh.userData.shown=part.mesh.visible;if(part.mesh.userData.movable)part.count=0;});
  group.updateMatrixWorld(true);
  const painted=pinDabs(shared,palettes,parts,{surface:true});painted.update();
  // Separate static shadow meshes share geometry, avoiding self-shadowing the paint dabs.
@@ -168,7 +170,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
  function syncVisuals(){
   for(const {mesh}of parts){mesh.visible=(mesh.userData.shown??true)&&(!mesh.userData.roomDetail||cutaway)&&!(cutaway&&cutMask.includes(mesh.userData.shell||'!'));}
   group.updateMatrixWorld(true);
-  parts.forEach(({mesh},i)=>{shadow.children[i].visible=mesh.visible;shadow.children[i].matrix.copy(mesh.matrixWorld);});painted.update();
+  parts.forEach(({mesh},i)=>{shadow.children[i].visible=mesh.visible&&!mesh.userData.movable;shadow.children[i].matrix.copy(mesh.matrixWorld);});painted.update();
  }
 
  // Two small gold stitches mark the furnishing the action button will use.
@@ -201,6 +203,7 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
    shared.uLamp.value.set(site.x+1.28,y+1.83,site.z-.6,night*.6);
   },
   nearDoor(feet){return atShackDoor(group.position,feet);},
+  activity(action){room.activity(action,cutaway);},
   focus(station,camera,dt){
    const mat=focusMark.material;
    mat.opacity+=(Number(!!station)*.91-mat.opacity)*(1-Math.exp(-14*dt));
@@ -215,9 +218,10 @@ export function createShack(shared,site,heightAt,{makePaint=paint}={}) {
   updateInterior(dt,feet,camera,state){
    const inside=insideShack(group.position,feet,state),nearDoor=atShackDoor(group.position,feet);
    const reveal=inside||(nearDoor&&Math.abs(feet.x-site.x-DOOR.x)<(cutaway?.95:.77)&&feet.z<site.z+(cutaway?2.5:2.2));
-   const dx=camera.position.x-site.x,dz=camera.position.z-site.z;
+   const focus=camera.userData?.cabinLook;
+   const dx=camera.position.x-(focus?.x??site.x),dz=camera.position.z-(focus?.z??site.z);
    const side=dx>.32?'right':dx<-.32?'left':cutMask.includes('left')?'left':'right';
-   const mask='roof,'+(inside?((dz>=0?'front,':'back,')+side):'');
+   const mask='roof,'+(inside?((dz>=0?'front,':'back,')+side+(focus?',yard':'')):'');
    const changed=reveal!==cutaway||(reveal&&mask!==cutMask);cutaway=reveal;cutMask=mask;
    const wanted=inside||nearDoor?-Math.PI*.49:0,old=doorAngle;doorAngle=wanted+(doorAngle-wanted)*Math.exp(-9*dt);doorHinge.rotation.y=doorAngle;
    if(changed||Math.abs(old-doorAngle)>.0001)syncVisuals();

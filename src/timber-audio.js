@@ -22,3 +22,19 @@ export function timberSamples(rate, creak, random=Math.random) {
   for(let i=0;i<data.length;i++)data[i]*=scale;
   return data;
 }
+
+export function furnishingSamples(rate,kind,random=Math.random){
+  const paper=kind==='page',duration=paper?.39:.74;
+  const data=new Float32Array(Math.round(rate*duration));
+  let high=0,body=0,grain=0,next=0,ripple=0;
+  for(let i=0;i<data.length;i++){
+    const t=i/rate,p=t/duration,noise=2*random()-1;
+    body+=.15*(noise-body);high+=.62*(noise-high);
+    if(t>=next){grain=.62+random()*.38;next=t+.010+.018*random();}
+    ripple+=grain*(paper?.012:.007);
+    const pressure=paper?.76*Math.exp(-((p-.24)**2)/.012)+.45*Math.exp(-((p-.61)**2)/.014):Math.sin(Math.PI*p)**.82;
+    const fibre=paper?high-body:.96*body+.24*(high-body);
+    data[i]=fibre*pressure*grain*(.83+.17*Math.sin(ripple));
+  }
+  return data;
+}

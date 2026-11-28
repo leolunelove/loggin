@@ -18,6 +18,9 @@ import {PLACES,restored,contributePlace} from './exploration.js';
 import {weatherAt,shelterAt} from './weather.js';
 import {createWeather} from './world/weather.js';
 import {seatedPose} from './figure/sit.js';
+import {cabinActivity,guideCabinWalk,advanceCabin,nearestGuestBed} from './world/cabin-activity.js';
+import {cabinPose} from './figure/cabin-pose.js';
+import {createCabinQuilt} from './world/cabin-quilt.js';
 import {advanceClock,canSleep,sleepUntilMorning,daylightAt,clockLabel,sleepFade} from './daylight.js';
 import {contributeFire,contributeMill,beginMilling,advanceMilling,contributePlanks,PROJECTS} from './camp.js';
 import {freshState} from './economy.js';
@@ -74,6 +77,7 @@ export class Lumberjack {
   this.looseTimber=new Set();ensureOrder(this.state);this.player.endurance=new Endurance(this.state.stamina);
   this.makeAxe();
   this.playTime=0;
+  this.cabinQuilt=createCabinQuilt(shared);scene.add(this.cabinQuilt.mesh);
   this.chopAnimation=new ChopAnimation(figure.man,animator,this.axe);
   this.heldAxe=new HeldAxe(physics,RAPIER,player.collider,heightAt);player.heldAxe=this.heldAxe;
   this.axeOwner=new AxeOwner(RAPIER);this.stowWeight=this.state.axeStowed?1:0;
@@ -124,7 +128,7 @@ export class Lumberjack {
   const syncCapture = () => {
     const captured=this.input.active;
     document.body.classList.toggle('mouse-captured',captured);
-    $('mouse-capture').hidden=!this.started||this.touch||this.paused||captured||!!this.seat;
+    $('mouse-capture').hidden=!this.started||this.touch||this.paused||captured||!!this.seat||!!this.cabin;
     $('chop-key').textContent=this.touch?'E':captured?'LMB':'E';
     this.held=false;if(!captured){this.swing=null;this.queuedStroke=null;this.lockedTree=null;}
   };
@@ -139,8 +143,14 @@ export class Lumberjack {
     syncCapture();if(!this.touch)this.input.capture();
   };
   $('start').onclick=start;
-  $('ledger-workbench').onclick=()=>{$('ledger').addEventListener('close',()=>this.open('upgrades'),{once:true});$('ledger').close();};
-  $('sleep').onclick=()=>{if(!this.insideShack||!canSleep(this.state))return;$('ledger').addEventListener('close',()=>this.beginSleep(),{once:true});$('ledger').close();};
+  const leaveDesk=kind=>{
+    if(kind==='bed'&&!canSleep(this.state))return;
+    if(this.cabin)this.cabin.next=kind;
+    else $('ledger').addEventListener('close',()=>this.useFurniture(kind),{once:true});
+    this.closeToForest($('ledger'));
+  };
+  $('ledger-workbench').onclick=()=>leaveDesk('bench');
+  $('sleep').onclick=()=>leaveDesk('bed');
   $('outpost-project').onclick=e=>this.networkAction(e);
   $('cart-project').onclick=e=>this.networkAction(e);
   $('field-action').onclick=()=>{if(this.started&&!this.paused)this.useFieldKey();};
@@ -174,11 +184,15 @@ export class Lumberjack {
   };
   $('touch-jump').onclick=()=>{if(this.started&&!this.paused)this.input.pressed.add('Jump');};
   $('resume-mouse').onclick=()=>this.input.capture();
-  $('upgrade-open').onclick=()=>{this.showBenchSection('upgrade-list');this.open('upgrades');};$('settings-open').onclick=()=>this.open('settings');
+  $('upgrade-open').onclick=()=>{this.showBenchSection('upgrade-list');this.openWorkbench();};$('settings-open').onclick=()=>this.open('settings');
   for(const d of document.querySelectorAll('dialog')){
     d.querySelector('.close').onclick=()=>this.closeToForest(d);
     // Native Escape and transitions to another dialog leave the cursor available.
-    d.addEventListener('close',()=>{if(this.paused&&!document.querySelector('dialog[open]'))this.resumeForest(false);});
+    d.addEventListener('close',()=>{
+      if(d.open)return;
+      if(d.dataset.cabin){delete d.dataset.cabin;if(this.cabin?.panel===d.id)this.cabin.stage='rise';}
+      if(this.paused&&!document.querySelector('dialog[open]'))this.resumeForest(false);
+    });
     d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}});
   }
   $('sensitivity').oninput=e=>{this.state.sensitivity=Number(e.target.value);this.input.sensitivity=.0022*this.state.sensitivity;$('sensitivity-value').textContent=this.state.sensitivity.toFixed(2)+'×';};
@@ -188,6 +202,10 @@ export class Lumberjack {
   $('upgrade-list').onclick=e=>{const b=e.target.closest('[data-buy]');if(!b)return;if(purchase(this.state,b.dataset.buy)){this.audio.upgrade();this.save();this.renderHud();this.renderUpgrades();this.toast(b.dataset.buy==='axe'?AXES[this.state.axe].name+' equipped.':b.dataset.buy==='speed'?'Swing speed upgraded.':'Wood yield upgraded.');}};
   addEventListener('keydown',e=>{
     if(!this.started){if(e.code==='Enter'&&!$('intro').hidden){e.preventDefault();start();}return;}
+    if(this.cabin&&!this.paused){
+      if(e.code==='Escape'&&!this.sleeping){this.cabin.next=null;this.cabin.stage='rise';}
+      return;
+    }
     if(e.code==='KeyX'&&!e.repeat&&!this.paused&&this.input.active){
       this.toggleAxe();e.preventDefault();return;
     }
@@ -199,7 +217,7 @@ export class Lumberjack {
     }
     if(e.code==='KeyU'&&!e.repeat&&!this.editingClothes&&!this.externalSaveChange){
       if($('upgrades').open){e.preventDefault();this.closeToForest($('upgrades'));}
-      else if(!this.paused){e.preventDefault();this.open('upgrades');}
+      else if(!this.paused){e.preventDefault();this.openWorkbench();}
     }
     if(!this.paused&&this.input.active&&['KeyE','Space'].includes(e.code))e.preventDefault();
   });
@@ -231,7 +249,10 @@ export class Lumberjack {
  closeToForest(dialog){
   dialog.close();this.resumeForest(true);
  }
- open(id){if(this.paused||this.sleeping||!this.started)return;this.paused=true;this.held=false;this.input.lockable=false;this.input.release();this.syncCapture();if(id==='field-note'){const f=FINDS[this.findKey];$('find-title').textContent=f.name;$('find-story').textContent=f.story;$('find-reward').textContent=f.reward;}else if(id==='outpost')this.renderOutpost();else if(id==='cart-panel')$('cart-project').innerHTML=cartPage(this);else if(id==='upgrades')this.renderUpgrades();else if(id==='ledger')this.renderLedger();else this.renderSettings();$(id).showModal();}
+ openWorkbench(){
+  if(this.insideShack)this.useFurniture('bench');else this.open('upgrades');
+ }
+ open(id,atFurniture=false){if(this.paused||this.sleeping||!this.started||(this.cabin&&!atFurniture))return;this.paused=true;this.held=false;this.input.lockable=false;this.input.release();this.syncCapture();if(id==='field-note'){const f=FINDS[this.findKey];$('find-title').textContent=f.name;$('find-story').textContent=f.story;$('find-reward').textContent=f.reward;}else if(id==='outpost')this.renderOutpost();else if(id==='cart-panel')$('cart-project').innerHTML=cartPage(this);else if(id==='upgrades')this.renderUpgrades();else if(id==='ledger')this.renderLedger();else this.renderSettings();$(id).showModal();}
  applyQuality(){
   const low=this.state.low;
   this.renderer.setPixelRatio(Math.min(devicePixelRatio,low?1:1.5));this.renderer.setSize(innerWidth,innerHeight);
@@ -251,7 +272,7 @@ export class Lumberjack {
   const bagBefore=s.carried,loadBefore=w.cart.load;
   let changed=false,structure=false;
   if(action==='sleep'&&!atCart&&restored(p)&&canSleep(s)){
-    $('outpost').addEventListener('close',()=>this.beginSleep(true),{once:true});$('outpost').close();return;
+    $('outpost').addEventListener('close',()=>this.useFurniture('bed',this.exploration.sites[i]),{once:true});this.closeToForest($('outpost'));return;
   }
   if(action==='unload'&&!atCart&&restored(p)){const n=depositWood(s);noteFreight(s,i,n);changed=n>0;}
   else if(action==='hire'&&(atCart||p?.trail===40)){changed=hireHauler(s);if(changed)this.cart.dispatch();}
@@ -416,6 +437,53 @@ export class Lumberjack {
     if(!d.builtShed)this.toast(d.parts.reduce((sum,n)=>sum+n,0)+' timber stacked · '+(this.state.carried?'Shared stock updated':'Bag empty'));
   }
  }
+ useFurniture(kind,house=this.home){
+  if(this.cabin||!this.started||this.sleeping||this.externalSaveChange||this.resetting)return;
+  if(kind==='bed'&&!canSleep(this.state)){this.toast('Your cot is made · Turn in after 18:00');return;}
+  const guest=house!==this.home;
+  if(guest&&!restored(this.state.places[this.exploration.sites.indexOf(house)]))return;
+  const a=cabinActivity(kind,house,this.state,this.player.feet,guest?nearestGuestBed(house,this.player.feet):null);
+  this.cabin=a;this.held=false;this.swing=this.queuedStroke=this.drawStroke=this.lockedTree=null;
+  if(this.delivery)this.cancelDelivery();
+  document.body.classList.add('cabin-activity');
+  this.syncCapture();
+ }
+ driveFurniture(dt,inp){
+  const a=this.cabin,feet=this.player.feet,moving=Math.hypot(inp.move.x,inp.move.y)>.20;
+  const advancing=!this.externalSaveChange&&!document.hidden&&(!this.paused||a.stage==='using');
+  if(!moving)a.cancelReady=true;
+  if(advancing&&!this.paused&&a.cancelReady&&moving&&a.stage!=='rise'){
+    a.stage='rise';a.next=null;
+  }
+  Object.assign(inp,{roomWalk:true,walk:true,sprint:false,strafe:false,jump:false,blockJump:true,trailBoost:false,
+    move:{x:0,y:0},look:{x:0,y:0},zoom:0,facingYaw:a.yaw});
+  if(!advancing)return;
+  if(a.stage==='walk')inp.workStep=guideCabinWalk(a,feet,dt);
+  if(a.stage==='blocked'){this.toast('Move a little closer to the furnishing.');a.stage='rise';}
+  const old=a.progress,oldStroke=a.stroke,oldPage=a.page,event=advanceCabin(a,dt),p=a.progress;
+  if(a.kind==='ledger'&&old<.48&&p>=.48)this.audio?.boardStep?.(a.hips,.35);
+  if(a.kind==='bed'&&old<.46&&p>=.46)this.audio?.boardStep?.(a.hips,.18);
+  const wave=.5-.5*Math.cos(a.age*2.75),leaf=a.age%5.6;
+  a.stroke=a.kind==='bench'?wave*THREE.MathUtils.smootherstep(p,.71,1):0;
+  a.page=a.kind==='ledger'?THREE.MathUtils.smootherstep(leaf,1,2.16)*THREE.MathUtils.smoothstep(p,.81,1):0;
+  if(a.stage==='using'&&a.stroke>.13&&oldStroke<=.13)this.audio?.furnishing?.('plane',a.right);
+  if(a.stage==='using'&&a.page>.12&&oldPage<=.12)this.audio?.furnishing?.('page',a.right);
+  const close=a.stage==='walk'?THREE.MathUtils.clamp(1-Math.hypot(feet.x-a.stand.x,feet.z-a.stand.z),0,1)*.24:
+    a.stage==='rise'?THREE.MathUtils.smoothstep(p,0,.92):.24+.76*THREE.MathUtils.smootherstep(p,0,.83);
+  this.follow.cabinShot={focus:a.focus,eye:a.eye,weight:close,panel:!!a.panel};
+  if(event==='ready'){
+    if(a.kind==='bed')this.beginSleep();
+    else{
+      if(a.kind==='bench')this.showBenchSection('upgrade-list');
+      $(a.panel).dataset.cabin=a.kind;this.open(a.panel,true);
+    }
+  }
+  if(event==='done'){
+    this.follow.cabinShot=null;this.cabin=null;this.figure.pack.restAtBench(null,0);
+    document.body.classList.remove('cabin-activity');this.held=false;this.input.clear();
+    if(a.next)this.useFurniture(a.next);else this.syncCapture();
+  }
+ }
  before(dt,inp){
   this.nearbyBark?.update(this.player.feet);
   this.time+=dt;this.lastDevice=inp.device;
@@ -431,10 +499,11 @@ export class Lumberjack {
     const i=this.exploration.nearest(this.player.feet),active=this.started&&!this.paused&&!this.sleeping;
     this.indoorPlace=i>=0&&this.exploration.sites[i].contains(this.player.feet)?i:-1;
     if(active&&i>=0&&!this.state.places[i].found){this.state.places[i].found=true;this.campUiKey=null;this.renderHud();this.toast(PLACES[i].name+' · New bag patch');this.save();}
-    if(active&&!toolOnly&&!this.swing&&i>=0&&!this.field?.fieldAction(this.player.feet,this.state)&&(inp.interactPressed||(this.held&&!this.outpostHeld))){this.placeIndex=i;this.placeTab='home';this.open('outpost');}
+    if(active&&!this.cabin&&!toolOnly&&!this.swing&&i>=0&&!this.field?.fieldAction(this.player.feet,this.state)&&(inp.interactPressed||(this.held&&!this.outpostHeld))){this.placeIndex=i;this.placeTab='home';this.open('outpost');}
     this.outpostHeld=this.held;
   }
 
+  if(this.cabin){this.driveFurniture(dt,inp);return;}
   if(this.seat){
    if(this.seated&&!this.paused&&(inp.interactPressed||(this.held&&!this.seatActionHeld)||Math.hypot(inp.move.x,inp.move.y)>.15))this.standFromBench();
    this.seatActionHeld=this.held;
@@ -452,10 +521,8 @@ export class Lumberjack {
    const station=this.insideShack?this.home.station?.(this.player.feet,this.player.yaw,this.state,this.roomStation?.key):null;
    this.roomStation=station;
    if(station&&!inactive&&(inp.interactPressed||(this.held&&!this.indoorActionHeld))){
-     if(station.key==='bench'){this.showBenchSection('upgrade-list');this.open('upgrades');}
-     else if(station.key==='bed'){
-       if(canSleep(this.state))this.beginSleep();else this.toast('Your cot is made · Turn in after 18:00');
-     }else this.open('ledger');
+     this.useFurniture(station.key==='stores'?'ledger':station.key);
+     if(this.cabin){this.driveFurniture(dt,inp);return;}
    }
    this.indoorActionHeld=this.held;return;
   }
@@ -684,8 +751,9 @@ export class Lumberjack {
   const packed=!s&&(this.state.axeStowed||this.insideShack||this.indoorPlace>=0||this.delivery||this.cart?.towing||this.seat);
   this.stowWeight=THREE.MathUtils.clamp(this.stowWeight+(packed?dt/.38:-dt/.29),0,1);
   const guards=()=>this.axeOwner.guards(this.figure.man,this.figure.pack,this.figure.headwear??this.figure.hat);
-  if(seated)this.heldAxe.stow();
-  this.chopAnimation.update(dt,s,this.state.axe,seated?null:this.heldAxe,guards,{weight:this.stowWeight,loop:this.figure.pack.axeLoop},this.sight,this.player);
+  const furnished=!!this.cabin&&this.cabin.stage!=='walk';
+  if(seated||furnished)this.heldAxe.stow();
+  this.chopAnimation.update(dt,s,this.state.axe,seated||furnished?null:this.heldAxe,guards,{weight:this.stowWeight,loop:this.figure.pack.axeLoop},this.sight,this.player);
   const {contact,blade}=this.chopAnimation.metrics;
   const driving=s&&!s.hit&&s.poseProgress>=.34&&s.poseProgress<=.59;
   if(driving&&s.lastEdge){
@@ -717,6 +785,15 @@ export class Lumberjack {
     }
     if(previousSeat<.94&&this.seatWeight>=.94&&this.state.carried>0)this.audio.axeTouch(pack.group.getWorldPosition(new THREE.Vector3()),.7,true);
   }
+  if(this.cabin){
+    const a=this.cabin;
+    cabinPose(a,this.figure.man,this.animator,this.figure);
+    if(this.stowWeight>=.74){
+      this.figure.pack.axeLoop.getWorldPosition(this.axe.position);
+      this.figure.pack.axeLoop.getWorldQuaternion(this.axe.quaternion);this.axe.updateMatrixWorld(true);
+    }
+  }
+  this.cabinQuilt?.update(this.cabin,this.figure.man.bones);
   this.cart?.pose();this.axePaint.update();
   if(this.seat&&!this.seated&&this.seatWeight===0){this.seat=null;this.syncCapture();}
  }
@@ -794,15 +871,15 @@ export class Lumberjack {
     this.renderHud();this.save();this.toast('Tree felled · Trim the branches and buck the trunk at the pale bands');
   }
  }
- beginSleep(outpost=false){
-  if(!outpost&&!this.insideShack||!canSleep(this.state))return;
-  this.sleeping=true;this.sleepAge=0;this.sleepApplied=false;this.paused=true;this.held=false;this.swing=null;this.input.lockable=false;this.input.release();this.input.clear();this.syncCapture();$('sleep-fade').hidden=false;
+ beginSleep(){
+  if(this.sleeping||this.cabin?.kind!=='bed'||this.cabin.stage!=='using'||!canSleep(this.state))return;
+  this.sleeping=true;this.sleepAge=0;this.sleepApplied=false;this.paused=true;this.held=false;this.swing=null;this.input.lockable=false;this.input.clear();this.syncCapture();$('sleep-fade').hidden=false;
  }
  updateDaylight(dt){
-  if(this.sleeping){this.sleepAge+=dt;$('sleep-fade').style.opacity=sleepFade(this.sleepAge);
+  if(this.sleeping){if(!document.hidden&&!this.externalSaveChange)this.sleepAge+=dt;$('sleep-fade').style.opacity=sleepFade(this.sleepAge);
    if(this.sleepAge>=.7&&!this.sleepApplied){this.sleepApplied=true;sleepUntilMorning(this.state);this.player.endurance?.replenish();this.save();$('sleep-message').textContent=`Morning · Day ${this.state.day}`;}
-   if(this.sleepAge>=2){this.sleeping=false;this.paused=false;this.input.lockable=!this.touch;this.input.clear();$('sleep-fade').hidden=true;$('sleep-message').textContent='Resting at camp…';this.syncCapture();this.toast('A fresh morning in the woods.');}
-  }else if(this.started&&!this.paused&&!document.hidden){advanceClock(this.state,dt);this.clockSave=(this.clockSave||0)+dt;if(this.clockSave>=30){this.clockSave=0;this.save();}}
+   if(this.sleepAge>=2){this.sleeping=false;this.paused=false;this.cabin.stage='rise';this.input.lockable=!this.touch;this.input.clear();$('sleep-fade').hidden=true;$('sleep-message').textContent='Resting at camp…';this.syncCapture();this.toast('A fresh morning in the woods.');}
+  }else if(this.started&&!this.paused&&!document.hidden&&this.cabin?.kind!=='bed'){advanceClock(this.state,dt);this.clockSave=(this.clockSave||0)+dt;if(this.clockSave>=30){this.clockSave=0;this.save();}}
   const light=daylightAt(this.state.hour),u=this.shared;
   const arc=(this.state.hour-6)*Math.PI/12;
   u.uSkySun.value.set(Math.cos(arc),Math.sin(arc)*.89,.22-.24*Math.sin(arc)).normalize();
@@ -842,7 +919,8 @@ export class Lumberjack {
 
   const room=this.home.updateInterior?.(dt,this.player.feet,this.camera,this.state);
   if(room){this.insideShack=room.inside;this.follow.interior=room.camera;if(room.changed)this.shade.refresh();}
-  this.home.focus?.(active&&this.insideShack&&!this.sleeping?this.roomStation:null,this.camera,dt);
+  this.home.activity?.(this.cabin?.house===this.home?this.cabin:null);
+  this.home.focus?.(active&&this.insideShack&&!this.cabin&&!this.sleeping?this.roomStation:null,this.camera,dt);
   const away=this.exploration?.update(dt,this.player.feet,this.camera,this.state);if(away){if(away.camera){this.follow.interior=away.camera;this.swing=null;}if(away.changed)this.shade.refresh();}
   this.home.updateMill?.(dt,!!this.state.millJob&&this.started);
   if(this.started&&!this.externalSaveChange&&!document.hidden&&advanceMilling(this.state,dt)){this.renderHud();if($('outpost').open)this.renderOutpost();if($('cart-panel').open)replaceRows($('cart-project'),cartPage(this),'data-outpost');this.save();this.toast('Two planks cut and stacked at the sawmill.');this.audio.unload(this.home.dropoff);}
@@ -935,6 +1013,7 @@ export class Lumberjack {
     aimStatus.textContent=degrees+'°  ·  '+controls+' to turn';
   }else aimStatus.textContent=this.lockedTree?'Tree locked · Q to release':'';
   if(this.seat&&this.started&&!this.paused){$('home-marker').hidden=true;$('target').hidden=true;$('action').hidden=false;$('chop').disabled=!this.seated;$('chop-key').textContent='E / LMB';$('action-text').textContent=this.seated?'Stand up':'Standing up…';$('context').textContent='Take your time · Mouse to look · WASD to stand';return;}
+  if(this.cabin){$('target').hidden=true;$('action').hidden=true;return;}
   const local=this.field?.fieldAction(this.player.feet,this.state);
   if(!this.sight&&local&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=false;$('chop').disabled=local.type==='rack'&&!this.state.carried;$('chop-key').textContent='E';$('action-text').textContent=local.title;$('context').textContent=local.note;return;}
   if(this.cart?.towing&&this.started&&!this.paused){$('target').hidden=true;$('action').hidden=true;return;}

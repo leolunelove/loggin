@@ -62,13 +62,17 @@ export function createOutpostHouse(shared,site,heightAt,index,{makePaint=paint,c
  for(const x of [-X,X])box(.17,h,.17,x,h/2,Z+porchDepth,1,'porch');
  const porchRoof=box(w+.7,.14,porchDepth+.35,0,h-.18,Z+porchDepth/2,2,'roof');porchRoof.rotation.x=.08;
  // Furnish the larger interiors: full-size beds, storage walls, a worktable and seating.
- const furniture=(a,b,c,x,dy,z,pal=1)=>{box(a,b,c,x,dy,z,pal);collision(x,dy,z,a/2,b/2,c/2);};
- const beds=index===2?4:index===1?2:1;for(let i=0;i<beds;i++){const x=i%2===0?-X+.7:X-.7,z=-Z+1.2+Math.floor(i/2)*2.05;furniture(1.05,.35,1.9,x,.29,z);box(.98,.15,1.8,x,.54,z,5);box(.85,.12,.4,x,.67,z-.58,5);box(.98,.055,1.1,x,.65,z+.24,index===0?4:2);}
+ const obstacles=[];
+ const obstacle=(x,dy,z,hx,hy,hz)=>{collision(x,dy,z,hx,hy,hz);obstacles.push(colliders.at(-1));};
+ const furniture=(a,b,c,x,dy,z,pal=1)=>{box(a,b,c,x,dy,z,pal);obstacle(x,dy,z,a/2,b/2,c/2);};
+ const bedPlaces=[];
+ const beds=index===2?4:index===1?2:1;for(let i=0;i<beds;i++){const x=i%2===0?-X+.7:X-.7,z=-Z+1.2+Math.floor(i/2)*2.05;bedPlaces.push({x,z,top:.685,side:x<0?1:-1});furniture(1.05,.35,1.9,x,.29,z);box(.98,.15,1.8,x,.54,z,5);box(.85,.12,.4,x,.67,z-.58,5);box(.98,.055,1.1,x,.65,z+.24,index===0?4:2);}
  const tableX=index===0?.74:index===1?1.31:1.38;
  furniture(index===2?2.3:1.5,.13,.85,tableX,.86,-.2);for(const dx of [-.55,.55])box(.1,.75,.1,tableX+dx,.46,-.2,1);furniture(1.38,.12,.38,tableX,.48,.65);
- const details=dressOutpost(group,craft,spec,index,doorX,tableX);
- if(index===2)collision(-X+.55,.49,Z-.66,.25,.49,.23);
- for(const y of [.55,1.15,1.75])box(.45,.09,1.8,X-.34,y,-Z+1.2,1);for(let i=0;i<7;i++)box(.32,.15,.22,X-.34,.68+(i%3)*.6,-Z+.65+Math.floor(i/3)*.45,3);
+ const details=dressOutpost(group,craft,spec,index,doorX,tableX,bedPlaces);
+ if(index===2)obstacle(-X+.55,.49,Z-.66,.25,.49,.23);
+ const shelfZ=index===0?-Z+1.2:Z-1.19;
+ for(const y of [.55,1.15,1.75])box(.45,.09,1.8,X-.34,y,shelfZ,1);for(let i=0;i<7;i++)box(.32,.15,.22,X-.34,.68+(i%3)*.6,shelfZ-.55+Math.floor(i/3)*.45,3);
  if(index===0){box(.9,1.7,.45,-X+.6,.93,Z-.5,5);box(.7,.1,.7,1.5,.8,-Z+.7,1);}
  let ctx,texture;if(typeof document!=='undefined'){const canvas=document.createElement('canvas');canvas.width=512;canvas.height=160;ctx=canvas.getContext('2d');ctx.fillStyle=['#593d29','#43534a','#614332'][index];ctx.fillRect(0,0,512,160);ctx.strokeStyle='#b19264';ctx.lineWidth=4;ctx.strokeRect(8,10,496,140);ctx.fillStyle='#f6dfaa';ctx.textAlign='center';ctx.font='bold 48px Georgia';ctx.fillText(['Orchard Rest','Riverwatch','Pine Hollow'][index],256,98);for(const x of [25,487]){ctx.beginPath();ctx.arc(x,80,5,0,Math.PI*2);ctx.fill();}texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const sign=new THREE.Mesh(new THREE.PlaneGeometry(2.08,.42),new THREE.MeshBasicMaterial({map:texture}));sign.position.set(doorX,Math.min(h-.13,2.67),Z+.19);sign.userData.shell='front';group.add(sign);}
  for(const {mesh} of parts)if(mesh.material===mats[0]||mesh.material===mats[1])dressTimber(mesh.geometry,mesh.position.toArray());
@@ -77,15 +81,16 @@ export function createOutpostHouse(shared,site,heightAt,index,{makePaint=paint,c
  const contains=feet=>Math.abs(feet.x-site.x)<X-.18&&Math.abs(feet.z-site.z)<Z-.18&&Math.abs(feet.y-y)<1.6;
  const nearDoor=feet=>Math.abs(feet.y-y)<1.6&&Math.hypot(feet.x-site.x-doorX,feet.z-site.z-Z)<2.5;
  const lampPosition=details.lamp.clone().add(group.position);
- return {group,paint:painted,shadow,colliders,spec,door:hinge,lampPosition,dropoff:{x:site.x+doorX,y,z:site.z+Z+1},contains,nearDoor,
+ return {group,paint:painted,shadow,colliders,obstacles,spec,beds:bedPlaces,bedside:details.bedside,door:hinge,lampPosition,dropoff:{x:site.x+doorX,y,z:site.z+Z+1},contains,nearDoor,
   setCamp(state){inhabited=!!state.restored;details.room.visible=inhabited&&reveal;},
-  light(night){details.core.visible=night>.08&&!mask.includes('front');},
+  light(night){details.core.visible=night>.08&&!mask.includes('front');details.bedGlass.color.setRGB(.38+.62*night,.29+.33*night,.17+.13*night);},
   setWood(){},
   updateInterior(dt,feet,camera){
     const inside=contains(feet),near=nearDoor(feet),old=angle,front=feet.z-site.z-Z;
     reveal=inside||(near&&Math.abs(feet.x-site.x-doorX)<(reveal?1.03:.82)&&front<(reveal?1.04:.70));
     angle+=((inside||near?-1.5:0)-angle)*(1-Math.exp(-8*dt));hinge.rotation.y=angle;
-    const next=reveal?'roof,'+(inside?((camera.position.z>=site.z?'front,':'back,')+(camera.position.x>=site.x?'right':'left')):''):'';
+    const focus=camera.userData?.cabinLook;
+    const next=reveal?'roof,'+(inside?((camera.position.z>=(focus?.z??site.z)?'front,':'back,')+(camera.position.x>=(focus?.x??site.x)?'right':'left')):''):'';
     const changed=next!==mask;mask=next;details.room.visible=inhabited&&reveal;details.floor.visible=reveal;
     if(changed||Math.abs(old-angle)>.0001)sync();
     return {inside,reveal,changed,camera:reveal?{center:{x:site.x,y:y+.83,z:site.z},distance:Math.max(w,d)*1.36}:null};

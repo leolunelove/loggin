@@ -2,7 +2,25 @@ import * as THREE from 'three';
 import {furnishCabin} from './shack-keepsakes.js';
 import {AXE_PROFILES} from '../figure/axes.js';
 
-export function buildShackRoom({box,part}){
+export function buildShackRoom({box,part,root}){
+ const stool=new THREE.Group(),plane=new THREE.Group(),page=new THREE.Group();
+ function assemble(group,mesh){group.add(mesh);mesh.userData.movable=true;return mesh;}
+ function leg(w,h,d,x,y,z){return assemble(stool,box(w,h,d,1,[x,y,z],3));}
+ for(const x of [-.102,.102])for(const z of [-.115,.115]){
+   const m=leg(.046,.39,.046,x*1.12,-.211,z*1.13);m.rotation.z=x*.61;m.rotation.x=-z*.62;
+ }
+ for(const z of [-.13,.13])leg(.24,.027,.025,0,-.28,z);
+ assemble(stool,part(new THREE.CylinderGeometry(.194,.178,.047,14),0,[0,0,0],5));
+ assemble(stool,part(new THREE.CylinderGeometry(.165,.17,.020,14),9,[0,.027,0],3));
+ stool.position.set(.97,.524,.85);root.add(stool);stool.visible=false;
+ box(.42,.022,.11,4,[-1.24,.891,-.46],5);
+ assemble(plane,box(.18,.047,.079,1,[0,0,0],4));
+ const iron=assemble(plane,box(.048,.058,.062,6,[.003,.033,0],2));iron.rotation.z=.32;
+ const tote=assemble(plane,part(new THREE.TorusGeometry(.032,.009,6,12),1,[.044,.043,0],3));tote.scale.set(.60,1,1);
+ plane.position.set(-1.105,.918,-.46);root.add(plane);plane.visible=false;
+ assemble(page,box(.175,.002,.240,7,[.0875,0,0],0));
+ for(let i=0;i<4;i++)assemble(page,box(.095-i*.006,.001,.003,3,[.085,.002,-.060+i*.032],0));
+ page.position.set(1.14,.977,.89);root.add(page);page.visible=false;
  const goods=[],tools=[],rewards=[],boardParts=[];
  const details=furnishCabin(part);
  const glass=new THREE.MeshBasicMaterial({color:0x869eac});
@@ -41,7 +59,7 @@ export function buildShackRoom({box,part}){
  }
  const rug=box(1.25,.012,1.4,7,[-.22,.125,.16],45);rug.visible=false;
  // The completed rear room can be walked into and gains a bed and a reading shelf.
- const cot=[box(1.45,.16,.64,1,[.05,.2,-.94],25),box(1.4,.12,.6,7,[.05,.34,-.94],30),box(.95,.045,.59,3,[.25,.42,-.94],25),box(.28,.13,.47,7,[-.48,.43,-.94],15)];
+ const cot=[box(1.91,.16,.64,1,[.02,.2,-.94],25),box(1.86,.12,.60,7,[.02,.34,-.94],30),box(.95,.045,.59,3,[.25,.42,-.94],25),box(.34,.13,.47,7,[-.68,.43,-.94],15)];
  const room=[];
  for(const m of [box(.98,.24,1.78,1,[.95,.22,-2.88],35),box(.92,.15,1.7,7,[.95,.4,-2.88],40),box(.91,.05,1.1,3,[.95,.5,-2.58],30),box(.72,.12,.35,7,[.95,.55,-3.48],20),box(.6,.65,.45,0,[-1.25,.33,-3.3],25)]){room.push(m);m.visible=false;}
  // A small lantern gives the room its own warm colour.
@@ -49,7 +67,14 @@ export function buildShackRoom({box,part}){
  let ctx,texture,previous='',expanded=false;
  if(typeof document!=='undefined'&&document.createElement){const canvas=document.createElement('canvas');canvas.width=640;canvas.height=320;ctx=canvas.getContext('2d');if(ctx){texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const label=part(new THREE.PlaneGeometry(1.22,.61),3,[0,1.55,-1.274],0);boardParts.push(label);label.material=new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide});}}
  const show=(mesh,value)=>{if(mesh.userData.shown===value)return false;mesh.userData.shown=value;return true;};
- return {light(night,hour){
+ return {activity(action,cutaway){
+  stool.visible=plane.visible=cutaway;
+  const reading=action?.kind==='ledger',working=action?.kind==='bench';
+  stool.position.x=.97-.42*(reading?THREE.MathUtils.smootherstep(action.progress,.07,.42):0);
+  plane.position.x=-1.105-.135*(working?action.stroke:0);
+  page.visible=!!(cutaway&&reading&&action.page>.002&&action.page<.998);
+  if(page.visible)page.rotation.z=2.79*action.page;
+ },light(night,hour){
   const twilight=Math.max(0,1-Math.min(Math.abs(hour-6),Math.abs(hour-18))/1.65);
   glass.color.copy(windowDay).lerp(windowNight,night).lerp(windowDusk,.63*twilight);
  },setState(s){

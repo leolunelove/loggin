@@ -40,6 +40,8 @@ Approach any front doorway and the door swings open. Walk through with WASD as t
 
 Supply shelves reflect stored logs, hardwood and planks. Purchased axes stay on the wall, building mementos mark completed projects, and a camp board displays your totals. In the home shack a gold stitch marks the furnishing in reach. Press **E**, left-click, tap the action button or press **Y** on a controller. The writing desk opens the camp ledger, the shelves show supplies, the tool bench opens upgrades, and the cot lets you sleep after dusk. Logs are still unloaded at the outdoor rack.
 
+He sets his pack down and works the hand plane with one hand braced against the bench. At the ledger he pulls out the stool, sits and turns the pages. Close the panel to stand, or choose **Sleep until morning** at the desk to walk to bed. He sits on the edge, lifts his boots onto the mattress and takes off his hat. The camera moves in with him and eases back as he gets up. Move or press **Esc** during the approach to change your mind.
+
 The finished porch adds a rug. Completing the cabin extension removes the rear partition and opens a rear bedroom with a patchwork quilt, bound books and a window. The starter room has an open ledger, a wood plane and vice, dried herbs, enamel tea ware and a bow saw. Boots tap and creak on its plank floor. Walk back through the front door to return to the forest.
 
 ## Build a bigger camp

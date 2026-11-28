@@ -43,9 +43,9 @@ test('interior camera stays above the room while preserving mouse heading and sm
  assert.ok(camera.position.y>4);f.look({x:.5,y:0});const yaw=f.yaw;f.update(1/60,new THREE.Vector3(),{x:0,y:0},0,()=>null,()=>0);assert.equal(f.yaw,yaw);
  const before=camera.position.clone();f.interior=null;f.update(1/60,new THREE.Vector3(),{x:0,y:0},0,()=>null,()=>0);assert.ok(camera.position.distanceTo(before)<.5,'exit should blend, not snap');
 });
-test('inside interaction opens the ledger and preserves walking instead of chopping outside trees',()=>{
+test('inside interaction selects the physical ledger and clears outdoor combat input',()=>{
  const g=Object.create(Lumberjack.prototype),s=freshState();let opened;
- Object.assign(g,{state:s,home:{contains:()=>true,station:()=>({key:'ledger'})},player:{feet:{x:0,y:0,z:0}},input:{active:true},follow:{look(){}},time:0,started:true,paused:false,held:false,swing:{},lockedTree:{},open:id=>opened=id});
+ Object.assign(g,{state:s,home:{contains:()=>true,station:()=>({key:'ledger'})},player:{feet:{x:0,y:0,z:0}},input:{active:true},follow:{look(){}},time:0,started:true,paused:false,held:false,swing:{},lockedTree:{},useFurniture:id=>opened=id});
  const input={move:{x:1,y:0},look:{x:0,y:0},interactPressed:true,device:'keyboard',sprint:true};g.before(.02,input);assert.equal(opened,'ledger');assert.equal(input.move.x,1);assert.equal(input.sprint,false);assert.equal(g.swing,null);assert.equal(g.lockedTree,null);
 });
 

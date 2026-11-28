@@ -259,14 +259,17 @@ export async function createFigure(sceneShared, onProgress, palettes = {}, appea
 
   const eyes=partOf(/high-poly/),eyeUniforms=eyes?.material.uniforms;
   const quiet=[3.7,5.1,3.25,4.75,4.20];
-  let blinkClock=0,blinkIndex=0;
-  function update(dt) {
+  let blinkClock=0,blinkIndex=0,hatHem=1.802;
+  function update(dt,activity) {
+    const recline=activity?.kind==='bed'?activity.progress:0;
+    if(hair)hair.material.uniforms.uHatHem.value=hatHem+.16*THREE.MathUtils.smootherstep(recline,.49,.68);
     if(eyeUniforms){
       blinkClock+=dt;
       const interval=quiet[blinkIndex];
       if(blinkClock>=interval){blinkClock-=interval;blinkIndex=(blinkIndex+1)%quiet.length;}
       const age=blinkClock-(quiet[blinkIndex]-.17);
       eyeUniforms.uBlink.value=age<0?0:age<.06?THREE.MathUtils.smoothstep(age,0,.06):1.-THREE.MathUtils.smoothstep(age,.065,.17);
+      eyeUniforms.uBlink.value=Math.max(eyeUniforms.uBlink.value,THREE.MathUtils.smootherstep(recline,.80,.995));
       eyeUniforms.uGaze.value=.00145*Math.sin((blinkIndex+1)*2.31+.27*blinkClock);
     }
     bodyDabs.update();wardrobe.update();
@@ -277,7 +280,7 @@ export async function createFigure(sceneShared, onProgress, palettes = {}, appea
     const a=sanitizeAppearance(value),p=characterPalettes(a);
     for(const [mesh,pal,lower] of [[suit,p.SHIRT,TROUSERS],[skin,p.SKIN],[hair,p.HAIR]]) if(mesh)tint(mesh.material,pal,lower);
     if(eyeUniforms)for(const [i,key] of ['uLidL','uLidM','uLidS'].entries())eyeUniforms[key].value.setRGB(...p.SKIN[i]);
-    if(hair)hair.material.uniforms.uHatHem.value=[1.802,1.771,1.785][a.headwear];
+    hatHem=[1.802,1.771,1.785][a.headwear];if(hair)hair.material.uniforms.uHatHem.value=hatHem;
     const brows=partOf(/eyebrow/);
     if(brows)tint(brows.material,p.HAIR.map((colour,i)=>colour.map((v,k)=>v*.67+p.SKIN[2][k]*.19)));
     if(skin){skin.material.uniforms.uBeard.value=a.beard;skin.material.uniforms.uWhisker.value.setRGB(...p.HAIR[1]);}
@@ -285,7 +288,7 @@ export async function createFigure(sceneShared, onProgress, palettes = {}, appea
     wardrobe.set(a,p);pack.setCanvas(p.PACK);pack.setLayer(a.workwear);
   }
   setAppearance(appearance);
-  return { man, hat:wardrobe.hat, headwear:wardrobe.headwear, pack, dabs, update, setAppearance,
+  return { man, hatMount:wardrobe.hatMount, hat:wardrobe.hat, headwear:wardrobe.headwear, pack, dabs, update, setAppearance,
     weather(dt,rain,shelter,heat){shared.uWearWet.value=workwearWetness(shared.uWearWet.value,dt,rain,shelter,heat);}
   };
 }

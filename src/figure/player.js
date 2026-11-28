@@ -115,7 +115,7 @@ export class Player {
       const v=new THREE.Vector3(this.vel.x,0,this.vel.z);
       const change=want.dir.clone().multiplyScalar(speed).sub(v);
       v.add(change.clampLength(0,(speed?17:24)*dt));
-      if(speed)this.yaw=this.turnToward(this.yaw,want.dirYaw,15,dt);
+      if(speed||input.facingYaw!=null)this.yaw=this.turnToward(this.yaw,speed?want.dirYaw:input.facingYaw,15,dt);
       this.speed=v.length();return this.step(dt,v,false);
     }
     this.jumpBuffer=active&&!input.blockJump?(input.jump?.145:Math.max(0,this.jumpBuffer-dt)):0;

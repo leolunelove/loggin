@@ -8,6 +8,7 @@ shots/*
 *.mp4
 !public/changelog/held-axe.mp4
 !public/changelog/directional-cuts.mp4
+!public/changelog/shack-at-rest.mp4
 *.log
 .env
 .test/

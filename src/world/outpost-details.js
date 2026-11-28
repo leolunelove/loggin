@@ -3,7 +3,7 @@ import {COMMON} from '../oilpaint/common.js';
 
 // Each household earns its living differently. All small fittings share a few
 // material batches; the doorway and the strip of floor beside the table stay clear.
-export function dressOutpost(parent,craft,spec,index,doorX,tableX) {
+export function dressOutpost(parent,craft,spec,index,doorX,tableX,beds) {
   const {group,box,pole,stone,join}=craft,X=spec.w/2,Z=spec.d/2;
   const room=group(parent),porch=group(parent);
   const accent=['cloth','blue','moss'][index];
@@ -87,6 +87,16 @@ export function dressOutpost(parent,craft,spec,index,doorX,tableX) {
   }
   const core=new THREE.Mesh(new THREE.BoxGeometry(.145,.216,.147),new THREE.MeshBasicMaterial({color:0xffbd70}));
   core.position.set(lx,2.01,lz);parent.add(core);core.visible=false;
+  const bedGlass=new THREE.MeshBasicMaterial({color:0xffc67a});
+  const bedside=beds.map(bed=>{
+    const wall=Math.sign(bed.x),x=wall*(X-.25),z=bed.z-.46;
+    box(room,'iron',x+wall*.12,1.32,z,.052,.23,.115);
+    pole(room,'iron',[x+wall*.13,1.26,z],[x,1.26,z],.026);
+    box(room,'cut',x,1.30,z,.14,.031,.14);
+    box(room,bedGlass,x,1.39,z,.087,.144,.089);
+    box(room,'iron',x,1.48,z,.14,.035,.14);
+    return new THREE.Vector3(x,1.39,z).add(parent.position);
+  });
   join(room);join(porch);room.visible=false;
-  return {room,porch,core,floor,lamp:new THREE.Vector3(lx,2.01,lz)};
+  return {room,porch,core,floor,bedside,bedGlass,lamp:new THREE.Vector3(lx,2.01,lz)};
 }

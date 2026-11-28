@@ -178,7 +178,7 @@ function tick(dt,draw=true) {
   animator.relaxHands(player.speed);
   animator.uprightTrunk(dt, player.speed, player.grounded && player.mode !== 'jump' && player.mode !== 'air' ? 1 : 0.3);
   const lookW = player.mode === 'move' || player.mode === 'idleExtra' ? THREE.MathUtils.clamp(1 - (player.speed - 1.5) / 2, 0, 1) : 0;
-  animator.lookToward(dt, camera.getWorldDirection(new THREE.Vector3()), lookW);
+  animator.lookToward(dt, camera.getWorldDirection(new THREE.Vector3()), lookW*(1-(game.cabin?.progress||0)));
   animator.armClearance(dt);
   if (player.mode === 'move' && !player.strafe) animator.leanInto(dt, player.turnRate, player.speed, player.accelF);
   else animator.leanInto(dt, 0, 0, 0);
@@ -186,7 +186,7 @@ function tick(dt,draw=true) {
   animator.placeFeet(dt, (x, z, from) => player.ground(x, z, from, 1.4), root.y, onGround ? 1 : 0);
   man.object.updateMatrixWorld(true);
   game.pose(dt);
-  figure.update(dt);
+  figure.update(dt,game.cabin);
   const sheltered=game.insideShack||game.indoorPlace>=0;
   leaves.mesh.visible=!sheltered;
   const step=Math.max(.0001,dt),vx=(player.feet.x-player.prevFeet.x)/step,vz=(player.feet.z-player.prevFeet.z)/step;

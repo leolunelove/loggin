@@ -52,7 +52,8 @@ test('all nine workwear and hat pairings stay on the correct bones and repaint i
    wardrobe.set({...a,headwear,workwear},p);wardrobe.update();
    const hats=parts.filter(m=>m.visible&&m.userData.hatStyle>=0);
    const clothes=parts.filter(m=>m.visible&&m.userData.coatStyle>=0);
-   assert.ok(hats.length>=2);assert.ok(hats.every(m=>m.userData.hatStyle===headwear&&m.parent===man.bones.Head));
+   assert.ok(hats.length>=2);assert.equal(wardrobe.hatMount.mount.parent,man.bones.Head);
+   assert.ok(hats.every(m=>m.userData.hatStyle===headwear&&m.parent===wardrobe.hatMount.mount));
    assert.ok(clothes.length>=4,'every cut has its own shaped clothing');assert.ok(clothes.every(m=>m.userData.coatStyle===workwear));
    for(const layer of clothes){assert.ok(layer.isSkinnedMesh);const w=layer.geometry.attributes.skinWeight;
      for(let v=0;v<w.count;v++)assert.ok(Math.abs(w.getX(v)+w.getY(v)+w.getZ(v)+w.getW(v)-1)<.0001);}

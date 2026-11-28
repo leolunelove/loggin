@@ -507,7 +507,7 @@ export class Animator {
   }
 
   /** Two-bone IK: moves the ankle of `side` by `delta` (world), knee bending in its own plane. */
-  legIK(side, delta) {
+  legIK(side, delta, bendDirection = null) {
     const hip = this.bones[`thigh_${side}`], knee = this.bones[`calf_${side}`], foot = this.bones[`foot_${side}`];
     const H = hip.getWorldPosition(new THREE.Vector3()), K = knee.getWorldPosition(new THREE.Vector3()), A = foot.getWorldPosition(new THREE.Vector3());
     const footQ = foot.getWorldQuaternion(new THREE.Quaternion());
@@ -527,6 +527,10 @@ export class Animator {
     const along = pole.lengthSq() < 1e-6 ? -1 : pole.clone().normalize().dot(fwdP);
     const pull = clamp((0.5 - along) / 0.7, 0, 1);
     pole.normalize().multiplyScalar(1 - pull).addScaledVector(fwdP, pull * 1.2 + 1e-3);
+    if (bendDirection) {
+      const wanted = bendDirection.clone().addScaledVector(axis, -bendDirection.dot(axis));
+      if (wanted.lengthSq() > 1e-6) pole.copy(wanted);
+    }
     pole.normalize();
     const cosA = clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1);
     const newK = H.clone().addScaledVector(axis, l1 * cosA).addScaledVector(pole, l1 * Math.sqrt(1 - cosA * cosA));

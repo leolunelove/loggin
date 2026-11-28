@@ -38,5 +38,13 @@ export function createSettlements(game,craft){
  const parts=[];for(const group of [...groups,guide]){group.updateMatrixWorld(true);group.traverse(mesh=>{const pal=mats.indexOf(mesh.material);if(mesh.isMesh&&pal>=0)parts.push({mesh,count:mesh.geometry.type==='DodecahedronGeometry'?100:25,style:()=>({pal,size:[.05,.18],dir:new THREE.Vector3(0,1,0)})});});}const dressing=pinDabs(shared,palettes,parts);dressing.update();district.add(dressing.mesh);
  return {group:district,guide,sites,routes,groups,clearAt,nearest(feet){return sites.findIndex(h=>h.contains(feet,{lodge:0})||Math.hypot(feet.x-h.dropoff.x,feet.z-h.dropoff.z)<5);},onTrail(feet,state){return routes.some((r,i)=>state.places[i].trail===40&&r.points.some((p,k)=>k&&segmentDistance(feet,r.points[k-1],p)<.85));},sync(state){for(let i=0;i<3;i++){const p=state.places[i],h=sites[i],r=routes[i],built=restored(p);h.setCamp({...state,lodge:0,porch:0,sawmill:0,planks:0,wood:built?state.wood:0,restored:built,hour:state.hour,fire:0});h.group.userData.rewards.visible=built;h.group.userData.rewards.traverse(m=>{if(m.isMesh)m.visible=built;});h.group.userData.repairs.forEach((m,k)=>m.visible=!built&&p.wood<(k+1)*6);r.build(p.trail,clearAt);}for(const g of groups)g.updateMatrixWorld(true);dressing.update();},update(dt,feet,camera,state){let room=null;for(let i=0;i<3;i++){const h=sites[i],r=h.updateInterior(dt,feet,camera),lamp=h.lampPosition,night=shared.uNight?.value??0,built=restored(state.places[i]);
     h.light(built?night:0);const p=r.inside?h.group.position:lamp;
-    shared.uCampLights.value[5+i]?.set(p.x,r.inside?p.y+2.35:p.y,p.z,built?(r.inside?.73+night*1.2:night*2.2):0);if(r.camera||r.changed)room=r;}return room;}};
+    const roomLight=shared.uCampLights.value[5+i],focus=camera.userData?.cabinLook;
+    roomLight?.set(p.x,r.inside?p.y+2.35:p.y,p.z,built?(r.inside?.73+night*1.2:night*2.2):0);
+    if(roomLight&&built&&r.inside&&focus){
+      const lamp=h.bedside.reduce((near,next)=>next.distanceToSquared(focus)<near.distanceToSquared(focus)?next:near);
+      const w=camera.userData.cabinWeight;
+      roomLight.x+=(lamp.x-roomLight.x)*w;roomLight.y+=(lamp.y-roomLight.y)*w;roomLight.z+=(lamp.z-roomLight.z)*w;
+      roomLight.w+=night*w*.74;
+    }
+    if(r.camera||r.changed)room=r;}return room;}};
 }

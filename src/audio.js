@@ -1,4 +1,4 @@
-import {timberSamples} from './timber-audio.js';
+import {timberSamples,furnishingSamples} from './timber-audio.js';
 import {rainSamples} from './rain-audio.js';
 import {rainMix} from './weather.js';
 import {fireSamples,fireMix} from './fire-audio.js';
@@ -123,6 +123,15 @@ export class ForestAudio {
   axeTouch(position,speed,wooden){
     const weight=clamp(speed/5,0,1);
     this.timberVoice('rack-knock',position,{gain:.07+.17*weight,rate:(wooden?1.24:.88)+this.random()*.06});
+  }
+  furnishing(kind,position){
+    if(!this.on||!this.context)return;
+    const name='cabin-'+kind,c=this.context;
+    if(!this.buffers.has(name)){
+      const samples=furnishingSamples(c.sampleRate,kind,this.random),buffer=c.createBuffer(1,samples.length,c.sampleRate);
+      buffer.getChannelData(0).set(samples);this.buffers.set(name,buffer);
+    }
+    this.sample(name,{position,gain:kind==='plane'?.18:.13,rate:.96+this.random()*.09});
   }
   boardStep(position,load){
     if(!this.context||!this.on)return;

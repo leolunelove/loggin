@@ -217,8 +217,12 @@ export function workClothes(shared,man,paint,hatPalette,clothPalette) {
   piece(coats[2],hips,new THREE.BoxGeometry(.035,.18,.018),3,-.209,.965,-.025,[1,1,1],10,-.21);
   sew(coats[2],chest,panel(3,6,(j,u)=>[(u-.5)*[.098,.142,.144][j]+.030,[1.129,1.145,1.231][j],.212-.019*(u-.25)**2]),2,20);
   sew(coats[2],chest,panel(2,6,(j,u)=>[(u-.5)*.145+.030,1.223+j*.010,.214-.019*(u-.25)**2]),3,6);
+  // One attachment preserves the fit of the selected hat, its band and its peak when lifted.
+  const mount=new THREE.Group();mount.position.set(0,1.81,-.012);man.object.add(mount);head.attach(mount);
+  for(const piece of hats.flat())mount.attach(piece);
+  const hatMount={mount,position:mount.position.clone(),rotation:mount.quaternion.clone()};
   const strokes=pinDabs(shared,palettes,parts,{surface:true});
-  return {hat:felt,headwear:hats.map(set=>set[0]),mesh:strokes.mesh,update:strokes.update,
+  return {hatMount,hat:felt,headwear:hats.map(set=>set[0]),mesh:strokes.mesh,update:strokes.update,
     set(a,p){tint(materials[0],p.HAT);strokes.setPalette(0,p.HAT);
       const waxed=[[.79,.66,.45],[.50,.385,.24],[.25,.205,.16]];
       const vest=p.SHIRT.map((c,i)=>c.map((v,k)=>waxed[i][k]*.70+v*.30));

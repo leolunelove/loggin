@@ -101,11 +101,26 @@ export class Follow {
       const c=this.interior.center, distance=this.interior.distance*(this.roomZoom??1);
       const centre=new THREE.Vector3(c.x+(target.x-c.x)*.14,c.y,c.z+(target.z-c.z)*.14);
       const eye=centre.clone().addScaledVector(new THREE.Vector3(.10,.84,.53).normalize(),distance);
+      const shot=this.cabinShot;
+      cam.userData.cabinLook=shot?.weight>.15?shot.focus:null;
+      cam.userData.cabinWeight=shot?.weight||0;
+      if(shot){
+        const aspect=cam.aspect||1,axis=shot.eye.clone().normalize(),distance=shot.eye.length()*Math.max(1,.78/aspect);
+        const focus=shot.focus.clone(),right=UP.clone().cross(axis).normalize();
+        if(shot.panel){
+          const span=distance*Math.tan(THREE.MathUtils.degToRad(cam.fov/2));
+          if(aspect>=1.16)focus.addScaledVector(right,span*aspect*.26);
+          else focus.addScaledVector(axis.clone().cross(right),-span*.33);
+        }
+        eye.lerp(focus.clone().addScaledVector(axis,distance),shot.weight);
+        centre.lerp(focus,shot.weight);
+      }
       const orientation=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye,centre,UP));
       const blend=1-Math.exp(-5.3*dt);
       cam.position.lerp(eye,blend);cam.quaternion.slerp(orientation,blend);
       this.exitBlend=1.15;this.pivot.set(target.x,target.y+1.35,target.z);return;
     }
+    cam.userData.cabinLook=null;cam.userData.cabinWeight=0;
     const oldPosition=(this.exitBlend>0||oldRotation)?cam.position.clone():null;
     const goal = new THREE.Vector3(target.x,target.y+1.35+.15*blend,target.z);
     if (this.pivot.lengthSq() === 0) this.pivot.copy(goal);
